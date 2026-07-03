@@ -686,7 +686,8 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
                     onChange={e => handleInputChange('e-mail_nre', e.target.value)}
                   />
                 </div>
-              )}
+              </div>
+            )}
 
               <div className="form-footer">
                 <button type="button" className="btn-secondary" onClick={handleCloseModal} disabled={isSaving}>
