@@ -34,7 +34,7 @@ export default function ContatoFormadores({ data }) {
       if (!map.has(key)) {
         map.set(key, {
           nome: item.nome_formador,
-          email: item.e-mail_formador || item['e-mail_formador'] || '',
+          email: item['e-mail_formador'] || item.e_mail_formador || '',
           telefone: item.telefone_formador || '',
           turma: item.turma || '',
           modalidade: item.modalidade || '',

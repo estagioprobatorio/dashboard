@@ -52,7 +52,7 @@ export default function App() {
 
     // Regra 4: Formadores (Verifica se está cadastrado como e-mail_formador na base)
     const isFormador = dataBase.some(item => 
-      (item.e-mail_formador || item['e-mail_formador'] || '').trim().toLowerCase() === cleanEmail
+      (item['e-mail_formador'] || item.e_mail_formador || '').trim().toLowerCase() === cleanEmail
     );
     if (isFormador) return 'formador';
 
@@ -156,7 +156,7 @@ export default function App() {
     // Formadores veem apenas registros pertencentes a eles
     if (userRole === 'formador') {
       return records.filter(item => {
-        const formadorEmail = (item.e-mail_formador || item['e-mail_formador'] || '').trim().toLowerCase();
+        const formadorEmail = (item['e-mail_formador'] || item.e_mail_formador || '').trim().toLowerCase();
         return formadorEmail === email;
       });
     }
