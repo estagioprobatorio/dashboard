@@ -93,7 +93,9 @@ export default function App() {
       const unsubscribe = onValue(dbRef, (snapshot) => {
         const val = snapshot.val();
         if (val) {
-          const firebaseRecords = Object.values(val);
+          // Constrói lista a partir do Firebase usando os VALORES do snapshot
+          // A chave de cada nó já é EP-[cgm]_[turma], então Object.values é seguro
+          const firebaseRecords = Object.values(val).filter(r => r && r.cgm);
           setRecords(firebaseRecords);
           setFirebaseActive(true);
         } else {
@@ -129,16 +131,28 @@ export default function App() {
   };
 
   // Callback de edição local do Admin
-  const handleLocalUpdate = (updatedRecord) => {
+  // oldKey: chave "cgm_turma" do registro ANTES da edição — necessário para remanejamentos
+  const handleLocalUpdate = (updatedRecord, oldKey = null) => {
     setRecords(prev => {
-      return prev.map(item => {
-        const itemKey = `${item.cgm}_${item.turma}`;
-        const updatedKey = `${updatedRecord.cgm}_${updatedRecord.turma}`;
-        if (itemKey === updatedKey) {
-          return updatedRecord;
-        }
-        return item;
-      });
+      const updatedKey = `${updatedRecord.cgm}_${updatedRecord.turma}`;
+
+      // Se a turma mudou, remove o registro antigo pela oldKey antes de atualizar
+      let filtered = prev;
+      if (oldKey && oldKey !== updatedKey) {
+        filtered = prev.filter(item => `${item.cgm}_${item.turma}` !== oldKey);
+      }
+
+      // Atualiza o registro pela nova chave (ou adiciona se não existia ainda)
+      const exists = filtered.some(item => `${item.cgm}_${item.turma}` === updatedKey);
+      if (exists) {
+        return filtered.map(item => {
+          if (`${item.cgm}_${item.turma}` === updatedKey) return updatedRecord;
+          return item;
+        });
+      } else {
+        // Remanejamento: o registro passou a ter uma chave nova — insere no lugar certo
+        return [...filtered, updatedRecord];
+      }
     });
   };
 

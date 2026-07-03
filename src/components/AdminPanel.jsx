@@ -172,24 +172,29 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
       // 3. Enviar para o Google Sheets via Apps Script Web App
       const appsScriptUrl = import.meta.env.VITE_APPS_SCRIPT_URL;
       if (appsScriptUrl) {
+        const payload = JSON.stringify({
+          action: 'updateRecord',
+          data: selectedRecord,
+          turma_anterior: originalRecord ? originalRecord.turma : null
+        });
+        console.log("Enviando para Apps Script:", payload);
         await fetch(appsScriptUrl, {
           method: 'POST',
           mode: 'no-cors',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            action: 'updateRecord',
-            data: selectedRecord,
-            turma_anterior: originalRecord ? originalRecord.turma : null
-          })
+          // text/plain é necessário com no-cors — application/json aciona preflight CORS
+          // e faz o browser descartar o Content-Type, causando falha silenciosa
+          headers: { 'Content-Type': 'text/plain' },
+          body: payload
         });
         console.log("Comando enviado para o Google Apps Script!");
       }
 
       // 4. Notificar a aplicação principal para atualizar o estado local instantaneamente
       if (onLocalUpdate) {
-        onLocalUpdate(selectedRecord);
+        const oldKey = originalRecord ? `${originalRecord.cgm}_${originalRecord.turma}` : null;
+        const newKey = `${selectedRecord.cgm}_${selectedRecord.turma}`;
+        // Passa o oldKey apenas se a turma mudou (remanejamento)
+        onLocalUpdate(selectedRecord, oldKey !== newKey ? oldKey : null);
       }
 
       setSaveStatus('Salvo com sucesso na planilha e no banco de dados!');
