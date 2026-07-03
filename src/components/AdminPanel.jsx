@@ -352,7 +352,7 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
                           </button>
                           <button 
                             className="action-btn" 
-                            style={{ backgroundColor: 'var(--color-primary)', color: 'white' }}
+                            style={{ backgroundColor: '#0d9488', color: 'white' }}
                             onClick={() => handleRemanejarClick(item)}
                           >
                             Remanejar
@@ -781,7 +781,7 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
                   type="button" 
                   className="btn-primary" 
                   style={{ 
-                    backgroundColor: sereCheckbox ? 'var(--color-primary)' : '#cbd5e1', 
+                    backgroundColor: sereCheckbox ? 'var(--color-primary-dark)' : '#cbd5e1', 
                     color: sereCheckbox ? 'white' : '#94a3b8',
                     cursor: sereCheckbox ? 'pointer' : 'not-allowed' 
                   }}
