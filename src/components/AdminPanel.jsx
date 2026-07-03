@@ -13,6 +13,11 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState('');
 
+  // Busca e dropdown para remanejamento
+  const [turmaSearch, setTurmaSearch] = useState('');
+  const [showTurmaDropdown, setShowTurmaDropdown] = useState(false);
+  const [hoveredIndex, setHoveredIndex] = useState(null);
+
   // Confirmação do SERE para remanejamento
   const [showSereModal, setShowSereModal] = useState(false);
   const [sereCheckbox, setSereCheckbox] = useState(false);
@@ -64,6 +69,8 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
     setSelectedRecord({ ...record });
     setOriginalRecord({ ...record });
     setEditMode('remanejamento');
+    setTurmaSearch(''); // Reseta busca
+    setShowTurmaDropdown(false);
     setSaveStatus('');
   };
 
@@ -72,6 +79,8 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
     setSelectedRecord(null);
     setOriginalRecord(null);
     setEditMode(null);
+    setTurmaSearch('');
+    setShowTurmaDropdown(false);
     setSaveStatus('');
   };
 
@@ -453,19 +462,72 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
                       }} 
                     />
                   </div>
-                  <div className="filter-group" style={{ gridColumn: '1 / -1' }}>
+                  <div className="filter-group" style={{ gridColumn: '1 / -1', position: 'relative' }}>
                     <span className="filter-label">Nova Turma (Destino)</span>
-                    <select 
-                      className="filter-select"
-                      value={selectedRecord.turma || ''}
-                      onChange={e => handleInputChange('turma', e.target.value)}
+                    <input 
+                      type="text"
+                      className="filter-input"
+                      placeholder="🔍 Digite para buscar a turma..."
+                      value={turmaSearch}
+                      onChange={(e) => {
+                        setTurmaSearch(e.target.value);
+                        setShowTurmaDropdown(true);
+                      }}
+                      onFocus={() => setShowTurmaDropdown(true)}
+                      onBlur={() => {
+                        // Timeout necessário para que o clique no dropdown seja processado
+                        setTimeout(() => setShowTurmaDropdown(false), 250);
+                      }}
                       required
-                    >
-                      <option value="">-- Selecione a nova turma --</option>
-                      {uniqueTurmas.map((t, i) => (
-                        <option key={i} value={t}>{t}</option>
-                      ))}
-                    </select>
+                    />
+                    
+                    {showTurmaDropdown && (
+                      <div style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
+                        right: 0,
+                        backgroundColor: 'white',
+                        border: '1px solid var(--color-card-border)',
+                        borderRadius: 'var(--radius-sm)',
+                        boxShadow: 'var(--shadow-lg)',
+                        maxHeight: '200px',
+                        overflowY: 'auto',
+                        zIndex: 100,
+                        marginTop: '0.25rem'
+                      }}>
+                        {uniqueTurmas
+                          .filter(t => t.toLowerCase().includes(turmaSearch.toLowerCase()))
+                          .map((t, i) => (
+                            <div 
+                              key={i}
+                              style={{
+                                padding: '0.75rem 1rem',
+                                cursor: 'pointer',
+                                borderBottom: '1px solid rgba(0,0,0,0.05)',
+                                color: 'var(--color-text-main)',
+                                fontSize: '0.9rem',
+                                backgroundColor: hoveredIndex === i ? 'rgba(50, 130, 184, 0.08)' : 'transparent',
+                                transition: 'background-color 0.2s'
+                              }}
+                              onMouseEnter={() => setHoveredIndex(i)}
+                              onMouseLeave={() => setHoveredIndex(null)}
+                              onClick={() => {
+                                handleInputChange('turma', t);
+                                setTurmaSearch(t);
+                                setShowTurmaDropdown(false);
+                              }}
+                            >
+                              {t}
+                            </div>
+                          ))}
+                        {uniqueTurmas.filter(t => t.toLowerCase().includes(turmaSearch.toLowerCase())).length === 0 && (
+                          <div style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem', fontStyle: 'italic' }}>
+                            Nenhuma turma encontrada.
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : (
