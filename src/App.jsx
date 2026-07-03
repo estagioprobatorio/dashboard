@@ -132,8 +132,8 @@ export default function App() {
   const handleLocalUpdate = (updatedRecord) => {
     setRecords(prev => {
       return prev.map(item => {
-        const itemKey = item.cod_cursista || `EP-${item.cgm}`;
-        const updatedKey = updatedRecord.cod_cursista || `EP-${updatedRecord.cgm}`;
+        const itemKey = `${item.cgm}_${item.turma}`;
+        const updatedKey = `${updatedRecord.cgm}_${updatedRecord.turma}`;
         if (itemKey === updatedKey) {
           return updatedRecord;
         }

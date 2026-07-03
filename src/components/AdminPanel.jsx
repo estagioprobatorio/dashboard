@@ -43,8 +43,7 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
     return data.filter(item => {
       const nomeMatch = item.nome_cursista && item.nome_cursista.toLowerCase().includes(query);
       const cgmMatch = item.cgm && item.cgm.toLowerCase().includes(query);
-      const codMatch = item.cod_cursista && item.cod_cursista.toLowerCase().includes(query);
-      return nomeMatch || cgmMatch || codMatch;
+      return nomeMatch || cgmMatch;
     });
   }, [data, searchQuery]);
 
@@ -116,7 +115,9 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
     setShowSereModal(false); // Fecha o modal do SERE se estiver aberto
 
     try {
-      const uniqueId = selectedRecord.cod_cursista || `EP-${selectedRecord.cgm}`;
+      const cleanKey = (val) => val ? val.toString().replace(/[\.\$\#\[\]\/]/g, "_").trim() : '';
+      const uniqueId = selectedRecord.cgm ? `EP-${selectedRecord.cgm}_${cleanKey(selectedRecord.turma)}` : `EP-unknown`;
+      const oldUniqueId = (originalRecord && originalRecord.cgm) ? `EP-${originalRecord.cgm}_${cleanKey(originalRecord.turma)}` : null;
       
       // 1. Identificar se houve movimentação de turma (Entrada, Saída, Transferência)
       let movementLog = null;
@@ -146,6 +147,13 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
 
       // 2. Gravar no Firebase Realtime Database
       if (isConfigured && database) {
+        // Se mudou a turma (e portanto a chave única do Firebase), remove o nó antigo
+        if (oldUniqueId && oldUniqueId !== uniqueId) {
+          const oldRecordRef = ref(database, `cursistas/${oldUniqueId}`);
+          await set(oldRecordRef, null);
+          console.log("Registro antigo removido do Firebase:", oldUniqueId);
+        }
+
         // Grava o cadastro do cursista
         const recordRef = ref(database, `cursistas/${uniqueId}`);
         await set(recordRef, selectedRecord);
@@ -172,7 +180,8 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
           },
           body: JSON.stringify({
             action: 'updateRecord',
-            data: selectedRecord
+            data: selectedRecord,
+            turma_anterior: originalRecord ? originalRecord.turma : null
           })
         });
         console.log("Comando enviado para o Google Apps Script!");
@@ -206,7 +215,8 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
     setSaveStatus('Removendo cursista...');
     
     try {
-      const uniqueId = record.cod_cursista || `EP-${record.cgm}`;
+      const cleanKey = (val) => val ? val.toString().replace(/[\.\$\#\[\]\/]/g, "_").trim() : '';
+      const uniqueId = record.cgm ? `EP-${record.cgm}_${cleanKey(record.turma)}` : `EP-unknown`;
       
       // Cria log de saída
       const movementLog = {
@@ -233,7 +243,7 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
       }
 
       // Atualiza local
-      const deletedRecord = { ...record, nome_cursista: '', cgm: '', turma: '', cod_cursista: uniqueId }; // Zera localmente
+      const deletedRecord = { ...record, nome_cursista: '', cgm: '', turma: '', cgm_turma_key: uniqueId }; // Zera localmente
       if (onLocalUpdate) {
         onLocalUpdate(deletedRecord);
       }
@@ -345,7 +355,7 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
                   
                   return (
                     <tr key={idx}>
-                      <td style={{ fontSize: '0.85rem' }}>{item.cod_cursista || item.cgm}</td>
+                      <td style={{ fontSize: '0.85rem' }}>{item.cgm}</td>
                       <td style={{ fontWeight: 600 }}>{item.nome_cursista}</td>
                       <td>{item['e-mail'] || item.email || '-'}</td>
                       <td style={{ fontSize: '0.85rem' }}>{item.turma}</td>
