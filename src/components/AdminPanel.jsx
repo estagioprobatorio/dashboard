@@ -18,9 +18,9 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
   const [showTurmaDropdown, setShowTurmaDropdown] = useState(false);
   const [hoveredIndex, setHoveredIndex] = useState(null);
 
-  // Confirmação do SERE para remanejamento
-  const [showSereModal, setShowSereModal] = useState(false);
-  const [sereCheckbox, setSereCheckbox] = useState(false);
+  // Sinalização e Tipo de Remanejamento
+  const [showSinalizacaoModal, setShowSinalizacaoModal] = useState(false);
+  const [tipoRemanejamento, setTipoRemanejamento] = useState('comum');
 
   // Paginação
   const [currentPage, setCurrentPage] = useState(1);
@@ -99,20 +99,20 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
     const turmaNova = (selectedRecord?.turma || '').trim();
     
     if (turmaAnterior !== turmaNova) {
-      // Abre o modal de confirmação do SERE se houve mudança de turma
-      setSereCheckbox(false);
-      setShowSereModal(true);
+      // Abre o modal de escolha do tipo de remanejamento e sinalização
+      setTipoRemanejamento('comum'); // Valor default
+      setShowSinalizacaoModal(true);
     } else {
-      // Salva diretamente se não houve alteração de turma
-      executeSave();
+      // Salva diretamente (sem e-mail/sinalização especial) se for apenas alteração cadastral
+      executeSave(null);
     }
   };
 
   // Executa o salvamento de fato (Google Sheets + Firebase + Logs)
-  const executeSave = async () => {
+  const executeSave = async (tipoRem) => {
     setIsSaving(true);
     setSaveStatus('Salvando alterações...');
-    setShowSereModal(false); // Fecha o modal do SERE se estiver aberto
+    setShowSinalizacaoModal(false); // Fecha o modal de sinalização
 
     try {
       const cleanKey = (val) => val ? val.toString().replace(/[\.\$\#\[\]\/]/g, "_").trim() : '';
@@ -175,14 +175,13 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
         const payload = JSON.stringify({
           action: 'updateRecord',
           data: selectedRecord,
-          turma_anterior: originalRecord ? originalRecord.turma : null
+          turma_anterior: originalRecord ? originalRecord.turma : null,
+          tipo_remanejamento: tipoRem
         });
         console.log("Enviando para Apps Script:", payload);
         await fetch(appsScriptUrl, {
           method: 'POST',
           mode: 'no-cors',
-          // text/plain é necessário com no-cors — application/json aciona preflight CORS
-          // e faz o browser descartar o Content-Type, causando falha silenciosa
           headers: { 'Content-Type': 'text/plain' },
           body: payload
         });
@@ -779,93 +778,93 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
         </div>
       )}
 
-      {/* Modal de Confirmação do SERE para Remanejamento */}
-      {showSereModal && (
+      {/* Modal de Sinalização do Remanejamento */}
+      {showSinalizacaoModal && (
         <div className="admin-form-overlay animate-fade-in" style={{ zIndex: 1100 }}>
           <div className="admin-form-card" style={{ maxWidth: '550px', padding: 0 }}>
             <div className="form-header" style={{ backgroundColor: 'var(--color-primary-dark)', color: 'white' }}>
               <h3 style={{ margin: 0, fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                ⚠️ Efetivar Remanejamento no SERE
+                🔀 Sinalização do Remanejamento
               </h3>
-              <button className="close-modal-btn" onClick={() => setShowSereModal(false)}>&times;</button>
+              <button className="close-modal-btn" onClick={() => setShowSinalizacaoModal(false)}>&times;</button>
             </div>
             
-            <div style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-              <p style={{ margin: 0, color: 'var(--color-text-dark)', lineHeight: 1.5 }}>
-                Você está alterando a turma do cursista <strong>{selectedRecord?.nome_cursista}</strong> (CGM: {selectedRecord?.cgm}):
+            <div style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              <p style={{ margin: 0, color: 'var(--color-text-dark)', lineHeight: 1.5, fontSize: '0.95rem' }}>
+                Você está alterando a turma do(a) cursista <strong>{selectedRecord?.nome_cursista}</strong> (CGM: {selectedRecord?.cgm}).
+                Selecione a sinalização deste remanejamento para a notificação de e-mail:
               </p>
-              
-              <div style={{ 
-                display: 'flex', 
-                justifyContent: 'space-between', 
-                alignItems: 'center', 
-                backgroundColor: 'rgba(50, 130, 184, 0.05)', 
-                padding: '1rem', 
-                borderRadius: 'var(--radius-sm)', 
-                border: '1px solid var(--color-card-border)' 
-              }}>
-                <div style={{ textAlign: 'center', flex: 1 }}>
-                  <span style={{ display: 'block', fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>Turma Anterior</span>
-                  <strong style={{ color: '#e53e3e', fontSize: '0.95rem' }}>{originalRecord?.turma || '(Sem Turma)'}</strong>
-                </div>
-                <div style={{ fontSize: '1.5rem', color: 'var(--color-text-muted)', padding: '0 0.5rem' }}>➔</div>
-                <div style={{ textAlign: 'center', flex: 1 }}>
-                  <span style={{ display: 'block', fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>Nova Turma</span>
-                  <strong style={{ color: 'var(--color-accent-green)', fontSize: '0.95rem' }}>{selectedRecord?.turma || '(Sem Turma)'}</strong>
-                </div>
-              </div>
 
-              <div style={{ 
-                borderLeft: '4px solid #f7b731', 
-                backgroundColor: 'rgba(247, 183, 49, 0.05)', 
-                padding: '1rem', 
-                borderRadius: 'var(--radius-sm)', 
-                display: 'flex',
-                flexDirection: 'column', 
-                alignItems: 'flex-start',
-                gap: '0.5rem'
-              }}>
-                <h5 style={{ margin: 0, color: '#b7791f', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700 }}>
-                  ⚠️ Importante: Atualização Manual no SERE
-                </h5>
-                <p style={{ margin: 0, fontSize: '0.875rem', color: '#744210', lineHeight: 1.4 }}>
-                  Esta ação atualizará o Dashboard (Firebase) e a Planilha de Dados, mas <strong>não se integra automaticamente ao SERE</strong>. 
-                  Você deve acessar o sistema SERE e efetivar o remanejamento manualmente lá.
+              {/* Opção 1: Provisório */}
+              <div 
+                onClick={() => setTipoRemanejamento('provisorio')}
+                style={{
+                  border: `2px solid ${tipoRemanejamento === 'provisorio' ? '#e28743' : 'var(--color-card-border)'}`,
+                  backgroundColor: tipoRemanejamento === 'provisorio' ? 'rgba(226, 135, 67, 0.05)' : 'white',
+                  padding: '1.25rem',
+                  borderRadius: 'var(--radius-sm)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  boxShadow: tipoRemanejamento === 'provisorio' ? 'var(--shadow-sm)' : 'none'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                  <input 
+                    type="radio" 
+                    checked={tipoRemanejamento === 'provisorio'} 
+                    onChange={() => setTipoRemanejamento('provisorio')}
+                    style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                  />
+                  <strong style={{ fontSize: '1.05rem', color: '#e28743' }}>1. Remanejamento Provisório</strong>
+                </div>
+                <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--color-text-muted)', paddingLeft: '1.75rem', lineHeight: 1.4 }}>
+                  Seus dados não serão alterados no SERE e nem no RCO, entre em contato com seu formador e tutor de destino para entender o processo.
                 </p>
               </div>
 
-              <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', cursor: 'pointer', userSelect: 'none', marginTop: '0.5rem' }}>
-                <input 
-                  type="checkbox" 
-                  checked={sereCheckbox}
-                  onChange={(e) => setSereCheckbox(e.target.checked)}
-                  style={{ marginTop: '0.2rem', width: '16px', height: '16px' }}
-                />
-                <span style={{ fontSize: '0.9rem', color: 'var(--color-text-dark)', lineHeight: 1.4 }}>
-                  Confirmo que farei (ou já fiz) a alteração manual deste remanejamento no sistema <strong>SERE</strong>.
-                </span>
-              </label>
-              
-              <div className="form-footer" style={{ marginTop: '1rem', borderTop: '1px solid var(--color-card-border)', paddingTop: '1.25rem', display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
+              {/* Opção 2: Comum */}
+              <div 
+                onClick={() => setTipoRemanejamento('comum')}
+                style={{
+                  border: `2px solid ${tipoRemanejamento === 'comum' ? 'var(--color-accent-blue)' : 'var(--color-card-border)'}`,
+                  backgroundColor: tipoRemanejamento === 'comum' ? 'rgba(33, 150, 243, 0.05)' : 'white',
+                  padding: '1.25rem',
+                  borderRadius: 'var(--radius-sm)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  boxShadow: tipoRemanejamento === 'comum' ? 'var(--shadow-sm)' : 'none'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                  <input 
+                    type="radio" 
+                    checked={tipoRemanejamento === 'comum'} 
+                    onChange={() => setTipoRemanejamento('comum')}
+                    style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                  />
+                  <strong style={{ fontSize: '1.05rem', color: 'var(--color-accent-blue)' }}>2. Remanejamento Comum</strong>
+                </div>
+                <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--color-text-muted)', paddingLeft: '1.75rem', lineHeight: 1.4 }}>
+                  Seus dados foram alterados no SERE e atualizados no Google Classroom e RCO em até 48h. Aguarde o período de migração.
+                </p>
+              </div>
+
+              <div className="form-footer" style={{ marginTop: '0.5rem', borderTop: '1px solid var(--color-card-border)', paddingTop: '1.25rem', display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
                 <button 
                   type="button" 
                   className="btn-secondary" 
-                  onClick={() => setShowSereModal(false)}
+                  onClick={() => setShowSinalizacaoModal(false)}
+                  disabled={isSaving}
                 >
-                  Voltar
+                  Cancelar
                 </button>
                 <button 
                   type="button" 
                   className="btn-primary" 
-                  style={{ 
-                    backgroundColor: sereCheckbox ? 'var(--color-primary-dark)' : '#cbd5e1', 
-                    color: sereCheckbox ? 'white' : '#94a3b8',
-                    cursor: sereCheckbox ? 'pointer' : 'not-allowed' 
-                  }}
-                  disabled={!sereCheckbox || isSaving}
-                  onClick={executeSave}
+                  disabled={isSaving}
+                  onClick={() => executeSave(tipoRemanejamento)}
                 >
-                  {isSaving ? "Salvando..." : "Confirmar e Finalizar"}
+                  {isSaving ? "Gravando e Enviando..." : "Confirmar e Enviar E-mail"}
                 </button>
               </div>
             </div>

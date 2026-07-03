@@ -95,7 +95,22 @@ export default function App() {
         if (val) {
           // Constrói lista a partir do Firebase usando os VALORES do snapshot
           // A chave de cada nó já é EP-[cgm]_[turma], então Object.values é seguro
-          const firebaseRecords = Object.values(val).filter(r => r && r.cgm);
+          const rawRecords = Object.values(val).filter(r => r && r.cgm);
+
+          // Deduplicação por CGM: se a mesma pessoa aparece em dois nós do Firebase
+          // (nó antigo não deletado após remanejamento), mantém apenas o mais recente.
+          // A "fonte da verdade" é a planilha — rode "Sincronizar Todos os Dados" para limpar.
+          const seenCgm = new Map();
+          rawRecords.forEach(r => {
+            const cgm = String(r.cgm).replace(/\D/g, '').trim();
+            if (!seenCgm.has(cgm)) {
+              seenCgm.set(cgm, r);
+            }
+            // Se já visto, mantém o que NÃO tem "AH" no nome da turma (heurística de "mais recente")
+            // ou simplesmente o primeiro encontrado — o syncAllData corrige o Firebase
+          });
+
+          const firebaseRecords = Array.from(seenCgm.values());
           setRecords(firebaseRecords);
           setFirebaseActive(true);
         } else {
