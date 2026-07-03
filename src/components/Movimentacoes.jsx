@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { database, isConfigured } from '../firebase';
-import { ref, onValue } from 'firebase/database';
+import { ref, onValue, remove } from 'firebase/database';
 
 export default function Movimentacoes({ userEmail, userRole }) {
   const [movements, setMovements] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Mock de Movimentações para Modo Offline/Local Fallback
   const mockMovements = useMemo(() => [
@@ -90,21 +91,47 @@ export default function Movimentacoes({ userEmail, userRole }) {
     }
   }, [mockMovements]);
 
-  // Filtragem baseada na função do usuário logado
+  // Função para deletar movimentação (apenas admins)
+  const handleDeleteMovement = async (id) => {
+    if (!window.confirm("Deseja realmente remover esta movimentação do histórico? (Isso não alterará a turma do cursista na planilha, apenas excluirá este registro do log)")) return;
+    try {
+      if (isConfigured && database) {
+        const movementRef = ref(database, `movements/${id}`);
+        await remove(movementRef);
+      } else {
+        // Fallback local se estiver offline
+        setMovements(prev => prev.filter(m => m.id !== id));
+      }
+    } catch (e) {
+      console.error("Erro ao deletar movimentação:", e);
+      alert("Erro ao remover movimentação: " + e.message);
+    }
+  };
+
+  // Filtragem baseada na função do usuário logado e busca por texto
   const filteredMovements = useMemo(() => {
+    const query = searchQuery.toLowerCase().trim();
     return movements.filter(mov => {
-      // Admins e Técnicos veem tudo
+      // 1. Controle de acesso por cargo
+      let hasAccess = false;
       if (userRole === 'admin' || userRole === 'tecnico') {
-        return true;
+        hasAccess = true;
+      } else if (userRole === 'tutor') {
+        hasAccess = mov.email_tutor_responsavel && mov.email_tutor_responsavel.toLowerCase() === userEmail.toLowerCase();
       }
-      // Tutores veem apenas as movimentações das turmas que tutoreiam
-      if (userRole === 'tutor') {
-        return mov.email_tutor_responsavel && mov.email_tutor_responsavel.toLowerCase() === userEmail.toLowerCase();
+
+      if (!hasAccess) return false;
+
+      // 2. Filtro de pesquisa (Nome do Cursista ou CGM)
+      if (query) {
+        const nomeMatch = mov.nome_cursista && mov.nome_cursista.toLowerCase().includes(query);
+        const cgmMatch = mov.cgm && mov.cgm.toLowerCase().includes(query);
+        return nomeMatch || cgmMatch;
       }
-      // Formadores por padrão não veem esta aba, mas se virem, limita a nada ou opcional
-      return false;
+
+      return true;
     });
-  }, [movements, userEmail, userRole]);
+  }, [movements, userEmail, userRole, searchQuery]);
 
   // Função para formatar a data de maneira premium (ex: "Hoje às 15:30" ou "02/07/2026 às 15:30")
   const formatTime = (isoString) => {
@@ -158,10 +185,31 @@ export default function Movimentacoes({ userEmail, userRole }) {
         </span>
       </div>
 
-      <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '2rem' }}>
+      <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
         Linha do tempo contendo transferências, novos ingressos e saídas de cursistas nas turmas. 
         {userRole === 'tutor' && " Mostrando apenas eventos das turmas sob sua tutoria."}
       </p>
+
+      {/* Barra de Filtro de Cursista */}
+      <div style={{ marginBottom: '2rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
+        <input 
+          type="text" 
+          placeholder="🔍 Buscar por nome do cursista ou CGM..." 
+          className="filter-input"
+          style={{ maxWidth: '420px', margin: 0, padding: '0.6rem 1rem' }}
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+        {searchQuery && (
+          <button 
+            className="btn-secondary" 
+            style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}
+            onClick={() => setSearchQuery('')}
+          >
+            Limpar Filtro
+          </button>
+        )}
+      </div>
 
       {loading ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}>
@@ -170,7 +218,7 @@ export default function Movimentacoes({ userEmail, userRole }) {
       ) : filteredMovements.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '4rem 2rem', color: 'var(--color-text-muted)' }}>
           <i className="lucide-calendar-x" style={{ fontSize: '2.5rem', marginBottom: '1rem', display: 'block', opacity: 0.5 }}></i>
-          Nenhuma movimentação de turma registrada até o momento.
+          {searchQuery ? "Nenhuma movimentação atende a esta pesquisa." : "Nenhuma movimentação de turma registrada até o momento."}
         </div>
       ) : (
         /* Timeline Container */
@@ -225,9 +273,33 @@ export default function Movimentacoes({ userEmail, userRole }) {
                     }}>
                       {style.text}
                     </span>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
-                      {formatTime(mov.timestamp)}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                        {formatTime(mov.timestamp)}
+                      </span>
+                      {userRole === 'admin' && (
+                        <button
+                          title="Remover movimentação do histórico"
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: '#e53e3e',
+                            cursor: 'pointer',
+                            padding: '0.2rem',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            borderRadius: '4px',
+                            transition: 'background-color 0.2s',
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(229, 62, 62, 0.08)'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                          onClick={() => handleDeleteMovement(mov.id)}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {/* Card Body */}
