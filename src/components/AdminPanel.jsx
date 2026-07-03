@@ -12,6 +12,10 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState('');
 
+  // Confirmação do SERE para remanejamento
+  const [showSereModal, setShowSereModal] = useState(false);
+  const [sereCheckbox, setSereCheckbox] = useState(false);
+
   // Paginação
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(15);
@@ -52,11 +56,28 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
     }));
   };
 
-  // Salvar registro (Google Sheets Web App + Firebase + Log de Movimentações)
-  const handleSave = async (e) => {
-    e.preventDefault();
+  // Intercepta o envio do formulário para verificar remanejamento
+  const handleSubmit = (e) => {
+    if (e) e.preventDefault();
+    
+    const turmaAnterior = (originalRecord?.turma || '').trim();
+    const turmaNova = (selectedRecord?.turma || '').trim();
+    
+    if (turmaAnterior !== turmaNova) {
+      // Abre o modal de confirmação do SERE se houve mudança de turma
+      setSereCheckbox(false);
+      setShowSereModal(true);
+    } else {
+      // Salva diretamente se não houve alteração de turma
+      executeSave();
+    }
+  };
+
+  // Executa o salvamento de fato (Google Sheets + Firebase + Logs)
+  const executeSave = async () => {
     setIsSaving(true);
     setSaveStatus('Salvando alterações...');
+    setShowSereModal(false); // Fecha o modal do SERE se estiver aberto
 
     try {
       const uniqueId = selectedRecord.cod_cursista || `EP-${selectedRecord.cgm}`;
@@ -357,7 +378,7 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
               <button className="close-modal-btn" onClick={() => { setSelectedRecord(null); setOriginalRecord(null); }}>&times;</button>
             </div>
             
-            <form onSubmit={handleSave}>
+            <form onSubmit={handleSubmit}>
               <div className="form-body">
                 {/* 1. Dados do Cursista */}
                 <h4 className="form-body-full" style={{ color: 'var(--color-primary-dark)', borderBottom: '1px solid var(--color-card-border)', paddingBottom: '0.25rem', marginTop: '0.5rem' }}>
@@ -581,6 +602,100 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmação do SERE para Remanejamento */}
+      {showSereModal && (
+        <div className="admin-form-overlay animate-fade-in" style={{ zIndex: 1100 }}>
+          <div className="admin-form-card" style={{ maxWidth: '550px', padding: 0 }}>
+            <div className="form-header" style={{ backgroundColor: 'var(--color-primary-dark)', color: 'white' }}>
+              <h3 style={{ margin: 0, fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                ⚠️ Efetivar Remanejamento no SERE
+              </h3>
+              <button className="close-modal-btn" onClick={() => setShowSereModal(false)}>&times;</button>
+            </div>
+            
+            <div style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              <p style={{ margin: 0, color: 'var(--color-text-dark)', lineHeight: 1.5 }}>
+                Você está alterando a turma do cursista <strong>{selectedRecord?.nome_cursista}</strong> (CGM: {selectedRecord?.cgm}):
+              </p>
+              
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center', 
+                backgroundColor: 'rgba(50, 130, 184, 0.05)', 
+                padding: '1rem', 
+                borderRadius: 'var(--radius-sm)', 
+                border: '1px solid var(--color-card-border)' 
+              }}>
+                <div style={{ textAlign: 'center', flex: 1 }}>
+                  <span style={{ display: 'block', fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>Turma Anterior</span>
+                  <strong style={{ color: '#e53e3e', fontSize: '0.95rem' }}>{originalRecord?.turma || '(Sem Turma)'}</strong>
+                </div>
+                <div style={{ fontSize: '1.5rem', color: 'var(--color-text-muted)', padding: '0 0.5rem' }}>➔</div>
+                <div style={{ textAlign: 'center', flex: 1 }}>
+                  <span style={{ display: 'block', fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>Nova Turma</span>
+                  <strong style={{ color: 'var(--color-accent-green)', fontSize: '0.95rem' }}>{selectedRecord?.turma || '(Sem Turma)'}</strong>
+                </div>
+              </div>
+
+              <div style={{ 
+                borderLeft: '4px solid #f7b731', 
+                backgroundColor: 'rgba(247, 183, 49, 0.05)', 
+                padding: '1rem', 
+                borderRadius: 'var(--radius-sm)', 
+                display: 'flex',
+                flexDirection: 'column', 
+                alignItems: 'flex-start',
+                gap: '0.5rem'
+              }}>
+                <h5 style={{ margin: 0, color: '#b7791f', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700 }}>
+                  ⚠️ Importante: Atualização Manual no SERE
+                </h5>
+                <p style={{ margin: 0, fontSize: '0.875rem', color: '#744210', lineHeight: 1.4 }}>
+                  Esta ação atualizará o Dashboard (Firebase) e a Planilha de Dados, mas <strong>não se integra automaticamente ao SERE</strong>. 
+                  Você deve acessar o sistema SERE e efetivar o remanejamento manualmente lá.
+                </p>
+              </div>
+
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', cursor: 'pointer', userSelect: 'none', marginTop: '0.5rem' }}>
+                <input 
+                  type="checkbox" 
+                  checked={sereCheckbox}
+                  onChange={(e) => setSereCheckbox(e.target.checked)}
+                  style={{ marginTop: '0.2rem', width: '16px', height: '16px' }}
+                />
+                <span style={{ fontSize: '0.9rem', color: 'var(--color-text-dark)', lineHeight: 1.4 }}>
+                  Confirmo que farei (ou já fiz) a alteração manual deste remanejamento no sistema <strong>SERE</strong>.
+                </span>
+              </label>
+              
+              <div className="form-footer" style={{ marginTop: '1rem', borderTop: '1px solid var(--color-card-border)', paddingTop: '1.25rem', display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
+                <button 
+                  type="button" 
+                  className="btn-secondary" 
+                  onClick={() => setShowSereModal(false)}
+                >
+                  Voltar
+                </button>
+                <button 
+                  type="button" 
+                  className="btn-primary" 
+                  style={{ 
+                    backgroundColor: sereCheckbox ? 'var(--color-primary)' : '#cbd5e1', 
+                    color: sereCheckbox ? 'white' : '#94a3b8',
+                    cursor: sereCheckbox ? 'pointer' : 'not-allowed' 
+                  }}
+                  disabled={!sereCheckbox || isSaving}
+                  onClick={executeSave}
+                >
+                  {isSaving ? "Salvando..." : "Confirmar e Finalizar"}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
