@@ -7,6 +7,7 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRecord, setSelectedRecord] = useState(null); // Registro sendo editado
   const [originalRecord, setOriginalRecord] = useState(null); // Registro antes de ser editado
+  const [editMode, setEditMode] = useState(null); // 'data' ou 'remanejamento'
   
   // Status de gravação
   const [isSaving, setIsSaving] = useState(false);
@@ -19,6 +20,15 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
   // Paginação
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(15);
+
+  // Extrai turmas únicas da base para preencher o select do remanejamento
+  const uniqueTurmas = useMemo(() => {
+    const classes = new Set();
+    data.forEach(item => {
+      if (item.turma) classes.add(item.turma.trim());
+    });
+    return Array.from(classes).sort();
+  }, [data]);
 
   // Filtragem dos registros para o Admin (busca por nome, CGM ou Código)
   const filteredRecords = useMemo(() => {
@@ -41,10 +51,27 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
 
   const totalPages = Math.max(Math.ceil(filteredRecords.length / itemsPerPage), 1);
 
-  // Abrir formulário de edição
+  // Abrir formulário de edição de dados comuns
   const handleEditClick = (record) => {
     setSelectedRecord({ ...record });
     setOriginalRecord({ ...record }); // Guarda o estado anterior para comparar modificações
+    setEditMode('data');
+    setSaveStatus('');
+  };
+
+  // Abrir formulário de remanejamento
+  const handleRemanejarClick = (record) => {
+    setSelectedRecord({ ...record });
+    setOriginalRecord({ ...record });
+    setEditMode('remanejamento');
+    setSaveStatus('');
+  };
+
+  // Fechar modals
+  const handleCloseModal = () => {
+    setSelectedRecord(null);
+    setOriginalRecord(null);
+    setEditMode(null);
     setSaveStatus('');
   };
 
@@ -149,9 +176,7 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
 
       setSaveStatus('Salvo com sucesso na planilha e no banco de dados!');
       setTimeout(() => {
-        setSelectedRecord(null); // Fecha o formulário
-        setOriginalRecord(null);
-        setSaveStatus('');
+        handleCloseModal();
       }, 1500);
 
     } catch (err) {
@@ -318,12 +343,19 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
                       <td style={{ fontSize: '0.85rem' }}>{item.nome_formador}</td>
                       <td style={{ fontSize: '0.85rem' }}>{item.tutor_responsavel}</td>
                       <td>
-                        <div className="actions-cell">
+                        <div className="actions-cell" style={{ display: 'flex', gap: '0.25rem' }}>
                           <button 
                             className="action-btn email" 
                             onClick={() => handleEditClick(item)}
                           >
                             Editar
+                          </button>
+                          <button 
+                            className="action-btn" 
+                            style={{ backgroundColor: 'var(--color-primary)', color: 'white' }}
+                            onClick={() => handleRemanejarClick(item)}
+                          >
+                            Remanejar
                           </button>
                           <button 
                             className="action-btn whatsapp" 
@@ -372,14 +404,72 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
       {/* Modal de Formulário de Edição */}
       {selectedRecord && (
         <div className="admin-form-overlay animate-fade-in">
-          <div className="admin-form-card">
+          <div className="admin-form-card" style={{ maxWidth: editMode === 'remanejamento' ? '500px' : '800px' }}>
             <div className="form-header">
-              <h3>Editar Cadastro: {selectedRecord.nome_cursista}</h3>
-              <button className="close-modal-btn" onClick={() => { setSelectedRecord(null); setOriginalRecord(null); }}>&times;</button>
+              <h3>
+                {editMode === 'remanejamento' 
+                  ? `Remanejar Cursista: ${selectedRecord.nome_cursista}` 
+                  : `Editar Cadastro: ${selectedRecord.nome_cursista}`}
+              </h3>
+              <button className="close-modal-btn" onClick={handleCloseModal}>&times;</button>
             </div>
             
             <form onSubmit={handleSubmit}>
-              <div className="form-body">
+              {editMode === 'remanejamento' ? (
+                <div className="form-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', padding: '2rem' }}>
+                  <div className="filter-group" style={{ gridColumn: '1 / -1' }}>
+                    <span className="filter-label">Cursista</span>
+                    <input 
+                      type="text" 
+                      className="filter-input" 
+                      value={selectedRecord.nome_cursista || ''} 
+                      disabled 
+                      style={{ backgroundColor: 'var(--color-bg-light)', cursor: 'not-allowed' }} 
+                    />
+                  </div>
+                  <div className="filter-group" style={{ gridColumn: '1 / -1' }}>
+                    <span className="filter-label">CGM</span>
+                    <input 
+                      type="text" 
+                      className="filter-input" 
+                      value={selectedRecord.cgm || ''} 
+                      disabled 
+                      style={{ backgroundColor: 'var(--color-bg-light)', cursor: 'not-allowed' }} 
+                    />
+                  </div>
+                  <div className="filter-group" style={{ gridColumn: '1 / -1' }}>
+                    <span className="filter-label">Turma de Origem</span>
+                    <input 
+                      type="text" 
+                      className="filter-input" 
+                      value={originalRecord.turma || '(Sem Turma)'} 
+                      disabled 
+                      style={{ 
+                        backgroundColor: 'rgba(229, 62, 62, 0.05)', 
+                        border: '1px solid #feb2b2', 
+                        color: '#e53e3e', 
+                        fontWeight: 600, 
+                        cursor: 'not-allowed' 
+                      }} 
+                    />
+                  </div>
+                  <div className="filter-group" style={{ gridColumn: '1 / -1' }}>
+                    <span className="filter-label">Nova Turma (Destino)</span>
+                    <select 
+                      className="filter-select"
+                      value={selectedRecord.turma || ''}
+                      onChange={e => handleInputChange('turma', e.target.value)}
+                      required
+                    >
+                      <option value="">-- Selecione a nova turma --</option>
+                      {uniqueTurmas.map((t, i) => (
+                        <option key={i} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              ) : (
+                <div className="form-body">
                 {/* 1. Dados do Cursista */}
                 <h4 className="form-body-full" style={{ color: 'var(--color-primary-dark)', borderBottom: '1px solid var(--color-card-border)', paddingBottom: '0.25rem', marginTop: '0.5rem' }}>
                   Dados do Cursista
@@ -458,8 +548,13 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
                     type="text" 
                     className="filter-input"
                     value={selectedRecord.turma || ''} 
-                    onChange={e => handleInputChange('turma', e.target.value)}
+                    disabled
+                    style={{ backgroundColor: 'var(--color-bg-light)', cursor: 'not-allowed' }}
+                    title="Para mudar a turma, utilize o botão 'Remanejar' na tabela principal."
                   />
+                  <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '0.2rem' }}>
+                    Para alterar a turma, utilize a ação <strong>Remanejar</strong> na lista de cursistas.
+                  </span>
                 </div>
 
                 <div className="filter-group">
@@ -591,10 +686,10 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
                     onChange={e => handleInputChange('e-mail_nre', e.target.value)}
                   />
                 </div>
-              </div>
+              )}
 
               <div className="form-footer">
-                <button type="button" className="btn-secondary" onClick={() => { setSelectedRecord(null); setOriginalRecord(null); }} disabled={isSaving}>
+                <button type="button" className="btn-secondary" onClick={handleCloseModal} disabled={isSaving}>
                   Cancelar
                 </button>
                 <button type="submit" className="btn-primary" disabled={isSaving}>
