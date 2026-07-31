@@ -6,6 +6,7 @@ export default function ContatoFormadores({ data }) {
   const [turmaFilter, setTurmaFilter] = useState('');
   const [modalidadeFilter, setModalidadeFilter] = useState('');
   const [nreFilter, setNreFilter] = useState('');
+  const [somenteNovos, setSomenteNovos] = useState(false);
   
   // Paginação
   const [currentPage, setCurrentPage] = useState(1);
@@ -43,7 +44,8 @@ export default function ContatoFormadores({ data }) {
           diaSemana: item.dia_da_semana || '',
           horarioIni: item.horario_inicial || '',
           horarioFim: item.horario_fim || '',
-          turno: item.turno || ''
+          turno: item.turno || '',
+          isNovo: item.novo_formador === 'SIM'
         });
       }
     });
@@ -79,9 +81,10 @@ export default function ContatoFormadores({ data }) {
       if (turmaFilter && item.turma !== turmaFilter) return false;
       if (modalidadeFilter && item.modalidade !== modalidadeFilter) return false;
       if (nreFilter && item.nre !== nreFilter) return false;
+      if (somenteNovos && !item.isNovo) return false;
       return true;
     });
-  }, [formadoresClasses, formadorSearch, turmaFilter, modalidadeFilter, nreFilter]);
+  }, [formadoresClasses, formadorSearch, turmaFilter, modalidadeFilter, nreFilter, somenteNovos]);
 
   // Paginação - registros visíveis
   const paginatedRecords = useMemo(() => {
@@ -135,6 +138,25 @@ export default function ContatoFormadores({ data }) {
             {filterOptions.nres.map(n => <option key={n} value={n}>{n}</option>)}
           </select>
         </div>
+        <div className="filter-group" style={{ justifyContent: 'flex-end', alignItems: 'flex-end' }}>
+          <span className="filter-label">&nbsp;</span>
+          <button
+            onClick={() => setSomenteNovos(prev => !prev)}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '6px',
+              padding: '8px 14px', borderRadius: '20px', border: 'none', cursor: 'pointer',
+              fontWeight: 700, fontSize: '0.8rem', letterSpacing: '0.03em',
+              transition: 'all 0.2s ease',
+              background: somenteNovos
+                ? 'linear-gradient(135deg, #f59e0b, #d97706)'
+                : 'rgba(255,255,255,0.08)',
+              color: somenteNovos ? '#fff' : 'var(--color-text-muted)',
+              boxShadow: somenteNovos ? '0 2px 8px rgba(245,158,11,0.4)' : 'none'
+            }}
+          >
+            ⭐ {somenteNovos ? 'Somente Novos' : 'Todos'}
+          </button>
+        </div>
       </div>
 
       {/* Tabela de Contatos */}
@@ -172,7 +194,18 @@ export default function ContatoFormadores({ data }) {
 
                 return (
                   <tr key={idx}>
-                    <td style={{ fontWeight: 600, color: 'var(--color-primary-dark)' }}>{item.nome}</td>
+                    <td style={{ fontWeight: 600, color: 'var(--color-primary-dark)' }}>
+                      {item.isNovo && (
+                        <span title="Formador Novo" style={{
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                          color: '#fff', fontSize: '0.6rem', fontWeight: 800,
+                          padding: '1px 5px', borderRadius: '10px',
+                          marginRight: '6px', verticalAlign: 'middle', letterSpacing: '0.03em'
+                        }}>⭐ NOVO</span>
+                      )}
+                      {item.nome}
+                    </td>
                     <td>
                       {item.email ? (
                         <a href={`mailto:${item.email}`} style={{ color: 'var(--color-accent-blue)', textDecoration: 'none' }}>
