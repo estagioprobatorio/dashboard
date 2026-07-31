@@ -87,7 +87,9 @@ button, input, select, textarea {
 }
 
 .banner-content {
-  max-width: 1400px;
+  max-width: 100%;
+  padding-left: 2rem;
+  padding-right: 2rem;
   margin: 0 auto;
   display: flex;
   justify-content: space-between;
@@ -140,7 +142,9 @@ button, input, select, textarea {
 }
 
 .tabs-container {
-  max-width: 1400px;
+  max-width: 100%;
+  padding-left: 2rem;
+  padding-right: 2rem;
   margin: 0 auto;
   display: flex;
   overflow-x: auto;
@@ -195,7 +199,9 @@ button, input, select, textarea {
 /* Main Content Area */
 .main-content {
   flex: 1;
-  max-width: 1400px;
+  max-width: 100%;
+  padding-left: 3rem;
+  padding-right: 3rem;
   width: 100%;
   margin: 0 auto;
   padding: 2rem;

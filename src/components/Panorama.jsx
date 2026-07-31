@@ -96,6 +96,42 @@ export default function Panorama({ data }) {
       .slice(0, 8);
   }, [filteredData]);
 
+  // Dados para Gráfico 3: Cursistas por Chamamento
+  const chamamentoChartData = useMemo(() => {
+    const counts = {};
+    filteredData.forEach(item => {
+      const val = item.chamamento || 'Não Informado';
+      counts[val] = (counts[val] || 0) + 1;
+    });
+    return Object.entries(counts)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [filteredData]);
+
+  // Dados para Gráfico 4: Cursistas por Turno
+  const turnoChartData = useMemo(() => {
+    const counts = {};
+    filteredData.forEach(item => {
+      const val = item.turno || 'Não Informado';
+      counts[val] = (counts[val] || 0) + 1;
+    });
+    return Object.entries(counts)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [filteredData]);
+
+  // Dados para Gráfico 5: Cursistas por Modalidade
+  const modalidadeChartData = useMemo(() => {
+    const counts = {};
+    filteredData.forEach(item => {
+      const val = item.modalidade || 'Não Informado';
+      counts[val] = (counts[val] || 0) + 1;
+    });
+    return Object.entries(counts)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [filteredData]);
+
   // Limpar todos os filtros
   const clearFilters = () => {
     setNreFilter('');
@@ -298,7 +334,10 @@ export default function Panorama({ data }) {
         {/* Seção de Gráficos */}
         <div className="chart-container-grid">
           {renderHorizontalBarChart(nreChartData, "Cursistas por NRE (Top 8)")}
-          {renderHorizontalBarChart(formadorChartData, "Cursistas por Formador (Média de Alunos - Top 8)")}
+          {renderHorizontalBarChart(formadorChartData, "Cursistas por Formador (Top 8)")}
+          {renderHorizontalBarChart(chamamentoChartData, "Cursistas por Chamamento")}
+          {renderHorizontalBarChart(turnoChartData, "Cursistas por Turno")}
+          {renderHorizontalBarChart(modalidadeChartData, "Cursistas por Modalidade")}
         </div>
       </div>
     </>
