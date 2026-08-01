@@ -138,23 +138,23 @@ export default function ContatoFormadores({ data }) {
             {filterOptions.nres.map(n => <option key={n} value={n}>{n}</option>)}
           </select>
         </div>
-        <div className="filter-group" style={{ justifyContent: 'flex-end', alignItems: 'flex-end' }}>
-          <span className="filter-label">&nbsp;</span>
+        <div className="filter-group">
+          <span className="filter-label">Filtro de Entrada</span>
           <button
             onClick={() => setSomenteNovos(prev => !prev)}
             style={{
-              display: 'inline-flex', alignItems: 'center', gap: '6px',
-              padding: '8px 14px', borderRadius: '20px', border: 'none', cursor: 'pointer',
-              fontWeight: 700, fontSize: '0.8rem', letterSpacing: '0.03em',
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+              height: '42px', padding: '0 1rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-card-border)', cursor: 'pointer',
+              fontWeight: 700, fontSize: '0.85rem', letterSpacing: '0.03em',
               transition: 'all 0.2s ease',
               background: somenteNovos
                 ? 'linear-gradient(135deg, #f59e0b, #d97706)'
-                : 'rgba(255,255,255,0.08)',
-              color: somenteNovos ? '#fff' : 'var(--color-text-muted)',
-              boxShadow: somenteNovos ? '0 2px 8px rgba(245,158,11,0.4)' : 'none'
+                : 'white',
+              color: somenteNovos ? '#fff' : 'var(--color-text-main)',
+              boxShadow: somenteNovos ? '0 2px 8px rgba(245,158,11,0.4)' : 'var(--shadow-sm)'
             }}
           >
-            ⭐ {somenteNovos ? 'Somente Novos' : 'Todos'}
+            ⭐ {somenteNovos ? 'Somente Novos' : 'Todos os Formadores'}
           </button>
         </div>
       </div>

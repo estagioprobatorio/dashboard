@@ -149,12 +149,11 @@ export default function ContatoCursistas({ data }) {
           <span className="filter-label">CPF Cursista</span>
           <input 
             type="text" 
-            placeholder="Apenas números..." 
+            placeholder="Ex: 00000000000..." 
             className="filter-input"
             value={cpfCursistaSearch}
             onChange={e => setCpfCursistaSearch(e.target.value)}
           />
-          <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>Ex: 00000000000</span>
         </div>
 
         {/* Busca por CPF Formador */}
@@ -162,7 +161,7 @@ export default function ContatoCursistas({ data }) {
           <span className="filter-label">CPF Formador</span>
           <input 
             type="text" 
-            placeholder="Buscar por CPF do Formador..." 
+            placeholder="Ex: 00000000000..." 
             className="filter-input"
             value={cpfFormadorSearch}
             onChange={e => setCpfFormadorSearch(e.target.value)}
