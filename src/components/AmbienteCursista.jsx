@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import FormularioRemanejamento from './FormularioRemanejamento';
 import TurmaModal from './TurmaModal';
 
@@ -6,6 +6,29 @@ export default function AmbienteCursista({ userEmail, records, movimentacoes = [
   const [showModalForm, setShowModalForm] = useState(false);
   const [selectedTurma, setSelectedTurma] = useState(null);
   const [classmateSearch, setClassmateSearch] = useState('');
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+
+  // Escuta evento de instalação PWA
+  useEffect(() => {
+    const handleBeforeInstall = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+  }, []);
+
+  const handleInstallPWA = async () => {
+    if (!deferredPrompt) {
+      alert("Para instalar no iPhone (iOS): Toque no botão Compartilhar ⬆️ do Safari e selecione 'Adicionar à Tela de Início'.\n\nNo Android/Chrome: Toque nos 3 pontos do navegador ➔ 'Instalar aplicativo'.");
+      return;
+    }
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setDeferredPrompt(null);
+    }
+  };
 
   // 1. Identificar o registro do Cursista Logado
   const cursistaRecord = useMemo(() => {
@@ -112,6 +135,29 @@ export default function AmbienteCursista({ userEmail, records, movimentacoes = [
             Olá, {cursistaRecord.nome_cursista}!
           </h1>
         </div>
+
+        <button
+          onClick={handleInstallPWA}
+          style={{
+            backgroundColor: 'rgba(255, 255, 255, 0.15)',
+            color: '#fff',
+            border: '1px solid rgba(255, 255, 255, 0.3)',
+            borderRadius: '10px',
+            padding: '0.55rem 1.1rem',
+            fontSize: '0.85rem',
+            fontWeight: 700,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            backdropFilter: 'blur(4px)',
+            transition: 'all 0.2s ease'
+          }}
+          onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.25)'}
+          onMouseLeave={e => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.15)'}
+        >
+          <span>📲</span> Instalar App no Celular
+        </button>
       </div>
          {/* BLOCO 1: MINHA TURMA */}
       {subTab === 'turma' && (
