@@ -111,21 +111,29 @@ export default function Movimentacoes({ userEmail, userRole }) {
   // Filtragem baseada na função do usuário logado e busca por texto
   const filteredMovements = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
+    const cleanUserEmail = userEmail ? userEmail.toLowerCase().trim() : '';
+
     return movements.filter(mov => {
       // 1. Controle de acesso por cargo
       let hasAccess = false;
       if (userRole === 'admin' || userRole === 'tecnico') {
         hasAccess = true;
       } else if (userRole === 'tutor') {
-        hasAccess = mov.email_tutor_responsavel && mov.email_tutor_responsavel.toLowerCase() === userEmail.toLowerCase();
+        hasAccess = (mov.email_tutor_responsavel && mov.email_tutor_responsavel.toLowerCase() === cleanUserEmail) ||
+                    (mov.email_tutor_origem && mov.email_tutor_origem.toLowerCase() === cleanUserEmail);
+      } else if (userRole === 'formador') {
+        hasAccess = (mov.email_formador && mov.email_formador.toLowerCase() === cleanUserEmail) ||
+                    (mov.email_formador_origem && mov.email_formador_origem.toLowerCase() === cleanUserEmail);
+      } else if (userRole === 'cursista') {
+        hasAccess = mov.emailCursista && mov.emailCursista.toLowerCase() === cleanUserEmail;
       }
 
       if (!hasAccess) return false;
 
       // 2. Filtro de pesquisa (Nome do Cursista ou CGM)
       if (query) {
-        const nomeMatch = mov.nome_cursista && mov.nome_cursista.toLowerCase().includes(query);
-        const cgmMatch = mov.cgm && mov.cgm.toLowerCase().includes(query);
+        const nomeMatch = (mov.nome_cursista || mov.nomeCursista || '').toLowerCase().includes(query);
+        const cgmMatch = (mov.cgm || '').toLowerCase().includes(query);
         return nomeMatch || cgmMatch;
       }
 
@@ -304,15 +312,15 @@ export default function Movimentacoes({ userEmail, userRole }) {
 
                   {/* Card Body */}
                   <div style={{ fontSize: '0.95rem' }}>
-                    O cursista <b style={{ color: 'var(--color-primary-dark)' }}>{mov.nome_cursista}</b> (CGM: {mov.cgm}) 
+                    O cursista <b style={{ color: 'var(--color-primary-dark)' }}>{mov.nome_cursista || mov.nomeCursista}</b> (CGM: {mov.cgm}) 
                     {mov.tipo_acao === 'Transferência' && (
                       <span>
-                        {" "}foi transferido da turma <span style={{ fontStyle: 'italic', color: 'var(--color-text-muted)' }}>{mov.turma_anterior}</span> para a turma <b>{mov.turma_nova}</b>.
+                        {" "}foi transferido da turma <span style={{ fontStyle: 'italic', color: 'var(--color-text-muted)' }}>{mov.turma_anterior || mov.turmaOrigem}</span> para a turma <b>{mov.turma_nova || mov.turmaDestino}</b>.
                       </span>
                     )}
-                    {mov.tipo_acao === 'Entrada' && (
+                    {(mov.tipo_acao === 'Entrada' || mov.solicitadoPor === 'Cursista') && (
                       <span>
-                        {" "}foi matriculado na turma <b>{mov.turma_nova}</b>.
+                        {" "}solicitou remanejamento da turma <b>{mov.turmaOrigem || mov.turma_anterior}</b> para o turno <b>{mov.turnoDesejado || mov.turno_pretendido}</b>.
                       </span>
                     )}
                     {mov.tipo_acao === 'Saída' && (
@@ -320,21 +328,27 @@ export default function Movimentacoes({ userEmail, userRole }) {
                         {" "}deixou a turma <span style={{ fontStyle: 'italic', color: 'var(--color-text-muted)' }}>{mov.turma_anterior}</span>.
                       </span>
                     )}
+                    {mov.motivo && (
+                      <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginTop: '0.3rem' }}>
+                        <b>Motivo:</b> {mov.motivo} {mov.justificativa ? `(${mov.justificativa})` : ''}
+                      </div>
+                    )}
                   </div>
 
-                  {/* Card Footer (Metadados da Tutoria) */}
+                  {/* Card Footer (Metadados da Tutoria e Formação) */}
                   <div style={{ 
                     display: 'flex', 
                     gap: '1.5rem', 
                     fontSize: '0.8rem', 
                     color: 'var(--color-text-muted)',
-                    borderTop: '1px solid rgba(0,0,0,0.04)',
-                    paddingTop: '0.5rem',
+                    borderTop: '1px solid rgba(0,0,0,0.06)',
+                    paddingTop: '0.6rem',
                     marginTop: '0.25rem',
                     flexWrap: 'wrap'
                   }}>
-                    <span><b>Tutor:</b> {mov.tutor || 'Não Atribuído'}</span>
-                    <span><b>NRE:</b> {mov.nre || 'Não Informado'}</span>
+                    <span><b>🎓 Formador:</b> {mov.formador || mov.formadorOrigem || 'Não Informado'} {mov.email_formador ? `(${mov.email_formador})` : ''}</span>
+                    <span><b>👤 Tutor:</b> {mov.tutor || mov.tutorOrigem || 'Não Atribuído'} {mov.email_tutor_responsavel ? `(${mov.email_tutor_responsavel})` : ''}</span>
+                    <span><b>📍 NRE:</b> {mov.nre || 'Não Informado'}</span>
                   </div>
                 </div>
               </div>
