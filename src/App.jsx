@@ -14,6 +14,7 @@ import ContatoCursistas from './components/ContatoCursistas';
 import DadosTutoria from './components/DadosTutoria';
 import AdminPanel from './components/AdminPanel';
 import Movimentacoes from './components/Movimentacoes';
+import ListaTurmas from './components/ListaTurmas';
 
 // Importando dados iniciais locais
 import fallbackData from './data_fallback.json';
@@ -252,6 +253,8 @@ export default function App() {
         return <ContatoCursistas data={filteredRecordsForView} />;
       case 'tutoria':
         return <DadosTutoria data={filteredRecordsForView} />;
+      case 'turmas':
+        return <ListaTurmas data={filteredRecordsForView} />;
       case 'movimentacoes':
         return <Movimentacoes userEmail={user.email} userRole={userRole} />;
       case 'admin':
@@ -343,7 +346,14 @@ export default function App() {
             className={`tab-btn ${activeTab === 'tutoria' ? 'active' : ''}`}
             onClick={() => setActiveTab('tutoria')}
           >
-            🤝 Dados Tutoria/Turmas
+            🤝 Dados Tutoria
+          </button>
+
+          <button 
+            className={`tab-btn ${activeTab === 'turmas' ? 'active' : ''}`}
+            onClick={() => setActiveTab('turmas')}
+          >
+            🏫 Lista de Turmas
           </button>
           
           {/* Aba de Movimentações: Escondida de Formadores */}
