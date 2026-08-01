@@ -112,7 +112,16 @@ export default function Panorama({ data }) {
   const turnoChartData = useMemo(() => {
     const counts = {};
     filteredData.forEach(item => {
-      const val = item.turno || 'Não Informado';
+      let val = (item.turno || 'Não Informado').trim();
+      // Normalização para solucionar erros de codificação (ex: MANHÃ que vira MANH)
+      const upper = val.toUpperCase();
+      if (upper.startsWith('MANH')) {
+        val = 'MANHA';
+      } else if (upper.startsWith('TARD')) {
+        val = 'TARDE';
+      } else if (upper.startsWith('NOIT')) {
+        val = 'NOITE';
+      }
       counts[val] = (counts[val] || 0) + 1;
     });
     return Object.entries(counts)

@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import TurmaModal from './TurmaModal';
 
 export default function DadosTutoria({ data }) {
   // Filtros
@@ -6,6 +7,9 @@ export default function DadosTutoria({ data }) {
   const [formadorFilter, setFormadorFilter] = useState('');
   const [modalidadeFilter, setModalidadeFilter] = useState('');
   const [chamamentoFilter, setChamamentoFilter] = useState('');
+
+  // Modal da Turma
+  const [selectedTurma, setSelectedTurma] = useState(null);
 
   // Paginação
   const [currentPage, setCurrentPage] = useState(1);
@@ -174,6 +178,7 @@ export default function DadosTutoria({ data }) {
           <thead>
             <tr>
               <th>Turma</th>
+              <th>Formador</th>
               <th>Tutor Responsável</th>
               <th>Telefone Tutor</th>
               <th>E-mail Tutor</th>
@@ -184,7 +189,7 @@ export default function DadosTutoria({ data }) {
           <tbody>
             {paginatedRecords.length === 0 ? (
               <tr>
-                <td colSpan="6" style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem' }}>
+                <td colSpan="7" style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem' }}>
                   Nenhuma tutoria encontrada com os filtros aplicados.
                 </td>
               </tr>
@@ -194,7 +199,44 @@ export default function DadosTutoria({ data }) {
 
                 return (
                   <tr key={idx}>
-                    <td style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--color-primary-dark)' }}>{item.turma}</td>
+                    <td>
+                      {item.turma ? (
+                        <button
+                          onClick={() => setSelectedTurma(item.turma)}
+                          title="Clique para abrir detalhes da turma"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.35rem',
+                            padding: '0.3rem 0.65rem',
+                            borderRadius: '6px',
+                            border: '1px solid #cbd5e1',
+                            backgroundColor: '#f8fafc',
+                            color: 'var(--color-primary-dark)',
+                            fontWeight: 700,
+                            fontSize: '0.82rem',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = '#e0f2fe';
+                            e.currentTarget.style.borderColor = 'var(--color-accent-blue)';
+                            e.currentTarget.style.color = '#0369a1';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = '#f8fafc';
+                            e.currentTarget.style.borderColor = '#cbd5e1';
+                            e.currentTarget.style.color = 'var(--color-primary-dark)';
+                          }}
+                        >
+                          <span>🏫</span> {item.turma}
+                        </button>
+                      ) : (
+                        '-'
+                      )}
+                    </td>
+                    <td style={{ fontWeight: 500, fontSize: '0.85rem' }}>{item.formador || '-'}</td>
                     <td style={{ fontWeight: 500 }}>{item.tutor}</td>
                     <td>
                       {item.telefoneTutor ? (
@@ -284,12 +326,18 @@ export default function DadosTutoria({ data }) {
               <button className="page-btn" onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages}>
                 Próxima
               </button>
-              <button className="page-btn" onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages}>
-                &gt;&gt;
-              </button>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal de Detalhes da Turma */}
+      {selectedTurma && (
+        <TurmaModal 
+          turmaName={selectedTurma} 
+          data={data} 
+          onClose={() => setSelectedTurma(null)} 
+        />
       )}
     </div>
   );

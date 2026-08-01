@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import TurmaModal from './TurmaModal';
 
 export default function ContatoCursistas({ data }) {
   // Filtros de texto/busca
@@ -13,6 +14,9 @@ export default function ContatoCursistas({ data }) {
   const [modalidadeFilter, setModalidadeFilter] = useState('');
   const [turnoFilter, setTurnoFilter] = useState('');
   const [chamamentoFilter, setChamamentoFilter] = useState('');
+
+  // Modal da Turma
+  const [selectedTurma, setSelectedTurma] = useState(null);
 
   // Paginação
   const [currentPage, setCurrentPage] = useState(1);
@@ -267,7 +271,43 @@ export default function ContatoCursistas({ data }) {
                         <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Não informado</span>
                       )}
                     </td>
-                    <td style={{ fontSize: '0.85rem' }}>{item.turma || '-'}</td>
+                    <td>
+                      {item.turma ? (
+                        <button
+                          onClick={() => setSelectedTurma(item.turma)}
+                          title="Clique para abrir detalhes da turma"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.35rem',
+                            padding: '0.3rem 0.65rem',
+                            borderRadius: '6px',
+                            border: '1px solid #cbd5e1',
+                            backgroundColor: '#f8fafc',
+                            color: 'var(--color-primary-dark)',
+                            fontWeight: 600,
+                            fontSize: '0.8rem',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = '#e0f2fe';
+                            e.currentTarget.style.borderColor = 'var(--color-accent-blue)';
+                            e.currentTarget.style.color = '#0369a1';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = '#f8fafc';
+                            e.currentTarget.style.borderColor = '#cbd5e1';
+                            e.currentTarget.style.color = 'var(--color-primary-dark)';
+                          }}
+                        >
+                          <span>🏫</span> {item.turma}
+                        </button>
+                      ) : (
+                        <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic', fontSize: '0.85rem' }}>-</span>
+                      )}
+                    </td>
                     <td style={{ fontSize: '0.85rem', fontWeight: 500 }}>{item.nome_formador || '-'}</td>
                     <td>
                       <div className="actions-cell">
@@ -340,6 +380,15 @@ export default function ContatoCursistas({ data }) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal de Detalhes da Turma */}
+      {selectedTurma && (
+        <TurmaModal 
+          turmaName={selectedTurma} 
+          data={data} 
+          onClose={() => setSelectedTurma(null)} 
+        />
       )}
     </div>
   );
