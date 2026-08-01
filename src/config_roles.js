@@ -7,10 +7,8 @@
  */
 
 export const DEFAULT_ADMINS = [
-  "alexandrebomfim@escola.pr.gov.br",
   "jorge.dotti@escola.pr.gov.br",
-  "estagioprobatorio@escola.pr.gov.br", // Adicionando placeholder para testes
-  "est.probmatricula@escola.pr.gov.br"     // Placeholder geral
+  "estagioprobatorio@escola.pr.gov.br"
 ];
 
 export const DEFAULT_TECNICOS = [

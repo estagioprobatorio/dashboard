@@ -181,6 +181,58 @@ export default function App() {
     });
   };
 
+  // Listas de Exemplos para Simulação do Admin
+  const [simulatedEmail, setSimulatedEmail] = useState('');
+
+  const formadoresExemplo = useMemo(() => {
+    const map = new Map();
+    records.forEach(r => {
+      const email = (r['e-mail_formador'] || r.e_mail_formador || r.email_formador || '').trim().toLowerCase();
+      const nome = r.nome_formador;
+      if (email && nome && !map.has(email)) {
+        map.set(email, { email, nome });
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => a.nome.localeCompare(b.nome));
+  }, [records]);
+
+  const tutoresExemplo = useMemo(() => {
+    const map = new Map();
+    records.forEach(r => {
+      const email = (r.email_tutor || '').trim().toLowerCase();
+      const nome = r.tutor_responsavel;
+      if (email && nome && !map.has(email)) {
+        map.set(email, { email, nome });
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => a.nome.localeCompare(b.nome));
+  }, [records]);
+
+  const cursistasExemplo = useMemo(() => {
+    const map = new Map();
+    records.forEach(r => {
+      const email = (r['e-mail'] || r.email || r.email_cursista || '').trim().toLowerCase();
+      const nome = r.nome_cursista;
+      if (email && nome && !map.has(email)) {
+        map.set(email, { email, nome });
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => a.nome.localeCompare(b.nome));
+  }, [records]);
+
+  // E-mail efetivo (Real ou do Exemplo Simulado)
+  const effectiveEmail = useMemo(() => {
+    if (!user) return '';
+    if (!simulatedRole) return user.email;
+    if (simulatedEmail) return simulatedEmail;
+    
+    if (simulatedRole === 'formador') return formadoresExemplo[0]?.email || user.email;
+    if (simulatedRole === 'tutor') return tutoresExemplo[0]?.email || user.email;
+    if (simulatedRole === 'cursista') return cursistasExemplo[0]?.email || user.email;
+    
+    return user.email;
+  }, [user, simulatedRole, simulatedEmail, formadoresExemplo, tutoresExemplo, cursistasExemplo]);
+
   // 4. Filtrar Registros Dinamicamente para as abas baseado no Perfil Ativo (Real ou Simulado)
   const filteredRecordsForView = useMemo(() => {
     if (!user || !effectiveRole) return [];
@@ -190,7 +242,7 @@ export default function App() {
       return records;
     }
 
-    const email = user.email.toLowerCase();
+    const email = effectiveEmail.toLowerCase();
 
     // Formadores veem apenas registros pertencentes a eles
     if (effectiveRole === 'formador') {
@@ -217,7 +269,7 @@ export default function App() {
     }
 
     return [];
-  }, [records, user, effectiveRole]);
+  }, [records, user, effectiveRole, effectiveEmail]);
 
   // Handler para novas solicitações enviadas pelo Cursista
   const handleNovaMovimentacao = (novaSolicitacao) => {
@@ -270,14 +322,16 @@ export default function App() {
       );
     }
 
-    // Se o perfil ativo for Cursista e a aba ativa não for uma das abas permitidas, renderiza o Ambiente Cursista
-    if (effectiveRole === 'cursista' || activeTab === 'cursista_ambiente') {
+    // Se o perfil ativo for Cursista ou se a aba for de Cursista
+    if (effectiveRole === 'cursista' || activeTab.startsWith('cursista_')) {
+      const subTab = activeTab === 'cursista_solicitacoes' ? 'solicitacoes' : 'turma';
       return (
         <AmbienteCursista 
-          userEmail={user.email} 
+          userEmail={effectiveEmail} 
           records={records} 
           movimentacoes={movimentacoesList}
           onNovaMovimentacao={handleNovaMovimentacao}
+          subTab={subTab}
         />
       );
     }
@@ -294,7 +348,7 @@ export default function App() {
       case 'turmas':
         return <ListaTurmas data={filteredRecordsForView} />;
       case 'movimentacoes':
-        return <Movimentacoes userEmail={user.email} userRole={effectiveRole} />;
+        return <Movimentacoes userEmail={effectiveEmail} userRole={effectiveRole} />;
       case 'admin':
         return (userRole === 'admin' || userRole === 'tecnico')
           ? <AdminPanel data={records} onLocalUpdate={handleLocalUpdate} userRole={userRole} /> 
@@ -306,18 +360,18 @@ export default function App() {
 
   return (
     <div className="app-container">
-      {/* Banner Superior com Logo do Brasão do Paraná */}
+      {/* Banner Superior com Logo do Brasão do Paraná alinhado ao texto */}
       <header className="header-banner">
         <div className="banner-content">
-          <div className="banner-title-area" style={{ display: 'flex', alignItems: 'center', gap: '1.2rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
             <img 
               src="/brasao_parana.svg" 
               alt="Brasão do Estado do Paraná" 
-              style={{ height: '62px', width: 'auto', filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))' }} 
+              style={{ height: '64px', width: 'auto', flexShrink: 0, filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))' }} 
             />
-            <div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
               <span className="logo-badge">Secretaria da Educação do Paraná • SEED/PR</span>
-              <h1 className="banner-title" style={{ marginTop: '0.2rem' }}>Estágio Probatório - Gestão de Turmas</h1>
+              <h1 className="banner-title" style={{ marginTop: '0.1rem', marginBottom: '0.1rem' }}>Estágio Probatório - Gestão de Turmas</h1>
               <span className="banner-subtitle">
                 Ambiente de Acompanhamento, Formadores, Tutores & Cursistas
               </span>
@@ -374,9 +428,11 @@ export default function App() {
           justify: 'space-between',
           fontSize: '0.85rem',
           fontWeight: 600,
+          flexWrap: 'wrap',
+          gap: '0.5rem',
           boxShadow: '0 2px 4px rgba(0,0,0,0.03)'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
               🎭 <b>Simular Visualização de Perfil:</b>
             </span>
@@ -385,8 +441,8 @@ export default function App() {
               onChange={e => {
                 const role = e.target.value;
                 setSimulatedRole(role || null);
-                if (role === 'cursista') setActiveTab('cursista_ambiente');
-                else if (role === 'formador' || role === 'tutor') setActiveTab('panorama');
+                setSimulatedEmail('');
+                if (role === 'cursista') setActiveTab('cursista_turma');
                 else setActiveTab('panorama');
               }}
               style={{
@@ -405,15 +461,61 @@ export default function App() {
               <option value="tutor">👤 Simular Ambiente do Tutor</option>
               <option value="cursista">🧑‍🎓 Simular Ambiente do Cursista</option>
             </select>
+
+            {/* Seleção do Exemplo Específico de Formador, Tutor ou Cursista */}
+            {simulatedRole === 'formador' && formadoresExemplo.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <span style={{ fontSize: '0.8rem' }}>Exemplo:</span>
+                <select
+                  value={effectiveEmail}
+                  onChange={e => setSimulatedEmail(e.target.value)}
+                  style={{ padding: '0.25rem 0.5rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.8rem', fontWeight: 600 }}
+                >
+                  {formadoresExemplo.map(f => (
+                    <option key={f.email} value={f.email}>{f.nome} ({f.email})</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {simulatedRole === 'tutor' && tutoresExemplo.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <span style={{ fontSize: '0.8rem' }}>Exemplo:</span>
+                <select
+                  value={effectiveEmail}
+                  onChange={e => setSimulatedEmail(e.target.value)}
+                  style={{ padding: '0.25rem 0.5rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.8rem', fontWeight: 600 }}
+                >
+                  {tutoresExemplo.map(t => (
+                    <option key={t.email} value={t.email}>{t.nome} ({t.email})</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {simulatedRole === 'cursista' && cursistasExemplo.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <span style={{ fontSize: '0.8rem' }}>Exemplo:</span>
+                <select
+                  value={effectiveEmail}
+                  onChange={e => setSimulatedEmail(e.target.value)}
+                  style={{ padding: '0.25rem 0.5rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.8rem', fontWeight: 600 }}
+                >
+                  {cursistasExemplo.slice(0, 50).map(c => (
+                    <option key={c.email} value={c.email}>{c.nome} ({c.email})</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
           {simulatedRole && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               <span style={{ fontSize: '0.8rem', color: '#b45309' }}>
-                Exibindo dashboard filtrado como: <b>{simulatedRole.toUpperCase()}</b>
+                Simulando: <b>{simulatedRole.toUpperCase()}</b> ({effectiveEmail})
               </span>
               <button
-                onClick={() => { setSimulatedRole(null); setActiveTab('panorama'); }}
+                onClick={() => { setSimulatedRole(null); setSimulatedEmail(''); setActiveTab('panorama'); }}
                 style={{
                   backgroundColor: '#92400e',
                   color: 'white',
@@ -438,14 +540,14 @@ export default function App() {
           {effectiveRole === 'cursista' ? (
             <>
               <button 
-                className={`tab-btn ${activeTab === 'cursista_ambiente' ? 'active' : ''}`}
-                onClick={() => setActiveTab('cursista_ambiente')}
+                className={`tab-btn ${activeTab === 'cursista_turma' ? 'active' : ''}`}
+                onClick={() => setActiveTab('cursista_turma')}
               >
-                🎓 Minha Turma & Remanejamento
+                🏫 Minha Turma
               </button>
               <button 
-                className={`tab-btn ${activeTab === 'movimentacoes' ? 'active' : ''}`}
-                onClick={() => setActiveTab('movimentacoes')}
+                className={`tab-btn ${activeTab === 'cursista_solicitacoes' ? 'active' : ''}`}
+                onClick={() => setActiveTab('cursista_solicitacoes')}
               >
                 🔄 Minhas Solicitações
               </button>
