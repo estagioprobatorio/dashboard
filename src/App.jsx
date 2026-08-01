@@ -561,12 +561,14 @@ export default function App() {
                 📊 Panorama Geral
               </button>
               
-              <button 
-                className={`tab-btn ${activeTab === 'formadores' ? 'active' : ''}`}
-                onClick={() => setActiveTab('formadores')}
-              >
-                🎓 Contato Formadores
-              </button>
+              {effectiveRole !== 'formador' && (
+                <button 
+                  className={`tab-btn ${activeTab === 'formadores' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('formadores')}
+                >
+                  🎓 Contato Formadores
+                </button>
+              )}
               
               <button 
                 className={`tab-btn ${activeTab === 'cursistas' ? 'active' : ''}`}
