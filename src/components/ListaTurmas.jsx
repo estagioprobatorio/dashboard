@@ -131,9 +131,9 @@ export default function ListaTurmas({ data }) {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-          <div className="kpi-card" style={{ padding: '0.6rem 1.2rem', minWidth: 'auto', background: 'white', borderRadius: '10px', boxShadow: 'var(--shadow-sm)' }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>Total Turmas</span>
-            <span style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--color-primary-dark)', display: 'block' }}>{filteredTurmas.length}</span>
+          <div className="kpi-card" style={{ padding: '0.6rem 1.25rem', minWidth: 'auto', background: 'white', borderRadius: '10px', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '0.2rem' }}>
+            <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total de Turmas</span>
+            <span style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--color-primary-dark)', fontFamily: 'var(--font-header)' }}>{filteredTurmas.length}</span>
           </div>
         </div>
       </div>

@@ -182,15 +182,90 @@ export default function Movimentacoes({ userEmail, userRole }) {
     }
   };
 
+  // Exportar Lista de Movimentações para CSV/Planilha Excel
+  const handleExportCSV = () => {
+    if (filteredMovements.length === 0) {
+      alert("Nenhuma movimentação encontrada para exportar.");
+      return;
+    }
+
+    const headers = [
+      "ID",
+      "Data/Hora",
+      "CGM",
+      "CPF",
+      "RG",
+      "Nome do Cursista",
+      "E-mail Cursista",
+      "Tipo Ação",
+      "Turma Origem",
+      "Turma Destino / Turno Pretendido",
+      "Motivo",
+      "Justificativa",
+      "Formador Responsável",
+      "E-mail Formador",
+      "Tutor Responsável",
+      "E-mail Tutor",
+      "NRE",
+      "Status"
+    ];
+
+    const rows = filteredMovements.map(m => [
+      `"${m.id || ''}"`,
+      `"${m.timestamp || m.dataHora || m.data || ''}"`,
+      `"${m.cgm || ''}"`,
+      `"${m.cpf || ''}"`,
+      `"${m.rg || ''}"`,
+      `"${(m.nome_cursista || m.nomeCursista || '').replace(/"/g, '""')}"`,
+      `"${(m.emailCursista || m.email || '').replace(/"/g, '""')}"`,
+      `"${m.tipo_acao || 'Remanejamento'}"`,
+      `"${(m.turma_anterior || m.turmaOrigem || '').replace(/"/g, '""')}"`,
+      `"${(m.turma_nova || m.turmaDestino || m.turnoDesejado || m.turno_pretendido || '').replace(/"/g, '""')}"`,
+      `"${(m.motivo || '').replace(/"/g, '""')}"`,
+      `"${(m.justificativa || '').replace(/"/g, '""')}"`,
+      `"${(m.formador || m.formadorOrigem || '').replace(/"/g, '""')}"`,
+      `"${(m.email_formador || '').replace(/"/g, '""')}"`,
+      `"${(m.tutor || m.tutor_responsavel || m.tutorOrigem || '').replace(/"/g, '""')}"`,
+      `"${(m.email_tutor_responsavel || m.email_tutor || '').replace(/"/g, '""')}"`,
+      `"${(m.nre || '').replace(/"/g, '""')}"`,
+      `"${m.status || 'Registrado'}"`
+    ]);
+
+    const csvContent = "\uFEFF" + [headers.join(";"), ...rows.map(r => r.join(";"))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `backup_movimentacoes_estagio_probatorio_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="glass-panel animate-fade-in">
-      <div className="panel-header">
-        <h2 className="panel-title">
-          <i className="lucide-activity"></i> Histórico de Movimentações de Turma
-        </h2>
-        <span className="kpi-label" style={{ fontSize: '0.85rem' }}>
-          {filteredMovements.length} atualizações registradas
-        </span>
+      <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+        <div>
+          <h2 className="panel-title">
+            <i className="lucide-activity"></i> Histórico de Movimentações
+          </h2>
+        </div>
+        <button
+          onClick={handleExportCSV}
+          className="btn-primary"
+          style={{
+            backgroundColor: '#0284c7',
+            color: '#fff',
+            fontWeight: 700,
+            fontSize: '0.85rem',
+            padding: '0.6rem 1.2rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem'
+          }}
+        >
+          <span>📥</span> Exportar CSV
+        </button>
       </div>
 
       <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>

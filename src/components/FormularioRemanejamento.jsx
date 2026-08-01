@@ -17,6 +17,9 @@ export default function FormularioRemanejamento({ cursistaData, onClose, onSubmi
   const tutorAtual = cursistaData?.tutor_responsavel || 'Tutor não informado';
   const nreCursista = cursistaData?.nre_tutor || cursistaData?.nre || 'NRE não informado';
 
+  const [cpf, setCpf] = useState(cursistaData?.cpf || '');
+  const [rg, setRg] = useState(cursistaData?.rg || '');
+
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
       setNomeArquivo(e.target.files[0].name);
@@ -36,13 +39,14 @@ export default function FormularioRemanejamento({ cursistaData, onClose, onSubmi
       id: `MOV-${Date.now()}`,
       dataHora: new Date().toLocaleString('pt-BR'),
       cgm: cgmCursista,
+      cpf: cpf,
+      rg: rg,
       nomeCursista: nomeCursista,
       emailCursista: emailCursista,
       nre: nreCursista,
       turmaOrigem: turmaAtual,
       formadorOrigem: formadorAtual,
       tutorOrigem: tutorAtual,
-      turnoDesejado: turnoDesejado,
       motivo: motivo,
       justificativa: justificativa,
       comprovante: nomeArquivo || 'Sem anexo',

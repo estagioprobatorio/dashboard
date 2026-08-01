@@ -363,15 +363,15 @@ export default function App() {
       {/* Banner Superior com Logo do Brasão do Paraná alinhado ao texto */}
       <header className="header-banner">
         <div className="banner-content">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+          <div className="banner-brand-area">
             <img 
               src="/brasao_parana.svg" 
               alt="Brasão do Estado do Paraná" 
-              style={{ height: '64px', width: 'auto', flexShrink: 0, filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))' }} 
+              style={{ height: '58px', width: 'auto', flexShrink: 0, filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))' }} 
             />
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+            <div className="banner-title-area">
               <span className="logo-badge">Secretaria da Educação do Paraná • SEED/PR</span>
-              <h1 className="banner-title" style={{ marginTop: '0.1rem', marginBottom: '0.1rem' }}>Estágio Probatório - Gestão de Turmas</h1>
+              <h1 className="banner-title">Estágio Probatório - Gestão de Turmas</h1>
               <span className="banner-subtitle">
                 Ambiente de Acompanhamento, Formadores, Tutores & Cursistas
               </span>
@@ -379,7 +379,7 @@ export default function App() {
           </div>
           
           {/* Perfil do Usuário Logado */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'rgba(255,255,255,0.08)', padding: '0.75rem 1.25rem', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.12)' }}>
+          <div className="banner-user-card">
             {user.photoURL && (
               <img 
                 src={user.photoURL} 
@@ -389,11 +389,11 @@ export default function App() {
             )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
               <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#fff' }}>{user.displayName}</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
                 <span className="logo-badge" style={{ fontSize: '0.65rem', padding: '0.1rem 0.4rem', backgroundColor: userRole === 'admin' ? '#e53e3e' : userRole === 'tecnico' ? 'var(--color-primary-mid)' : userRole === 'cursista' ? '#fbbf24' : 'var(--color-accent-green)', color: userRole === 'cursista' ? '#1e293b' : '#fff' }}>
                   {userRole.toUpperCase()}
                 </span>
-                <span style={{ fontSize: '0.75rem', opacity: 0.7 }}>{user.email}</span>
+                <span style={{ fontSize: '0.75rem', opacity: 0.8, wordBreak: 'break-all' }}>{user.email}</span>
               </div>
             </div>
             <button 
@@ -406,7 +406,7 @@ export default function App() {
                 padding: '0.25rem',
                 fontSize: '0.8rem',
                 fontWeight: 600,
-                marginLeft: '0.5rem',
+                marginLeft: 'auto',
                 textDecoration: 'underline'
               }}
             >
@@ -418,23 +418,10 @@ export default function App() {
 
       {/* Barra de Simulação de Papel para Administradores / Técnicos */}
       {(userRole === 'admin' || userRole === 'tecnico') && (
-        <div style={{
-          backgroundColor: '#fffbeb',
-          color: '#92400e',
-          borderBottom: '2px solid #fde68a',
-          padding: '0.5rem 1.5rem',
-          display: 'flex',
-          alignItems: 'center',
-          justify: 'space-between',
-          fontSize: '0.85rem',
-          fontWeight: 600,
-          flexWrap: 'wrap',
-          gap: '0.5rem',
-          boxShadow: '0 2px 4px rgba(0,0,0,0.03)'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+        <div className="simulator-bar">
+          <div className="simulator-controls">
             <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-              🎭 <b>Simular Visualização de Perfil:</b>
+              🎭 <b>Simular Visualização:</b>
             </span>
             <select
               value={simulatedRole || ''}
@@ -446,14 +433,15 @@ export default function App() {
                 else setActiveTab('panorama');
               }}
               style={{
-                padding: '0.3rem 0.7rem',
+                padding: '0.35rem 0.7rem',
                 borderRadius: '6px',
                 border: '1px solid #f59e0b',
                 backgroundColor: 'white',
                 fontSize: '0.82rem',
                 fontWeight: 700,
                 color: '#92400e',
-                cursor: 'pointer'
+                cursor: 'pointer',
+                maxWidth: '100%'
               }}
             >
               <option value="">-- Visão Admin Real (Painel Completo) --</option>
@@ -464,12 +452,12 @@ export default function App() {
 
             {/* Seleção do Exemplo Específico de Formador, Tutor ou Cursista */}
             {simulatedRole === 'formador' && formadoresExemplo.length > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', maxWidth: '100%' }}>
                 <span style={{ fontSize: '0.8rem' }}>Exemplo:</span>
                 <select
                   value={effectiveEmail}
                   onChange={e => setSimulatedEmail(e.target.value)}
-                  style={{ padding: '0.25rem 0.5rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.8rem', fontWeight: 600 }}
+                  style={{ padding: '0.3rem 0.5rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.8rem', fontWeight: 600, maxWidth: '100%' }}
                 >
                   {formadoresExemplo.map(f => (
                     <option key={f.email} value={f.email}>{f.nome} ({f.email})</option>
@@ -479,12 +467,12 @@ export default function App() {
             )}
 
             {simulatedRole === 'tutor' && tutoresExemplo.length > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', maxWidth: '100%' }}>
                 <span style={{ fontSize: '0.8rem' }}>Exemplo:</span>
                 <select
                   value={effectiveEmail}
                   onChange={e => setSimulatedEmail(e.target.value)}
-                  style={{ padding: '0.25rem 0.5rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.8rem', fontWeight: 600 }}
+                  style={{ padding: '0.3rem 0.5rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.8rem', fontWeight: 600, maxWidth: '100%' }}
                 >
                   {tutoresExemplo.map(t => (
                     <option key={t.email} value={t.email}>{t.nome} ({t.email})</option>
@@ -494,12 +482,12 @@ export default function App() {
             )}
 
             {simulatedRole === 'cursista' && cursistasExemplo.length > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', maxWidth: '100%' }}>
                 <span style={{ fontSize: '0.8rem' }}>Exemplo:</span>
                 <select
                   value={effectiveEmail}
                   onChange={e => setSimulatedEmail(e.target.value)}
-                  style={{ padding: '0.25rem 0.5rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.8rem', fontWeight: 600 }}
+                  style={{ padding: '0.3rem 0.5rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.8rem', fontWeight: 600, maxWidth: '100%' }}
                 >
                   {cursistasExemplo.slice(0, 50).map(c => (
                     <option key={c.email} value={c.email}>{c.nome} ({c.email})</option>
@@ -510,8 +498,8 @@ export default function App() {
           </div>
 
           {simulatedRole && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <span style={{ fontSize: '0.8rem', color: '#b45309' }}>
+            <div className="simulator-info" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.8rem', color: '#b45309', wordBreak: 'break-all' }}>
                 Simulando: <b>{simulatedRole.toUpperCase()}</b> ({effectiveEmail})
               </span>
               <button
@@ -520,7 +508,7 @@ export default function App() {
                   backgroundColor: '#92400e',
                   color: 'white',
                   border: 'none',
-                  padding: '0.25rem 0.75rem',
+                  padding: '0.3rem 0.75rem',
                   borderRadius: '6px',
                   cursor: 'pointer',
                   fontSize: '0.78rem',
