@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { database, auth, isConfigured } from './firebase';
+import { database, auth, isConfigured as isFirebaseConfigured } from './firebase';
+import { supabase, isConfigured as isSupabaseConfigured } from './supabase';
 import { ref, onValue } from 'firebase/database';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 
@@ -31,7 +32,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [userRole, setUserRole] = useState(null); // 'admin', 'tecnico', 'tutor', 'formador', 'cursista', 'unauthorized'
   const [simulatedRole, setSimulatedRole] = useState(null); // Para Admin simular outros perfis
-  const [authLoading, setAuthLoading] = useState(isConfigured ? true : false);
+  const [authLoading, setAuthLoading] = useState(isFirebaseConfigured || isSupabaseConfigured ? true : false);
 
   // Papel ativo (Real ou Simulado)
   const effectiveRole = simulatedRole || userRole;
@@ -73,9 +74,39 @@ export default function App() {
     return 'unauthorized';
   };
 
-  // 2. Efeito para monitorar autenticação real no Firebase
+  // 2. Efeito para monitorar autenticação real no Firebase / Supabase
   useEffect(() => {
-    if (isConfigured && auth) {
+    if (isSupabaseConfigured && supabase) {
+      // Supabase Auth Session
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session && session.user && session.user.email) {
+          setUser({
+            email: session.user.email,
+            displayName: session.user.user_metadata?.full_name || 'Usuário Google',
+            photoURL: session.user.user_metadata?.avatar_url || ''
+          });
+          setUserRole(resolveUserRole(session.user.email, records));
+        }
+        setAuthLoading(false);
+      });
+
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        if (session && session.user && session.user.email) {
+          setUser({
+            email: session.user.email,
+            displayName: session.user.user_metadata?.full_name || 'Usuário Google',
+            photoURL: session.user.user_metadata?.avatar_url || ''
+          });
+          setUserRole(resolveUserRole(session.user.email, records));
+        } else if (!isFirebaseConfigured) {
+          setUser(null);
+          setUserRole(null);
+        }
+        setAuthLoading(false);
+      });
+
+      return () => subscription.unsubscribe();
+    } else if (isFirebaseConfigured && auth) {
       const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
         if (firebaseUser && firebaseUser.email) {
           setUser({
@@ -83,10 +114,7 @@ export default function App() {
             displayName: firebaseUser.displayName || 'Usuário Google',
             photoURL: firebaseUser.photoURL || ''
           });
-          
-          // Resolve papel com base no e-mail e nos dados atualmente carregados
-          const role = resolveUserRole(firebaseUser.email, records);
-          setUserRole(role);
+          setUserRole(resolveUserRole(firebaseUser.email, records));
         } else {
           setUser(null);
           setUserRole(null);
@@ -98,20 +126,53 @@ export default function App() {
     }
   }, [records]);
 
-  // 3. Efeito para assinar banco de dados em tempo real
+  // 3. Efeito para carregar e assinar banco de dados (Prioridade: Supabase > Firebase > Fallback Local)
   useEffect(() => {
-    if (isConfigured && database) {
+    if (isSupabaseConfigured && supabase) {
+      setIsLoading(true);
+
+      const fetchSupabaseRecords = async () => {
+        try {
+          const { data, error } = await supabase.from('cursistas').select('*');
+          if (error) throw error;
+
+          if (data && data.length > 0) {
+            setRecords(data);
+            setFirebaseActive(true); // Indica banco online ativo
+          } else {
+            console.log("Supabase vazio, mantendo dados locais/fallback.");
+            setRecords(fallbackData);
+          }
+        } catch (err) {
+          console.error("Erro ao carregar dados do Supabase:", err);
+          setRecords(fallbackData);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      fetchSupabaseRecords();
+
+      // Assinatura de alterações em Tempo Real (PostgreSQL CDC)
+      const channel = supabase
+        .channel('cursistas-realtime-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'cursistas' }, (payload) => {
+          console.log("Supabase Realtime event recebido:", payload);
+          fetchSupabaseRecords();
+        })
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    } else if (isFirebaseConfigured && database) {
       setIsLoading(true);
       const dbRef = ref(database, 'cursistas');
       
       const unsubscribe = onValue(dbRef, (snapshot) => {
         const val = snapshot.val();
         if (val) {
-          // Constrói lista a partir do Firebase usando os VALORES do snapshot
-          // A chave de cada nó já é EP-[cgm]_[turma], então Object.values é seguro
           const rawRecords = Object.values(val).filter(r => r && (r.cgm || r.cod_cursista || r['e-mail'] || r.e_mail));
-
-          // Deduplicação por chave única (CGM, Código do Cursista ou E-mail)
           const seenKeys = new Map();
           rawRecords.forEach(r => {
             const key = r.cgm ? String(r.cgm).replace(/\D/g, '').trim() : (r.cod_cursista || r['e-mail'] || r.e_mail);
@@ -119,9 +180,7 @@ export default function App() {
               seenKeys.set(key, r);
             }
           });
-
-          const firebaseRecords = Array.from(seenKeys.values());
-          setRecords(firebaseRecords);
+          setRecords(Array.from(seenKeys.values()));
           setFirebaseActive(true);
         } else {
           setRecords(fallbackData);
@@ -137,6 +196,7 @@ export default function App() {
       return () => unsubscribe();
     }
   }, []);
+
 
   // Handler para Login Simulado (Local Mode) ou Callback de Login Real
   const handleLoginSuccess = (authenticatedUser) => {

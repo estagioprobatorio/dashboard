@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { database, isConfigured } from '../firebase';
+import { database, isConfigured as isFirebaseConfigured } from '../firebase';
+import { supabase, isConfigured as isSupabaseConfigured } from '../supabase';
 import { ref, onValue, remove } from 'firebase/database';
 
 export default function Movimentacoes({ userEmail, userRole }) {
@@ -43,7 +44,7 @@ export default function Movimentacoes({ userEmail, userRole }) {
       tipo_acao: 'Saída',
       email_tutor_responsavel: 'sirleyjeremias@escola.pr.gov.br',
       tutor: 'SIRLEY JEREMIAS',
-      nre: 'IVAIPORÃ'
+      nre: 'UNION DA VITORIA'
     },
     {
       id: 'mock-4',
@@ -60,7 +61,44 @@ export default function Movimentacoes({ userEmail, userRole }) {
   ], []);
 
   useEffect(() => {
-    if (isConfigured && database) {
+    if (isSupabaseConfigured && supabase) {
+      setLoading(true);
+
+      const fetchMovements = async () => {
+        try {
+          const { data, error } = await supabase
+            .from('movimentacoes')
+            .select('*')
+            .order('timestamp', { ascending: false });
+
+          if (error) throw error;
+          if (data && data.length > 0) {
+            setMovements(data);
+          } else {
+            setMovements([]);
+          }
+        } catch (err) {
+          console.error("Erro ao carregar movimentações do Supabase:", err);
+          setMovements(mockMovements);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      fetchMovements();
+
+      // Assinatura em Tempo Real
+      const channel = supabase
+        .channel('movimentacoes-realtime')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'movimentacoes' }, () => {
+          fetchMovements();
+        })
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    } else if (isFirebaseConfigured && database) {
       setLoading(true);
       const movementsRef = ref(database, 'movements');
       
@@ -95,7 +133,10 @@ export default function Movimentacoes({ userEmail, userRole }) {
   const handleDeleteMovement = async (id) => {
     if (!window.confirm("Deseja realmente remover esta movimentação do histórico? (Isso não alterará a turma do cursista na planilha, apenas excluirá este registro do log)")) return;
     try {
-      if (isConfigured && database) {
+      if (isSupabaseConfigured && supabase) {
+        await supabase.from('movimentacoes').delete().eq('id', id);
+        setMovements(prev => prev.filter(m => m.id !== id));
+      } else if (isFirebaseConfigured && database) {
         const movementRef = ref(database, `movements/${id}`);
         await remove(movementRef);
       } else {

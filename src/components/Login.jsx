@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { auth, googleProvider, isConfigured } from '../firebase';
+import { auth, googleProvider, isConfigured as isFirebaseConfigured } from '../firebase';
+import { supabase, isConfigured as isSupabaseConfigured } from '../supabase';
 import { signInWithPopup } from 'firebase/auth';
 
 export default function Login({ onLoginSuccess }) {
@@ -11,31 +12,46 @@ export default function Login({ onLoginSuccess }) {
   const [customEmail, setCustomEmail] = useState('');
   const [useCustom, setUseCustom] = useState(false);
 
+  const isOnlineConfigured = isSupabaseConfigured || isFirebaseConfigured;
+
   // Executar Login Real com o Google
   const handleGoogleLogin = async () => {
     setLoading(true);
     setError('');
     try {
-      if (!isConfigured || !auth) {
-        throw new Error("Firebase não configurado corretamente.");
-      }
-      const result = await signInWithPopup(auth, googleProvider);
-      const user = result.user;
-      
-      if (user && user.email) {
-        // Envia o usuário autenticado para a App
-        onLoginSuccess({
-          email: user.email,
-          displayName: user.displayName || 'Usuário Google',
-          photoURL: user.photoURL || '',
-          uid: user.uid
+      if (isSupabaseConfigured && supabase) {
+        const { error: supAuthErr } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            queryParams: {
+              hd: 'escola.pr.gov.br'
+            },
+            redirectTo: window.location.origin
+          }
         });
+        if (supAuthErr) throw supAuthErr;
+        return;
+      }
+
+      if (isFirebaseConfigured && auth) {
+        const result = await signInWithPopup(auth, googleProvider);
+        const user = result.user;
+        
+        if (user && user.email) {
+          onLoginSuccess({
+            email: user.email,
+            displayName: user.displayName || 'Usuário Google',
+            photoURL: user.photoURL || '',
+            uid: user.uid
+          });
+        } else {
+          throw new Error("Não foi possível obter o e-mail do Google.");
+        }
       } else {
-        throw new Error("Não foi possível obter o e-mail do Google.");
+        throw new Error("Provedor de Autenticação não configurado.");
       }
     } catch (err) {
       console.error("Erro no login:", err);
-      // Tratamento de mensagens de erro comuns do Firebase Auth
       if (err.code === 'auth/popup-blocked') {
         setError('O pop-up de login foi bloqueado pelo seu navegador. Por favor, libere pop-ups para este site.');
       } else if (err.code === 'auth/popup-closed-by-user') {
@@ -137,8 +153,8 @@ export default function Login({ onLoginSuccess }) {
           </div>
         )}
 
-        {/* Seção de Login Online (Firebase Configurado) */}
-        {isConfigured ? (
+        {/* Seção de Login Online (Supabase/Firebase Configurado) */}
+        {isOnlineConfigured ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             <button
               onClick={handleGoogleLogin}

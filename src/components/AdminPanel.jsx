@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { database, isConfigured } from '../firebase';
+import { database, isConfigured as isFirebaseConfigured } from '../firebase';
+import { supabase, isConfigured as isSupabaseConfigured } from '../supabase';
 import { ref, set, push } from 'firebase/database';
 
 export default function AdminPanel({ data, onLocalUpdate, userRole }) {
@@ -98,75 +99,130 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
     const turmaAnterior = (originalRecord?.turma || '').trim();
     const turmaNova = (selectedRecord?.turma || '').trim();
     
-    if (turmaAnterior !== turmaNova) {
-      // Abre o modal de escolha do tipo de remanejamento e sinalização
-      setTipoRemanejamento('comum'); // Valor default
+    if (editMode === 'remanejamento' && turmaAnterior !== turmaNova) {
       setShowSinalizacaoModal(true);
     } else {
-      // Salva diretamente (sem e-mail/sinalização especial) se for apenas alteração cadastral
-      executeSave(null);
+      executeSave('comum');
     }
   };
 
-  // Executa o salvamento de fato (Google Sheets + Firebase + Logs)
-  const executeSave = async (tipoRem) => {
+  // Confirma a gravação
+  const confirmSaveWithSinalizacao = (tipo) => {
+    setShowSinalizacaoModal(false);
+    executeSave(tipo);
+  };
+
+  // Executa o salvamento de fato (Google Sheets + Supabase + Firebase + Logs)
+  const executeSave = async (tipoRem = 'comum') => {
     setIsSaving(true);
     setSaveStatus('Salvando alterações...');
-    setShowSinalizacaoModal(false); // Fecha o modal de sinalização
 
     try {
       const cleanKey = (val) => val ? val.toString().replace(/[\.\$\#\[\]\/]/g, "_").trim() : '';
+      
+      const oldUniqueId = originalRecord ? (originalRecord.cgm ? `EP-${originalRecord.cgm}_${cleanKey(originalRecord.turma)}` : `EP-unknown`) : null;
       const uniqueId = selectedRecord.cgm ? `EP-${selectedRecord.cgm}_${cleanKey(selectedRecord.turma)}` : `EP-unknown`;
-      const oldUniqueId = (originalRecord && originalRecord.cgm) ? `EP-${originalRecord.cgm}_${cleanKey(originalRecord.turma)}` : null;
-      
-      // 1. Identificar se houve movimentação de turma (Entrada, Saída, Transferência)
+
+      // Prepara o Log de Movimentação caso tenha mudado de turma
       let movementLog = null;
-      
-      if (originalRecord) {
-        const turmaAnterior = (originalRecord.turma || '').trim();
-        const turmaNova = (selectedRecord.turma || '').trim();
-        
-        if (turmaAnterior !== turmaNova) {
-          let tipoAcao = 'Transferência';
-          if (!turmaAnterior && turmaNova) tipoAcao = 'Entrada';
-          if (turmaAnterior && !turmaNova) tipoAcao = 'Saída';
-          
-          movementLog = {
-            timestamp: new Date().toISOString(),
-            nome_cursista: selectedRecord.nome_cursista,
-            cgm: selectedRecord.cgm || '',
-            turma_anterior: turmaAnterior,
-            turma_nova: turmaNova,
-            tipo_acao: tipoAcao,
-            email_tutor_responsavel: selectedRecord.email_tutor || '',
-            tutor: selectedRecord.tutor_responsavel || '',
-            nre: selectedRecord.nre_tutor || ''
-          };
+      const turmaAnterior = originalRecord ? originalRecord.turma : null;
+      const turmaNova = selectedRecord.turma;
+
+      if (turmaAnterior && turmaNova && turmaAnterior !== turmaNova) {
+        let tipoAcao = 'Transferência';
+        if (tipoRem === 'remanejamento_duplo') {
+          tipoAcao = 'Remanejamento Duplo (Recebeu + Cedeu)';
+        } else if (tipoRem === 'abrir_vaga') {
+          tipoAcao = 'Remanejamento Simples (Abriu Vaga)';
+        }
+
+        movementLog = {
+          timestamp: new Date().toISOString(),
+          nome_cursista: selectedRecord.nome_cursista,
+          cgm: selectedRecord.cgm || '',
+          turma_anterior: turmaAnterior,
+          turma_nova: turmaNova,
+          tipo_acao: tipoAcao,
+          email_tutor_responsavel: selectedRecord.email_tutor || '',
+          tutor: selectedRecord.tutor_responsavel || '',
+          nre: selectedRecord.nre_tutor || ''
+        };
+      }
+
+      // 1. Gravar no Supabase
+      if (isSupabaseConfigured && supabase) {
+        const supabasePayload = {
+          cod_cursista: selectedRecord.cod_cursista || null,
+          cgm: selectedRecord.cgm ? String(selectedRecord.cgm) : null,
+          nome_cursista: selectedRecord.nome_cursista || 'CURSISTA',
+          email: selectedRecord['e-mail'] || selectedRecord.email || selectedRecord.email_cursista || null,
+          cpf_cursista: selectedRecord.cpf_cursista || null,
+          rg: selectedRecord.rg || null,
+          telefone_cursista: selectedRecord.telefone_cursista || null,
+          modalidade: selectedRecord.modalidade || null,
+          componente: selectedRecord.componente || null,
+          turma: selectedRecord.turma || null,
+          dia_da_semana: selectedRecord.dia_da_semana || null,
+          horario_inicial: selectedRecord.horario_inicial || null,
+          horario_fim: selectedRecord.horario_fim || null,
+          turno: selectedRecord.turno || null,
+          ano_formativo: selectedRecord.ano_formativo || null,
+          nome_formador: selectedRecord.nome_formador || null,
+          cpf_formador: selectedRecord.cpf_formador || null,
+          rg_formador: selectedRecord.rg_formador || null,
+          email_formador: selectedRecord['e-mail_formador'] || selectedRecord.email_formador || null,
+          telefone_formador: selectedRecord.telefone_formador || null,
+          nre_formador: selectedRecord.nre_formador || null,
+          componente_formador: selectedRecord.componente_formador || null,
+          tutor_responsavel: selectedRecord.tutor_responsavel || null,
+          email_tutor: selectedRecord.email_tutor || null,
+          telefone_tutor: selectedRecord.telefone_tutor || null,
+          nre_tutor: selectedRecord.nre_tutor || null,
+          email_nre: selectedRecord['e-mail_nre'] || selectedRecord.email_nre || null,
+          link_classroom: selectedRecord['Link Classroom'] || selectedRecord.link_classroom || null,
+          id_classroom: selectedRecord.id_classroom || null,
+          periodo_ini: selectedRecord.periodo_ini || null,
+          chamamento: selectedRecord.chamamento || null,
+          nre_exe: selectedRecord.nre_exe || null,
+          munic_exe: selectedRecord.munic_exe || null,
+          componente_conc: selectedRecord.componente_conc || null,
+          observacoes_cursista: selectedRecord.observacoes_cursista || null,
+          observacoes_formador: selectedRecord.observacoes_formador || null,
+          observacoes_tutor: selectedRecord.observacoes_tutor || null,
+          observacoes_turma: selectedRecord.observacoes_turma || null,
+          updated_at: new Date().toISOString()
+        };
+
+        const { error: supErr } = await supabase
+          .from('cursistas')
+          .upsert(supabasePayload, { onConflict: 'cod_cursista' });
+
+        if (supErr) {
+          console.error("Erro ao salvar no Supabase:", supErr);
+        } else {
+          console.log("Dados salvos no Supabase!");
+        }
+
+        if (movementLog) {
+          await supabase.from('movimentacoes').insert(movementLog);
+          console.log("Movimentação registrada no Supabase!");
         }
       }
 
-      // 2. Gravar no Firebase Realtime Database
-      if (isConfigured && database) {
-        // Se mudou a turma (e portanto a chave única do Firebase), remove o nó antigo
+      // 2. Gravar no Firebase (se configurado)
+      if (isFirebaseConfigured && database) {
         if (oldUniqueId && oldUniqueId !== uniqueId) {
           const oldRecordRef = ref(database, `cursistas/${oldUniqueId}`);
           await set(oldRecordRef, null);
-          console.log("Registro antigo removido do Firebase:", oldUniqueId);
         }
-
-        // Grava o cadastro do cursista
         const recordRef = ref(database, `cursistas/${uniqueId}`);
         await set(recordRef, selectedRecord);
         
-        // Se houve movimentação de turma, grava o log na coleção de movimentações
         if (movementLog) {
           const movementsRef = ref(database, 'movements');
           const newMovementRef = push(movementsRef);
           await set(newMovementRef, movementLog);
-          console.log("Movimentação registrada no Firebase!");
         }
-        
-        console.log("Dados do Cursista salvos no Firebase!");
       }
 
       // 3. Enviar para o Google Sheets via Apps Script Web App
@@ -178,21 +234,18 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
           turma_anterior: originalRecord ? originalRecord.turma : null,
           tipo_remanejamento: tipoRem
         });
-        console.log("Enviando para Apps Script:", payload);
         await fetch(appsScriptUrl, {
           method: 'POST',
           mode: 'no-cors',
           headers: { 'Content-Type': 'text/plain' },
           body: payload
         });
-        console.log("Comando enviado para o Google Apps Script!");
       }
 
       // 4. Notificar a aplicação principal para atualizar o estado local instantaneamente
       if (onLocalUpdate) {
         const oldKey = originalRecord ? `${originalRecord.cgm}_${originalRecord.turma}` : null;
         const newKey = `${selectedRecord.cgm}_${selectedRecord.turma}`;
-        // Passa o oldKey apenas se a turma mudou (remanejamento)
         onLocalUpdate(selectedRecord, oldKey !== newKey ? oldKey : null);
       }
 
@@ -209,7 +262,7 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
     }
   };
 
-  // Tratar exclusão de cursista (Simulado ou Real)
+  // Tratar exclusão de cursista
   const handleDelete = async (record) => {
     if (!window.confirm(`Tem certeza que deseja remover o cursista ${record.nome_cursista}?`)) {
       return;
@@ -222,7 +275,6 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
       const cleanKey = (val) => val ? val.toString().replace(/[\.\$\#\[\]\/]/g, "_").trim() : '';
       const uniqueId = record.cgm ? `EP-${record.cgm}_${cleanKey(record.turma)}` : `EP-unknown`;
       
-      // Cria log de saída
       const movementLog = {
         timestamp: new Date().toISOString(),
         nome_cursista: record.nome_cursista,
@@ -235,19 +287,25 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
         nre: record.nre_tutor || ''
       };
 
-      if (isConfigured && database) {
-        // Remove do Firebase
+      if (isSupabaseConfigured && supabase) {
+        if (record.cgm) {
+          await supabase.from('cursistas').delete().eq('cgm', String(record.cgm));
+        } else if (record.cod_cursista) {
+          await supabase.from('cursistas').delete().eq('cod_cursista', record.cod_cursista);
+        }
+        await supabase.from('movimentacoes').insert(movementLog);
+      }
+
+      if (isFirebaseConfigured && database) {
         const recordRef = ref(database, `cursistas/${uniqueId}`);
-        await set(recordRef, null); // Remove no Firebase setando null
+        await set(recordRef, null);
         
-        // Grava log
         const movementsRef = ref(database, 'movements');
         const newMovementRef = push(movementsRef);
         await set(newMovementRef, movementLog);
       }
 
-      // Atualiza local
-      const deletedRecord = { ...record, nome_cursista: '', cgm: '', turma: '', cgm_turma_key: uniqueId }; // Zera localmente
+      const deletedRecord = { ...record, nome_cursista: '', cgm: '', turma: '', cgm_turma_key: uniqueId };
       if (onLocalUpdate) {
         onLocalUpdate(deletedRecord);
       }
