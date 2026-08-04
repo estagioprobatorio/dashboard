@@ -133,11 +133,37 @@ export default function App() {
 
       const fetchSupabaseRecords = async () => {
         try {
-          const { data, error } = await supabase.from('cursistas').select('*');
-          if (error) throw error;
+          let allData = [];
+          let page = 0;
+          const pageSize = 1000;
+          let hasMore = true;
 
-          if (data && data.length > 0) {
-            setRecords(data);
+          // Supabase limita a 1000 linhas por busca. Fazemos busca por páginas para trazer a base completa.
+          while (hasMore) {
+            const from = page * pageSize;
+            const to = from + pageSize - 1;
+
+            const { data, error } = await supabase
+              .from('cursistas')
+              .select('*')
+              .range(from, to);
+
+            if (error) throw error;
+
+            if (data && data.length > 0) {
+              allData = allData.concat(data);
+              if (data.length < pageSize) {
+                hasMore = false;
+              } else {
+                page++;
+              }
+            } else {
+              hasMore = false;
+            }
+          }
+
+          if (allData.length > 0) {
+            setRecords(allData);
             setFirebaseActive(true); // Indica banco online ativo
           } else {
             console.log("Supabase vazio, mantendo dados locais/fallback.");
