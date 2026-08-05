@@ -290,16 +290,14 @@ export default function App() {
   }, []);
 
 
-  // Handler para Login Simulado (Local Mode) ou Callback de Login Real
   const handleLoginSuccess = (authenticatedUser) => {
     setUser(authenticatedUser);
-    const role = resolveUserRole(authenticatedUser.email, records);
+    const role = resolveUserRole(authenticatedUser.email, enrichedRecords);
     setUserRole(role);
   };
 
-  // Logout
   const handleLogout = async () => {
-    if (isConfigured && auth) {
+    if (isFirebaseConfigured && auth) {
       await signOut(auth);
     }
     setUser(null);
