@@ -5,7 +5,7 @@ import { ref, onValue } from 'firebase/database';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 
 // Importando Listas de Permissões Estáticas
-import { DEFAULT_ADMINS, DEFAULT_TECNICOS } from './config_roles';
+import { DEFAULT_ADMINS, DEFAULT_TECNICOS, DEFAULT_TUTORES } from './config_roles';
 
 // Importando componentes
 import Login from './components/Login';
@@ -20,10 +20,12 @@ import AmbienteCursista from './components/AmbienteCursista';
 
 // Importando dados iniciais locais
 import fallbackData from './data_fallback.json';
+import tutoresFallback from './tutores_fallback.json';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('panorama');
   const [records, setRecords] = useState(fallbackData);
+  const [tutoresList, setTutoresList] = useState(tutoresFallback);
   const [movimentacoesList, setMovimentacoesList] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [firebaseActive, setFirebaseActive] = useState(false);
@@ -36,6 +38,29 @@ export default function App() {
 
   // Papel ativo (Real ou Simulado)
   const effectiveRole = simulatedRole || userRole;
+
+  // 2. Enriquecer os registros de cursistas com os dados da tabela de tutores se estiverem em branco na planilha de origem
+  const enrichedRecords = useMemo(() => {
+    const tutoresMap = new Map();
+    tutoresList.forEach(t => {
+      if (t.tutor_responsavel) {
+        tutoresMap.set(t.tutor_responsavel.trim().toUpperCase(), t);
+      }
+    });
+
+    return records.map(r => {
+      const tutorName = r.tutor_responsavel ? r.tutor_responsavel.trim().toUpperCase() : '';
+      const tutorInfo = tutoresMap.get(tutorName);
+      
+      return {
+        ...r,
+        email_tutor: r.email_tutor || (tutorInfo ? tutorInfo.email_educ : null),
+        telefone_tutor: r.telefone_tutor || (tutorInfo ? tutorInfo.telefone : null),
+        nre_tutor: r.nre_tutor || (tutorInfo ? tutorInfo.nre_tutor : null),
+        email_nre: r.email_nre || (tutorInfo ? tutorInfo.email_nre : null)
+      };
+    });
+  }, [records, tutoresList]);
 
   // 1. Resolver o papel (Role) do usuário com base no e-mail
   const resolveUserRole = (email, dataBase) => {
@@ -52,15 +77,20 @@ export default function App() {
       return 'tecnico';
     }
 
-    // Regra 3: Tutores (Verifica se está cadastrado como email_tutor na base)
-    const isTutor = dataBase.some(item => 
-      item.email_tutor && item.email_tutor.trim().toLowerCase() === cleanEmail
+    // Regra 2.5: Tutores Padrão Estáticos (Fallback quando a planilha/banco está vazia de tutores)
+    if (DEFAULT_TUTORES.map(e => e.toLowerCase()).includes(cleanEmail)) {
+      return 'tutor';
+    }
+
+    // Regra 3: Tutores (Verifica se está cadastrado como email_educ na tabela/lista de tutores)
+    const isTutor = tutoresList.some(item => 
+      item.email_educ && item.email_educ.trim().toLowerCase() === cleanEmail
     );
     if (isTutor) return 'tutor';
 
     // Regra 4: Formadores (Verifica se está cadastrado como e-mail_formador na base)
     const isFormador = dataBase.some(item => 
-      (item['e-mail_formador'] || item.e_mail_formador || '').trim().toLowerCase() === cleanEmail
+      (item['e-mail_formador'] || item.e_mail_formador || item.email_formador || '').trim().toLowerCase() === cleanEmail
     );
     if (isFormador) return 'formador';
 
@@ -85,7 +115,7 @@ export default function App() {
             displayName: session.user.user_metadata?.full_name || 'Usuário Google',
             photoURL: session.user.user_metadata?.avatar_url || ''
           });
-          setUserRole(resolveUserRole(session.user.email, records));
+          setUserRole(resolveUserRole(session.user.email, enrichedRecords));
         }
         setAuthLoading(false);
       });
@@ -97,7 +127,7 @@ export default function App() {
             displayName: session.user.user_metadata?.full_name || 'Usuário Google',
             photoURL: session.user.user_metadata?.avatar_url || ''
           });
-          setUserRole(resolveUserRole(session.user.email, records));
+          setUserRole(resolveUserRole(session.user.email, enrichedRecords));
         } else if (!isFirebaseConfigured) {
           setUser(null);
           setUserRole(null);
@@ -114,7 +144,7 @@ export default function App() {
             displayName: firebaseUser.displayName || 'Usuário Google',
             photoURL: firebaseUser.photoURL || ''
           });
-          setUserRole(resolveUserRole(firebaseUser.email, records));
+          setUserRole(resolveUserRole(firebaseUser.email, enrichedRecords));
         } else {
           setUser(null);
           setUserRole(null);
@@ -124,7 +154,7 @@ export default function App() {
 
       return () => unsubscribe();
     }
-  }, [records]);
+  }, [enrichedRecords, tutoresList]);
 
   // 3. Efeito para carregar e assinar banco de dados (Prioridade: Supabase > Firebase > Fallback Local)
   useEffect(() => {
@@ -138,32 +168,43 @@ export default function App() {
           const pageSize = 1000;
           let hasMore = true;
 
-          // Supabase limita a 1000 linhas por busca. Fazemos busca por páginas para trazer a base completa.
-          while (hasMore) {
-            const from = page * pageSize;
-            const to = from + pageSize - 1;
+          // Criamos a Promise de busca paginada
+          const fetchPromise = (async () => {
+            while (hasMore) {
+              const from = page * pageSize;
+              const to = from + pageSize - 1;
 
-            const { data, error } = await supabase
-              .from('cursistas')
-              .select('*')
-              .range(from, to);
+              const { data, error } = await supabase
+                .from('cursistas')
+                .select('*')
+                .range(from, to);
 
-            if (error) throw error;
+              if (error) throw error;
 
-            if (data && data.length > 0) {
-              allData = allData.concat(data);
-              if (data.length < pageSize) {
-                hasMore = false;
+              if (data && data.length > 0) {
+                allData = allData.concat(data);
+                if (data.length < pageSize) {
+                  hasMore = false;
+                } else {
+                  page++;
+                }
               } else {
-                page++;
+                hasMore = false;
               }
-            } else {
-              hasMore = false;
             }
-          }
+            return allData;
+          })();
 
-          if (allData.length > 0) {
-            setRecords(allData);
+          // Promise de Timeout (5 segundos)
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("Timeout de conexão com o banco de dados (5s)")), 5000)
+          );
+
+          // Corrida entre a requisição e o timeout
+          const resultData = await Promise.race([fetchPromise, timeoutPromise]);
+
+          if (resultData && resultData.length > 0) {
+            setRecords(resultData);
             setFirebaseActive(true); // Indica banco online ativo
           } else {
             console.log("Supabase vazio, mantendo dados locais/fallback.");
@@ -171,24 +212,49 @@ export default function App() {
           }
         } catch (err) {
           console.error("Erro ao carregar dados do Supabase:", err);
+          console.warn("Usando banco de dados local/fallback devido ao erro/timeout.");
           setRecords(fallbackData);
         } finally {
           setIsLoading(false);
         }
       };
 
-      fetchSupabaseRecords();
+      const fetchSupabaseTutores = async () => {
+        try {
+          const { data, error } = await supabase
+            .from('tutores')
+            .select('*');
+          if (error) throw error;
+          if (data && data.length > 0) {
+            setTutoresList(data);
+          }
+        } catch (err) {
+          console.error("Erro ao carregar tutores do Supabase, usando fallback local:", err);
+        }
+      };
 
-      // Assinatura de alterações em Tempo Real (PostgreSQL CDC)
+      fetchSupabaseRecords();
+      fetchSupabaseTutores();
+
+      // Assinatura de alterações em Tempo Real (PostgreSQL CDC) com Debounce de 2 segundos
+      let debounceTimeout = null;
       const channel = supabase
         .channel('cursistas-realtime-changes')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'cursistas' }, (payload) => {
-          console.log("Supabase Realtime event recebido:", payload);
-          fetchSupabaseRecords();
+          console.log("Supabase Realtime event recebido (cursistas):", payload);
+          if (debounceTimeout) clearTimeout(debounceTimeout);
+          debounceTimeout = setTimeout(() => {
+            fetchSupabaseRecords();
+          }, 2000);
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'tutores' }, (payload) => {
+          console.log("Supabase Realtime event recebido (tutores):", payload);
+          fetchSupabaseTutores();
         })
         .subscribe();
 
       return () => {
+        if (debounceTimeout) clearTimeout(debounceTimeout);
         supabase.removeChannel(channel);
       };
     } else if (isFirebaseConfigured && database) {
@@ -267,44 +333,51 @@ export default function App() {
     });
   };
 
-  // Listas de Exemplos para Simulação do Admin
   const [simulatedEmail, setSimulatedEmail] = useState('');
 
   const formadoresExemplo = useMemo(() => {
     const map = new Map();
-    records.forEach(r => {
+    enrichedRecords.forEach(r => {
       const email = (r['e-mail_formador'] || r.e_mail_formador || r.email_formador || '').trim().toLowerCase();
       const nome = r.nome_formador;
-      if (email && nome && !map.has(email)) {
+      if (email && email.includes('@') && nome && !map.has(email)) {
         map.set(email, { email, nome });
       }
     });
     return Array.from(map.values()).sort((a, b) => a.nome.localeCompare(b.nome));
-  }, [records]);
+  }, [enrichedRecords]);
 
   const tutoresExemplo = useMemo(() => {
     const map = new Map();
-    records.forEach(r => {
-      const email = (r.email_tutor || '').trim().toLowerCase();
-      const nome = r.tutor_responsavel;
-      if (email && nome && !map.has(email)) {
+    tutoresList.forEach(t => {
+      const email = (t.email_educ || '').trim().toLowerCase();
+      const rawName = t.tutor_responsavel || '';
+      
+      // Formata "NOME SOBRENOME" para "Nome Sobrenome" (Title Case)
+      const nome = rawName
+        .toLowerCase()
+        .split(' ')
+        .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(' ');
+
+      if (email && email.includes('@') && nome && !map.has(email)) {
         map.set(email, { email, nome });
       }
     });
     return Array.from(map.values()).sort((a, b) => a.nome.localeCompare(b.nome));
-  }, [records]);
+  }, [tutoresList]);
 
   const cursistasExemplo = useMemo(() => {
     const map = new Map();
-    records.forEach(r => {
+    enrichedRecords.forEach(r => {
       const email = (r['e-mail'] || r.email || r.email_cursista || '').trim().toLowerCase();
       const nome = r.nome_cursista;
-      if (email && nome && !map.has(email)) {
+      if (email && email.includes('@') && nome && !map.has(email)) {
         map.set(email, { email, nome });
       }
     });
     return Array.from(map.values()).sort((a, b) => a.nome.localeCompare(b.nome));
-  }, [records]);
+  }, [enrichedRecords]);
 
   // E-mail efetivo (Real ou do Exemplo Simulado)
   const effectiveEmail = useMemo(() => {
@@ -325,37 +398,33 @@ export default function App() {
     
     // Admins e Técnicos na visão real veem tudo
     if (effectiveRole === 'admin' || effectiveRole === 'tecnico') {
-      return records;
+      return enrichedRecords;
     }
 
     const email = effectiveEmail.toLowerCase();
 
     // Formadores veem apenas registros pertencentes a eles
     if (effectiveRole === 'formador') {
-      return records.filter(item => {
-        const formadorEmail = (item['e-mail_formador'] || item.e_mail_formador || '').trim().toLowerCase();
+      return enrichedRecords.filter(item => {
+        const formadorEmail = (item['e-mail_formador'] || item.email_formador || '').trim().toLowerCase();
         return formadorEmail === email;
       });
     }
 
-    // Tutores veem apenas registros pertencentes a eles
+    // Tutores veem todos os registros (sem filtros de e-mail), permitindo visualizar todos os formadores, turmas e cursistas
     if (effectiveRole === 'tutor') {
-      return records.filter(item => {
-        const tutorEmail = (item.email_tutor || '').trim().toLowerCase();
-        return tutorEmail === email;
-      });
+      return enrichedRecords;
     }
 
     // Cursistas veem seus próprios registros
     if (effectiveRole === 'cursista') {
-      return records.filter(item => {
+      return enrichedRecords.filter(item => {
         const cursistaEmail = (item['e-mail'] || item.email || item.email_cursista || '').trim().toLowerCase();
         return cursistaEmail === email;
       });
     }
 
-    return [];
-  }, [records, user, effectiveRole, effectiveEmail]);
+  }, [enrichedRecords, user, effectiveRole, effectiveEmail]);
 
   // Handler para novas solicitações enviadas pelo Cursista
   const handleNovaMovimentacao = (novaSolicitacao) => {
@@ -514,9 +583,21 @@ export default function App() {
               onChange={e => {
                 const role = e.target.value;
                 setSimulatedRole(role || null);
-                setSimulatedEmail('');
-                if (role === 'cursista') setActiveTab('cursista_turma');
-                else setActiveTab('panorama');
+                
+                // Define um e-mail de exemplo padrão para evitar dropdown vazio/desalinhado
+                if (role === 'formador' && formadoresExemplo.length > 0) {
+                  setSimulatedEmail(formadoresExemplo[0].email);
+                  setActiveTab('panorama');
+                } else if (role === 'tutor' && tutoresExemplo.length > 0) {
+                  setSimulatedEmail(tutoresExemplo[0].email);
+                  setActiveTab('panorama');
+                } else if (role === 'cursista' && cursistasExemplo.length > 0) {
+                  setSimulatedEmail(cursistasExemplo[0].email);
+                  setActiveTab('cursista_turma');
+                } else {
+                  setSimulatedEmail('');
+                  setActiveTab('panorama');
+                }
               }}
               style={{
                 padding: '0.35rem 0.7rem',
