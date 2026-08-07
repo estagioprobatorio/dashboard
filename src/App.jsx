@@ -409,9 +409,12 @@ export default function App() {
       });
     }
 
-    // Tutores veem todos os registros (sem filtros de e-mail), permitindo visualizar todos os formadores, turmas e cursistas
+    // Tutores veem apenas registros pertencentes a eles
     if (effectiveRole === 'tutor') {
-      return enrichedRecords;
+      return enrichedRecords.filter(item => {
+        const tutorEmail = (item.email_tutor || '').trim().toLowerCase();
+        return tutorEmail === email;
+      });
     }
 
     // Cursistas veem seus próprios registros
