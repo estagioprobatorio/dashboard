@@ -4,6 +4,7 @@ import { supabase, isConfigured as isSupabaseConfigured } from '../supabase';
 import { ref, set, push } from 'firebase/database';
 
 export default function AdminPanel({ data, onLocalUpdate, userRole }) {
+  const isConfigured = isFirebaseConfigured || isSupabaseConfigured;
   // Estados de busca e do formulário
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRecord, setSelectedRecord] = useState(null); // Registro sendo editado
@@ -55,6 +56,222 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
   }, [filteredRecords, currentPage, itemsPerPage]);
 
   const totalPages = Math.max(Math.ceil(filteredRecords.length / itemsPerPage), 1);
+
+  // Estados de convites do Classroom
+  const [showClassroomModal, setShowClassroomModal] = useState(false);
+  const [classroomInviteType, setClassroomInviteType] = useState('tutor'); // 'tutor' ou 'nre'
+  const [massInviteTarget, setMassInviteTarget] = useState(null); // 'mass' ou 'individual'
+  const [coursesList, setCoursesList] = useState([]);
+  
+  // Status de processamento de convites do Classroom
+  const [isProcessingInvites, setIsProcessingInvites] = useState(false);
+  const [inviteProgress, setInviteProgress] = useState(0);
+  const [inviteCurrentIndex, setInviteCurrentIndex] = useState(0);
+  const [inviteTotalCount, setInviteTotalCount] = useState(0);
+  const [inviteCurrentStatus, setInviteCurrentStatus] = useState('');
+  const [inviteSummary, setInviteSummary] = useState({ success: 0, already: 0, error: 0, details: [] });
+  const [stopInviteProcessing, setStopInviteProcessing] = useState(false);
+
+  // Extrai turmas únicas da base para Classroom
+  const uniqueClassroomCourses = useMemo(() => {
+    const map = new Map();
+    data.forEach(item => {
+      if (!item.turma) return;
+      const turmaKey = item.turma.trim();
+      const idClassroom = item.id_classroom || item.idClassroom || '';
+      const emailTutor = item.email_tutor || item.emailTutor || '';
+      const tutorName = item.tutor_responsavel || '';
+      const emailNre = item.e_mail_nre || item.email_nre || item.emailNre || '';
+      
+      if (!map.has(turmaKey)) {
+        map.set(turmaKey, {
+          turma: turmaKey,
+          idClassroom: idClassroom,
+          tutorName: tutorName,
+          emailTutor: emailTutor,
+          emailNre: emailNre,
+          selected: !!idClassroom
+        });
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => a.turma.localeCompare(b.turma));
+  }, [data]);
+
+  const openMassInviteModal = (type) => {
+    setClassroomInviteType(type);
+    setMassInviteTarget('mass');
+    
+    const list = uniqueClassroomCourses.map(c => ({
+      ...c,
+      selected: !!c.idClassroom && !!(type === 'tutor' ? c.emailTutor : c.emailNre)
+    }));
+    
+    setCoursesList(list);
+    setShowClassroomModal(true);
+    setIsProcessingInvites(false);
+    setInviteProgress(0);
+    setInviteCurrentIndex(0);
+    setInviteTotalCount(0);
+    setInviteCurrentStatus('');
+    setInviteSummary({ success: 0, already: 0, error: 0, details: [] });
+    setStopInviteProcessing(false);
+  };
+
+  const openIndividualInviteModal = (record) => {
+    setMassInviteTarget('individual');
+    // Para envio individual, mostramos as duas opções (Tutor ou NRE) no modal
+    setClassroomInviteType('tutor'); // padrão inicial no modal individual
+    
+    const course = {
+      turma: record.turma,
+      idClassroom: record.id_classroom || record.idClassroom || '',
+      tutorName: record.tutor_responsavel || '',
+      emailTutor: record.email_tutor || '',
+      emailNre: record.e_mail_nre || record.email_nre || '',
+      selected: true
+    };
+    
+    setCoursesList([course]);
+    setShowClassroomModal(true);
+    setIsProcessingInvites(false);
+    setInviteProgress(0);
+    setInviteCurrentIndex(0);
+    setInviteTotalCount(0);
+    setInviteCurrentStatus('');
+    setInviteSummary({ success: 0, already: 0, error: 0, details: [] });
+    setStopInviteProcessing(false);
+  };
+
+  const startSendingInvites = async (type) => {
+    const appsScriptUrl = import.meta.env.VITE_APPS_SCRIPT_URL;
+    if (!appsScriptUrl) {
+      alert("Erro: URL do Google Apps Script (VITE_APPS_SCRIPT_URL) não está configurada!");
+      return;
+    }
+
+    const targets = coursesList.filter(c => c.selected);
+    if (targets.length === 0) {
+      alert("Nenhuma turma selecionada para envio.");
+      return;
+    }
+
+    const confirmMsg = massInviteTarget === 'individual'
+      ? `Deseja enviar o convite de ${type === 'tutor' ? 'Tutor' : 'NRE'} para a turma "${targets[0].turma}"?`
+      : `Deseja enviar os convites de ${type === 'tutor' ? 'Tutor' : 'NRE'} para as ${targets.length} turmas selecionadas?`;
+
+    if (!window.confirm(confirmMsg)) return;
+
+    setIsProcessingInvites(true);
+    setInviteTotalCount(targets.length);
+    setInviteProgress(0);
+    setInviteCurrentIndex(0);
+    setStopInviteProcessing(false);
+    
+    const summary = { success: 0, already: 0, error: 0, details: [] };
+    setInviteSummary(summary);
+
+    for (let i = 0; i < targets.length; i++) {
+      if (stopInviteProcessing) {
+        setInviteCurrentStatus("Envio cancelado pelo usuário.");
+        break;
+      }
+
+      const course = targets[i];
+      const targetEmail = type === 'tutor' ? course.emailTutor : course.emailNre;
+      
+      setInviteCurrentIndex(i + 1);
+      setInviteCurrentStatus(`Enviando convite para "${course.turma}" (${targetEmail || 'Sem e-mail'})...`);
+
+      if (!course.idClassroom) {
+        summary.error++;
+        summary.details.push({
+          turma: course.turma,
+          email: 'ID Ausente',
+          status: 'error',
+          message: 'ID do Classroom ausente'
+        });
+        setInviteSummary({ ...summary });
+        setInviteProgress(Math.round(((i + 1) / targets.length) * 100));
+        continue;
+      }
+
+      if (!targetEmail) {
+        summary.error++;
+        summary.details.push({
+          turma: course.turma,
+          email: 'E-mail Ausente',
+          status: 'error',
+          message: 'E-mail não cadastrado'
+        });
+        setInviteSummary({ ...summary });
+        setInviteProgress(Math.round(((i + 1) / targets.length) * 100));
+        continue;
+      }
+
+      try {
+        const payload = JSON.stringify({
+          action: 'inviteTeacher',
+          courseId: course.idClassroom,
+          email: targetEmail
+        });
+
+        const response = await fetch(appsScriptUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: payload
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Erro HTTP ${response.status}`);
+        }
+        
+        const result = await response.json();
+        if (result.status === 'success') {
+          summary.success++;
+          summary.details.push({
+            turma: course.turma,
+            email: targetEmail,
+            status: 'success',
+            message: 'Convite enviado'
+          });
+        } else if (result.status === 'already_member' || result.status === 'already_invited') {
+          summary.already++;
+          summary.details.push({
+            turma: course.turma,
+            email: targetEmail,
+            status: 'already',
+            message: result.message || 'Já cadastrado/convidado'
+          });
+        } else {
+          summary.error++;
+          summary.details.push({
+            turma: course.turma,
+            email: targetEmail,
+            status: 'error',
+            message: result.message || 'Erro no convite'
+          });
+        }
+      } catch (err) {
+        console.error("Erro no convite:", err);
+        summary.error++;
+        summary.details.push({
+          turma: course.turma,
+          email: targetEmail,
+          status: 'error',
+          message: 'Erro de comunicação: ' + err.message
+        });
+      }
+
+      setInviteSummary({ ...summary });
+      setInviteProgress(Math.round(((i + 1) / targets.length) * 100));
+      
+      // Pequeno atraso para evitar overload
+      await new Promise(resolve => setTimeout(resolve, 600));
+    }
+
+    setIsProcessingInvites(false);
+    setInviteCurrentStatus("Processamento concluído!");
+  };
 
   // Abrir formulário de edição de dados comuns
   const handleEditClick = (record) => {
@@ -360,6 +577,38 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
         </div>
       </div>
 
+      {/* Bloco de Ações do Google Classroom */}
+      <div className="glass-panel animate-fade-in" style={{ marginBottom: '1.25rem', padding: '1.25rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+          <div>
+            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-primary-dark)', fontSize: '1.1rem', fontWeight: 800 }}>
+              🎓 Google Classroom - Convites para Professores
+            </h3>
+            <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+              Convide as Tutoras (coluna N) e os e-mails dos NREs (coluna R) como co-docentes no Classroom.
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: '0.75rem' }}>
+            <button 
+              type="button"
+              className="btn-primary" 
+              style={{ backgroundColor: '#10b981', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', padding: '0.55rem 1.1rem', cursor: 'pointer' }}
+              onClick={() => openMassInviteModal('tutor')}
+            >
+              🤝 Convidar Tutores em Massa
+            </button>
+            <button 
+              type="button"
+              className="btn-primary" 
+              style={{ backgroundColor: '#0ea5e9', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', padding: '0.55rem 1.1rem', cursor: 'pointer' }}
+              onClick={() => openMassInviteModal('nre')}
+            >
+              🏢 Convidar NREs em Massa
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* Interface Principal de Busca */}
       <div className="glass-panel animate-fade-in">
         <div className="panel-header">
@@ -426,12 +675,14 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
                       <td>
                         <div className="actions-cell" style={{ display: 'flex', gap: '0.25rem' }}>
                           <button 
+                            type="button"
                             className="action-btn email" 
                             onClick={() => handleEditClick(item)}
                           >
                             Editar
                           </button>
                           <button 
+                            type="button"
                             className="action-btn" 
                             style={{ backgroundColor: '#0d9488', color: 'white' }}
                             onClick={() => handleRemanejarClick(item)}
@@ -439,6 +690,15 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
                             Remanejar
                           </button>
                           <button 
+                            type="button"
+                            className="action-btn classroom" 
+                            style={{ backgroundColor: '#f59e0b', color: 'white', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}
+                            onClick={() => openIndividualInviteModal(item)}
+                          >
+                            Convidar
+                          </button>
+                          <button 
+                            type="button"
                             className="action-btn whatsapp" 
                             style={{ backgroundColor: '#e53e3e' }}
                             onClick={() => handleDelete(item)}
@@ -929,6 +1189,235 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
           </div>
         </div>
       )}
+
+      {/* Modal de Integração Google Classroom (Individual e Massa) */}
+      {showClassroomModal && (
+        <div className="admin-form-overlay animate-fade-in" style={{ zIndex: 1200 }}>
+          <div className="admin-form-card" style={{ maxWidth: '850px', padding: 0 }}>
+            <div className="form-header" style={{ backgroundColor: classroomInviteType === 'tutor' ? '#10b981' : '#0ea5e9', color: 'white' }}>
+              <h3 style={{ margin: 0, fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                🎓 Convites do Google Classroom ({massInviteTarget === 'individual' ? 'Envio Individual' : 'Envio em Massa'})
+              </h3>
+              <button className="close-modal-btn" onClick={() => !isProcessingInvites && setShowClassroomModal(false)} disabled={isProcessingInvites}>&times;</button>
+            </div>
+            
+            <div style={{ padding: '1.75rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              
+              {/* Opções de tipo de envio no caso individual */}
+              {massInviteTarget === 'individual' && !isProcessingInvites && inviteCurrentIndex === 0 && (
+                <div style={{ display: 'flex', gap: '1rem', backgroundColor: '#f1f5f9', padding: '0.75rem', borderRadius: '8px', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-primary-dark)' }}>Tipo de Convite:</span>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.85rem', cursor: 'pointer' }}>
+                    <input 
+                      type="radio" 
+                      name="indvInviteType" 
+                      checked={classroomInviteType === 'tutor'} 
+                      onChange={() => setClassroomInviteType('tutor')}
+                    />
+                    Tutor ({coursesList[0]?.emailTutor || 'Sem e-mail'})
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.85rem', cursor: 'pointer' }}>
+                    <input 
+                      type="radio" 
+                      name="indvInviteType" 
+                      checked={classroomInviteType === 'nre'} 
+                      onChange={() => setClassroomInviteType('nre')}
+                    />
+                    NRE ({coursesList[0]?.emailNre || 'Sem e-mail'})
+                  </label>
+                </div>
+              )}
+
+              {/* Se estiver processando ou finalizou, mostra a barra de progresso / resumo */}
+              {(isProcessingInvites || inviteCurrentIndex > 0) && (
+                <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1.25rem' }}>
+                  <h4 style={{ margin: '0 0 0.75rem 0', color: 'var(--color-primary-dark)' }}>
+                    Progresso do Envio
+                  </h4>
+                  
+                  {/* Status do envio em tempo real */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text-main)', marginBottom: '0.5rem' }}>
+                    <span>{inviteCurrentStatus}</span>
+                    <span>{inviteProgress}% ({inviteCurrentIndex} / {inviteTotalCount})</span>
+                  </div>
+                  
+                  {/* Barra de Progresso Realista (estilo OS) */}
+                  <div style={{ width: '100%', height: '24px', backgroundColor: '#e2e8f0', borderRadius: '12px', overflow: 'hidden', position: 'relative', border: '1px solid #cbd5e1', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.1)' }}>
+                    <div style={{
+                      width: `${inviteProgress}%`,
+                      height: '100%',
+                      background: 'linear-gradient(90deg, #10b981 0%, #059669 100%)',
+                      transition: 'width 0.3s ease',
+                      boxShadow: 'inset 0 -1px 0 rgba(0,0,0,0.15)'
+                    }}></div>
+                  </div>
+                  
+                  {/* Resumo parcial/final */}
+                  <div style={{ display: 'flex', gap: '1.5rem', marginTop: '1rem', fontSize: '0.85rem' }}>
+                    <span style={{ color: 'var(--color-accent-green)' }}>🟢 Sucesso: <strong>{inviteSummary.success}</strong></span>
+                    <span style={{ color: '#f59e0b' }}>🟡 Já cadastrado/pendente: <strong>{inviteSummary.already}</strong></span>
+                    <span style={{ color: '#e53e3e' }}>🔴 Erros: <strong>{inviteSummary.error}</strong></span>
+                  </div>
+                  
+                  {isProcessingInvites && (
+                    <button 
+                      type="button" 
+                      className="btn-secondary" 
+                      style={{ marginTop: '1rem', width: '100%', borderColor: '#f87171', color: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.05)', cursor: 'pointer' }}
+                      onClick={() => setStopInviteProcessing(true)}
+                    >
+                      🛑 Interromper Envio
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Seção de Verificação Manual (exibida antes de iniciar o processamento) */}
+              {!isProcessingInvites && inviteCurrentIndex === 0 && (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>
+                      Verifique as informações das turmas antes de disparar os convites:
+                    </p>
+                    {massInviteTarget === 'mass' && (
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button 
+                          type="button"
+                          className="page-btn" 
+                          style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem', cursor: 'pointer' }}
+                          onClick={() => setCoursesList(prev => prev.map(c => ({ 
+                            ...c, 
+                            selected: !!c.idClassroom && !!(classroomInviteType === 'tutor' ? c.emailTutor : c.emailNre) 
+                          })))}
+                        >
+                          Selecionar Válidos
+                        </button>
+                        <button 
+                          type="button"
+                          className="page-btn" 
+                          style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem', cursor: 'pointer' }}
+                          onClick={() => setCoursesList(prev => prev.map(c => ({ ...c, selected: false })))}
+                        >
+                          Limpar Seleção
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div style={{ maxHeight: '280px', overflowY: 'auto', border: '1px solid var(--color-card-border)', borderRadius: '8px' }}>
+                    <table className="custom-table" style={{ margin: 0 }}>
+                      <thead>
+                        <tr>
+                          {massInviteTarget === 'mass' && <th style={{ width: '40px' }}>Sim</th>}
+                          <th>Turma</th>
+                          <th>ID Classroom</th>
+                          <th>{classroomInviteType === 'tutor' ? 'Tutor Responsável' : 'E-mail NRE'}</th>
+                          <th>Status dos Dados</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {coursesList.map((course, idx) => {
+                          const targetEmail = classroomInviteType === 'tutor' ? course.emailTutor : course.emailNre;
+                          const hasId = !!course.idClassroom;
+                          const hasEmail = !!targetEmail;
+                          const isValid = hasId && hasEmail;
+                          
+                          return (
+                            <tr key={idx} style={{ opacity: isValid ? 1 : 0.6, backgroundColor: isValid ? 'transparent' : '#fffbeb' }}>
+                              {massInviteTarget === 'mass' && (
+                                <td>
+                                  <input 
+                                    type="checkbox" 
+                                    checked={course.selected} 
+                                    disabled={!isValid}
+                                    onChange={(e) => {
+                                      const checked = e.target.checked;
+                                      setCoursesList(prev => prev.map((c, i) => i === idx ? { ...c, selected: checked } : c));
+                                    }}
+                                    style={{ width: '16px', height: '16px', cursor: isValid ? 'pointer' : 'not-allowed' }}
+                                  />
+                                </td>
+                              )}
+                              <td style={{ fontSize: '0.8rem', fontWeight: 600 }}>{course.turma}</td>
+                              <td style={{ fontSize: '0.8rem', color: hasId ? 'inherit' : '#ef4444' }}>{course.idClassroom || '⚠️ Ausente'}</td>
+                              <td style={{ fontSize: '0.8rem', color: hasEmail ? 'inherit' : '#ef4444' }}>
+                                {classroomInviteType === 'tutor' 
+                                  ? (course.tutorName ? `${course.tutorName} (${course.emailTutor || 'Sem e-mail'})` : '⚠️ Não atribuído')
+                                  : (course.emailNre || '⚠️ Ausente')}
+                              </td>
+                              <td>
+                                {isValid ? (
+                                  <span style={{ color: 'var(--color-accent-green)', fontWeight: 600, fontSize: '0.75rem' }}>✓ Pronto</span>
+                                ) : (
+                                  <span style={{ color: '#d97706', fontWeight: 600, fontSize: '0.75rem' }}>
+                                    {!hasId && !hasEmail ? 'ID e e-mail ausentes' : !hasId ? 'ID Classroom ausente' : 'E-mail ausente'}
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+
+              {/* Lista de Detalhes dos Resultados (Erros ou Sucessos) */}
+              {!isProcessingInvites && inviteCurrentIndex > 0 && inviteSummary.details.length > 0 && (
+                <div style={{ marginTop: '0.5rem' }}>
+                  <h4 style={{ margin: '0 0 0.5rem 0', color: 'var(--color-primary-dark)' }}>Relatório de Detalhes</h4>
+                  <div style={{ maxHeight: '180px', overflowY: 'auto', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '0.8rem' }}>
+                    {inviteSummary.details.map((detail, idx) => (
+                      <div 
+                        key={idx} 
+                        style={{ 
+                          padding: '0.5rem 0.75rem', 
+                          borderBottom: '1px solid #e2e8f0',
+                          backgroundColor: detail.status === 'error' ? '#fef2f2' : detail.status === 'already' ? '#fffbeb' : '#f0fdf4',
+                          color: detail.status === 'error' ? '#991b1b' : detail.status === 'already' ? '#92400e' : '#166534',
+                          display: 'flex',
+                          justifyContent: 'space-between'
+                        }}
+                      >
+                        <span><strong>{detail.turma}</strong> ({detail.email})</span>
+                        <span>{detail.message}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Rodapé do Modal */}
+              <div className="form-footer" style={{ borderTop: '1px solid var(--color-card-border)', paddingTop: '1.25rem', display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
+                <button 
+                  type="button" 
+                  className="btn-secondary" 
+                  onClick={() => setShowClassroomModal(false)}
+                  disabled={isProcessingInvites}
+                  style={{ cursor: 'pointer' }}
+                >
+                  {inviteCurrentIndex > 0 ? "Fechar" : "Cancelar"}
+                </button>
+                
+                {!isProcessingInvites && inviteCurrentIndex === 0 && (
+                  <button 
+                    type="button" 
+                    className="btn-primary" 
+                    style={{ backgroundColor: classroomInviteType === 'tutor' ? '#10b981' : '#0ea5e9', cursor: 'pointer' }}
+                    onClick={() => startSendingInvites(classroomInviteType)}
+                  >
+                    🚀 Iniciar Envio de Convites
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
     </>
   );
 }
