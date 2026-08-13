@@ -1418,6 +1418,3 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
     </>
   );
 }
-    </>
-  );
-}
