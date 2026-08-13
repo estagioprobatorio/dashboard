@@ -37,7 +37,7 @@ export default function ListaTurmas({ data }) {
           tutor: item.tutor_responsavel || 'Não Atribuído',
           emailTutor: item.email_tutor || '',
           nreTutor: item.nre_tutor || '',
-          linkClassroom: item['Link Classroom'] || item.link_classroom || '',
+          linkClassroom: item['Link Classroom'] || item.link_classroom || item.Link_Classroom || '',
           idClassroom: item.id_classroom || item.ID_classroom || '',
           cursistas: []
         });

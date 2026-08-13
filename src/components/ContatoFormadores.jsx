@@ -35,12 +35,12 @@ export default function ContatoFormadores({ data }) {
       if (!map.has(key)) {
         map.set(key, {
           nome: item.nome_formador,
-          email: item['e-mail_formador'] || item.e_mail_formador || '',
+          email: item['e-mail_formador'] || item.e_mail_formador || item.email_formador || '',
           telefone: item.telefone_formador || '',
           turma: item.turma || '',
           modalidade: item.modalidade || '',
           nre: item.nre_formador || item.nre_tutor || '',
-          classroom: item['Link Classroom'] || item.Link_Classroom || '',
+          classroom: item['Link Classroom'] || item.Link_Classroom || item.link_classroom || '',
           diaSemana: item.dia_da_semana || '',
           horarioIni: item.horario_inicial || '',
           horarioFim: item.horario_fim || '',

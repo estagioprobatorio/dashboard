@@ -41,7 +41,7 @@ export default function TurmaModal({ turmaName, data, onClose }) {
       tutor: first.tutor_responsavel || 'Não Atribuído',
       emailTutor: first.email_tutor || '',
       nreTutor: first.nre_tutor || '',
-      linkClassroom: first['Link Classroom'] || first.link_classroom || '',
+      linkClassroom: first['Link Classroom'] || first.link_classroom || first.Link_Classroom || '',
       cursistas: Array.from(cursistasMap.values()).sort((a, b) => a.nome.localeCompare(b.nome))
     };
   }, [turmaName, data]);

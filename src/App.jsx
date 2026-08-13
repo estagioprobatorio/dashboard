@@ -48,12 +48,21 @@ export default function App() {
       }
     });
 
+    const formatTimeOnly = (timeStr) => {
+      if (!timeStr) return null;
+      const str = String(timeStr).trim();
+      const match = str.match(/\b\d{2}:\d{2}(:\d{2})?\b/);
+      return match ? match[0].slice(0, 5) : str;
+    };
+
     return records.map(r => {
       const tutorName = r.tutor_responsavel ? r.tutor_responsavel.trim().toUpperCase() : '';
       const tutorInfo = tutoresMap.get(tutorName);
       
       return {
         ...r,
+        horario_inicial: formatTimeOnly(r.horario_inicial),
+        horario_fim: formatTimeOnly(r.horario_fim),
         email_tutor: r.email_tutor || (tutorInfo ? tutorInfo.email_educ : null),
         telefone_tutor: r.telefone_tutor || (tutorInfo ? tutorInfo.telefone : null),
         nre_tutor: r.nre_tutor || (tutorInfo ? tutorInfo.nre_tutor : null),
@@ -484,7 +493,7 @@ export default function App() {
       return (
         <AmbienteCursista 
           userEmail={effectiveEmail} 
-          records={records} 
+          records={enrichedRecords} 
           movimentacoes={movimentacoesList}
           onNovaMovimentacao={handleNovaMovimentacao}
           subTab={subTab}
@@ -507,7 +516,7 @@ export default function App() {
         return <Movimentacoes userEmail={effectiveEmail} userRole={effectiveRole} />;
       case 'admin':
         return (userRole === 'admin' || userRole === 'tecnico')
-          ? <AdminPanel data={records} onLocalUpdate={handleLocalUpdate} userRole={userRole} /> 
+          ? <AdminPanel data={enrichedRecords} onLocalUpdate={handleLocalUpdate} userRole={userRole} /> 
           : <Panorama data={filteredRecordsForView} />;
       default:
         return <Panorama data={filteredRecordsForView} />;

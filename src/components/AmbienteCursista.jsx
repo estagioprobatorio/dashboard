@@ -194,9 +194,9 @@ export default function AmbienteCursista({ userEmail, records, movimentacoes = [
                 >
                   Ver Detalhes da Turma
                 </button>
-                {(cursistaRecord['Link Classroom'] || cursistaRecord.Link_Classroom) && (
+                {(cursistaRecord['Link Classroom'] || cursistaRecord.Link_Classroom || cursistaRecord.link_classroom) && (
                   <a 
-                    href={cursistaRecord['Link Classroom'] || cursistaRecord.Link_Classroom} 
+                    href={cursistaRecord['Link Classroom'] || cursistaRecord.Link_Classroom || cursistaRecord.link_classroom} 
                     target="_blank" 
                     rel="noreferrer" 
                     className="action-btn classroom" 
