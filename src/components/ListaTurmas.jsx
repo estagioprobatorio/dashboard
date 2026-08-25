@@ -19,8 +19,8 @@ export default function ListaTurmas({ data }) {
     const map = new Map();
 
     data.forEach(item => {
-      if (!item.turma) return;
-      const turmaKey = item.turma.trim();
+      if (!item.turmas) return;
+      const turmaKey = item.turmas.trim();
 
       if (!map.has(turmaKey)) {
         map.set(turmaKey, {
@@ -37,8 +37,8 @@ export default function ListaTurmas({ data }) {
           tutor: item.tutor_responsavel || 'Não Atribuído',
           emailTutor: item.email_tutor || '',
           nreTutor: item.nre_tutor || '',
-          linkClassroom: item['Link Classroom'] || item.link_classroom || item.Link_Classroom || '',
-          idClassroom: item.id_classroom || item.ID_classroom || '',
+          linkClassroom: item['Link Classroom'] || item.link || item.link || '',
+          idClassroom: item.id_classroom || item.id_classroom || '',
           cursistas: []
         });
       }
@@ -82,7 +82,7 @@ export default function ListaTurmas({ data }) {
       if (formadorFilter && item.formador !== formadorFilter) return false;
       if (turmaSearch) {
         const query = turmaSearch.toLowerCase();
-        const turmaMatch = item.turma.toLowerCase().includes(query);
+        const turmaMatch = item.turmas.toLowerCase().includes(query);
         const compMatch = item.componente.toLowerCase().includes(query);
         if (!turmaMatch && !compMatch) return false;
       }
@@ -216,7 +216,7 @@ export default function ListaTurmas({ data }) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '1.2rem' }}>
           {paginatedTurmas.map((tItem) => (
             <div
-              key={tItem.turma}
+              key={tItem.turmas}
               className="glass-panel"
               onClick={() => { setSelectedTurma(tItem); setCursistaSearch(''); }}
               style={{
@@ -256,7 +256,7 @@ export default function ListaTurmas({ data }) {
                 </div>
 
                 <h3 style={{ fontSize: '1.05rem', color: 'var(--color-primary-dark)', marginBottom: '0.6rem', fontWeight: 800, lineHeight: 1.3 }}>
-                  {tItem.turma}
+                  {tItem.turmas}
                 </h3>
 
                 <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', display: 'flex', flexDirection: 'column', gap: '0.35rem', marginBottom: '1rem' }}>
@@ -356,7 +356,7 @@ export default function ListaTurmas({ data }) {
                   {selectedTurma.anoFormativo} • {selectedTurma.componente}
                 </span>
                 <h2 style={{ fontSize: '1.3rem', marginTop: '0.3rem', fontWeight: 800 }}>
-                  {selectedTurma.turma}
+                  {selectedTurma.turmas}
                 </h2>
               </div>
               <button

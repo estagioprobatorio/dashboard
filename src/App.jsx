@@ -318,19 +318,19 @@ export default function App() {
   // oldKey: chave "cgm_turma" do registro ANTES da edição — necessário para remanejamentos
   const handleLocalUpdate = (updatedRecord, oldKey = null) => {
     setRecords(prev => {
-      const updatedKey = `${updatedRecord.cgm}_${updatedRecord.turma}`;
+      const updatedKey = `${updatedRecord.cgm}_${updatedRecord.turmas}`;
 
       // Se a turma mudou, remove o registro antigo pela oldKey antes de atualizar
       let filtered = prev;
       if (oldKey && oldKey !== updatedKey) {
-        filtered = prev.filter(item => `${item.cgm}_${item.turma}` !== oldKey);
+        filtered = prev.filter(item => `${item.cgm}_${item.turmas}` !== oldKey);
       }
 
       // Atualiza o registro pela nova chave (ou adiciona se não existia ainda)
-      const exists = filtered.some(item => `${item.cgm}_${item.turma}` === updatedKey);
+      const exists = filtered.some(item => `${item.cgm}_${item.turmas}` === updatedKey);
       if (exists) {
         return filtered.map(item => {
-          if (`${item.cgm}_${item.turma}` === updatedKey) return updatedRecord;
+          if (`${item.cgm}_${item.turmas}` === updatedKey) return updatedRecord;
           return item;
         });
       } else {

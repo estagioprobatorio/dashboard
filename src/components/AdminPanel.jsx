@@ -32,7 +32,7 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
   const uniqueTurmas = useMemo(() => {
     const classes = new Set();
     data.forEach(item => {
-      if (item.turma) classes.add(item.turma.trim());
+      if (item.turmas) classes.add(item.turmas.trim());
     });
     return Array.from(classes).sort();
   }, [data]);
@@ -76,8 +76,8 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
   const uniqueClassroomCourses = useMemo(() => {
     const map = new Map();
     data.forEach(item => {
-      if (!item.turma) return;
-      const turmaKey = item.turma.trim();
+      if (!item.turmas) return;
+      const turmaKey = item.turmas.trim();
       const idClassroom = item.id_classroom || item.idClassroom || '';
       const emailTutor = item.email_tutor || item.emailTutor || '';
       const tutorName = item.tutor_responsavel || '';
@@ -85,7 +85,7 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
       
       if (!map.has(turmaKey)) {
         map.set(turmaKey, {
-          turma: turmaKey,
+          turmas: turmaKey,
           idClassroom: idClassroom,
           tutorName: tutorName,
           emailTutor: emailTutor,
@@ -94,7 +94,7 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
         });
       }
     });
-    return Array.from(map.values()).sort((a, b) => a.turma.localeCompare(b.turma));
+    return Array.from(map.values()).sort((a, b) => a.turmas.localeCompare(b.turmas));
   }, [data]);
 
   const openMassInviteModal = (type) => {
@@ -123,7 +123,7 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
     setClassroomInviteType('tutor'); // padrão inicial no modal individual
     
     const course = {
-      turma: record.turma,
+      turmas: record.turmas,
       idClassroom: record.id_classroom || record.idClassroom || '',
       tutorName: record.tutor_responsavel || '',
       emailTutor: record.email_tutor || '',
@@ -156,7 +156,7 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
     }
 
     const confirmMsg = massInviteTarget === 'individual'
-      ? `Deseja enviar o convite de ${type === 'tutor' ? 'Tutor' : 'NRE'} para a turma "${targets[0].turma}"?`
+      ? `Deseja enviar o convite de ${type === 'tutor' ? 'Tutor' : 'NRE'} para a turma "${targets[0].turmas}"?`
       : `Deseja enviar os convites de ${type === 'tutor' ? 'Tutor' : 'NRE'} para as ${targets.length} turmas selecionadas?`;
 
     if (!window.confirm(confirmMsg)) return;
@@ -180,12 +180,12 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
       const targetEmail = type === 'tutor' ? course.emailTutor : course.emailNre;
       
       setInviteCurrentIndex(i + 1);
-      setInviteCurrentStatus(`Enviando convite para "${course.turma}" (${targetEmail || 'Sem e-mail'})...`);
+      setInviteCurrentStatus(`Enviando convite para "${course.turmas}" (${targetEmail || 'Sem e-mail'})...`);
 
       if (!course.idClassroom) {
         summary.error++;
         summary.details.push({
-          turma: course.turma,
+          turmas: course.turmas,
           email: 'ID Ausente',
           status: 'error',
           message: 'ID do Classroom ausente'
@@ -198,7 +198,7 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
       if (!targetEmail) {
         summary.error++;
         summary.details.push({
-          turma: course.turma,
+          turmas: course.turmas,
           email: 'E-mail Ausente',
           status: 'error',
           message: 'E-mail não cadastrado'
@@ -229,7 +229,7 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
         if (result.status === 'success') {
           summary.success++;
           summary.details.push({
-            turma: course.turma,
+            turmas: course.turmas,
             email: targetEmail,
             status: 'success',
             message: 'Convite enviado'
@@ -237,7 +237,7 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
         } else if (result.status === 'already_member' || result.status === 'already_invited') {
           summary.already++;
           summary.details.push({
-            turma: course.turma,
+            turmas: course.turmas,
             email: targetEmail,
             status: 'already',
             message: result.message || 'Já cadastrado/convidado'
@@ -245,7 +245,7 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
         } else {
           summary.error++;
           summary.details.push({
-            turma: course.turma,
+            turmas: course.turmas,
             email: targetEmail,
             status: 'error',
             message: result.message || 'Erro no convite'
@@ -255,7 +255,7 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
         console.error("Erro no convite:", err);
         summary.error++;
         summary.details.push({
-          turma: course.turma,
+          turmas: course.turmas,
           email: targetEmail,
           status: 'error',
           message: 'Erro de comunicação: ' + err.message
@@ -313,8 +313,8 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
   const handleSubmit = (e) => {
     if (e) e.preventDefault();
     
-    const turmaAnterior = (originalRecord?.turma || '').trim();
-    const turmaNova = (selectedRecord?.turma || '').trim();
+    const turmaAnterior = (originalRecord?.turmas || '').trim();
+    const turmaNova = (selectedRecord?.turmas || '').trim();
     
     if (editMode === 'remanejamento' && turmaAnterior !== turmaNova) {
       setShowSinalizacaoModal(true);
@@ -337,13 +337,13 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
     try {
       const cleanKey = (val) => val ? val.toString().replace(/[\.\$\#\[\]\/]/g, "_").trim() : '';
       
-      const oldUniqueId = originalRecord ? (originalRecord.cgm ? `EP-${originalRecord.cgm}_${cleanKey(originalRecord.turma)}` : `EP-unknown`) : null;
-      const uniqueId = selectedRecord.cgm ? `EP-${selectedRecord.cgm}_${cleanKey(selectedRecord.turma)}` : `EP-unknown`;
+      const oldUniqueId = originalRecord ? (originalRecord.cgm ? `EP-${originalRecord.cgm}_${cleanKey(originalRecord.turmas)}` : `EP-unknown`) : null;
+      const uniqueId = selectedRecord.cgm ? `EP-${selectedRecord.cgm}_${cleanKey(selectedRecord.turmas)}` : `EP-unknown`;
 
       // Prepara o Log de Movimentação caso tenha mudado de turma
       let movementLog = null;
-      const turmaAnterior = originalRecord ? originalRecord.turma : null;
-      const turmaNova = selectedRecord.turma;
+      const turmaAnterior = originalRecord ? originalRecord.turmas : null;
+      const turmaNova = selectedRecord.turmas;
 
       if (turmaAnterior && turmaNova && turmaAnterior !== turmaNova) {
         let tipoAcao = 'Transferência';
@@ -378,7 +378,7 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
           telefone_cursista: selectedRecord.telefone_cursista || null,
           modalidade: selectedRecord.modalidade || null,
           componente: selectedRecord.componente || null,
-          turma: selectedRecord.turma || null,
+          turmas: selectedRecord.turmas || null,
           dia_da_semana: selectedRecord.dia_da_semana || null,
           horario_inicial: selectedRecord.horario_inicial || null,
           horario_fim: selectedRecord.horario_fim || null,
@@ -396,7 +396,7 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
           telefone_tutor: selectedRecord.telefone_tutor || null,
           nre_tutor: selectedRecord.nre_tutor || null,
           email_nre: selectedRecord['e-mail_nre'] || selectedRecord.email_nre || null,
-          link_classroom: selectedRecord['Link Classroom'] || selectedRecord.link_classroom || null,
+          link: selectedRecord.link || selectedRecord['Link Classroom'] || selectedRecord.link_classroom || null,
           id_classroom: selectedRecord.id_classroom || null,
           periodo_ini: selectedRecord.periodo_ini || null,
           chamamento: selectedRecord.chamamento || null,
@@ -448,7 +448,7 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
         const payload = JSON.stringify({
           action: 'updateRecord',
           data: selectedRecord,
-          turma_anterior: originalRecord ? originalRecord.turma : null,
+          turma_anterior: originalRecord ? originalRecord.turmas : null,
           tipo_remanejamento: tipoRem
         });
         await fetch(appsScriptUrl, {
@@ -461,8 +461,8 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
 
       // 4. Notificar a aplicação principal para atualizar o estado local instantaneamente
       if (onLocalUpdate) {
-        const oldKey = originalRecord ? `${originalRecord.cgm}_${originalRecord.turma}` : null;
-        const newKey = `${selectedRecord.cgm}_${selectedRecord.turma}`;
+        const oldKey = originalRecord ? `${originalRecord.cgm}_${originalRecord.turmas}` : null;
+        const newKey = `${selectedRecord.cgm}_${selectedRecord.turmas}`;
         onLocalUpdate(selectedRecord, oldKey !== newKey ? oldKey : null);
       }
 
@@ -490,13 +490,13 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
     
     try {
       const cleanKey = (val) => val ? val.toString().replace(/[\.\$\#\[\]\/]/g, "_").trim() : '';
-      const uniqueId = record.cgm ? `EP-${record.cgm}_${cleanKey(record.turma)}` : `EP-unknown`;
+      const uniqueId = record.cgm ? `EP-${record.cgm}_${cleanKey(record.turmas)}` : `EP-unknown`;
       
       const movementLog = {
         timestamp: new Date().toISOString(),
         nome_cursista: record.nome_cursista,
         cgm: record.cgm || '',
-        turma_anterior: record.turma || '',
+        turma_anterior: record.turmas || '',
         turma_nova: '',
         tipo_acao: 'Saída',
         email_tutor_responsavel: record.email_tutor || '',
@@ -522,7 +522,7 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
         await set(newMovementRef, movementLog);
       }
 
-      const deletedRecord = { ...record, nome_cursista: '', cgm: '', turma: '', cgm_turma_key: uniqueId };
+      const deletedRecord = { ...record, nome_cursista: '', cgm: '', turmas: '', cgm_turma_key: uniqueId };
       if (onLocalUpdate) {
         onLocalUpdate(deletedRecord);
       }
@@ -669,7 +669,7 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
                       <td style={{ fontSize: '0.85rem' }}>{item.cgm}</td>
                       <td style={{ fontWeight: 600 }}>{item.nome_cursista}</td>
                       <td>{item['e-mail'] || item.email || '-'}</td>
-                      <td style={{ fontSize: '0.85rem' }}>{item.turma}</td>
+                      <td style={{ fontSize: '0.85rem' }}>{item.turmas}</td>
                       <td style={{ fontSize: '0.85rem' }}>{item.nome_formador}</td>
                       <td style={{ fontSize: '0.85rem' }}>{item.tutor_responsavel}</td>
                       <td>
@@ -783,7 +783,7 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
                     <input 
                       type="text" 
                       className="filter-input" 
-                      value={originalRecord.turma || '(Sem Turma)'} 
+                      value={originalRecord.turmas || '(Sem Turma)'} 
                       disabled 
                       style={{ 
                         backgroundColor: 'rgba(229, 62, 62, 0.05)', 
@@ -941,7 +941,7 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
                   <input 
                     type="text" 
                     className="filter-input"
-                    value={selectedRecord.turma || ''} 
+                    value={selectedRecord.turmas || ''} 
                     disabled
                     style={{ backgroundColor: 'var(--color-bg-light)', cursor: 'not-allowed' }}
                     title="Para mudar a turma, utilize o botão 'Remanejar' na tabela principal."
@@ -956,8 +956,8 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
                   <input 
                     type="text" 
                     className="filter-input"
-                    value={selectedRecord['Link Classroom'] || selectedRecord.Link_Classroom || ''} 
-                    onChange={e => handleInputChange('Link Classroom', e.target.value)}
+                    value={selectedRecord.link || selectedRecord['Link Classroom'] || selectedRecord.Link_Classroom || ''} 
+                    onChange={e => handleInputChange('link', e.target.value)}
                   />
                 </div>
 
@@ -1338,7 +1338,7 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
                                   />
                                 </td>
                               )}
-                              <td style={{ fontSize: '0.8rem', fontWeight: 600 }}>{course.turma}</td>
+                              <td style={{ fontSize: '0.8rem', fontWeight: 600 }}>{course.turmas}</td>
                               <td style={{ fontSize: '0.8rem', color: hasId ? 'inherit' : '#ef4444' }}>{course.idClassroom || '⚠️ Ausente'}</td>
                               <td style={{ fontSize: '0.8rem', color: hasEmail ? 'inherit' : '#ef4444' }}>
                                 {classroomInviteType === 'tutor' 
@@ -1380,7 +1380,7 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
                           justifyContent: 'space-between'
                         }}
                       >
-                        <span><strong>{detail.turma}</strong> ({detail.email})</span>
+                        <span><strong>{detail.turmas}</strong> ({detail.email})</span>
                         <span>{detail.message}</span>
                       </div>
                     ))}

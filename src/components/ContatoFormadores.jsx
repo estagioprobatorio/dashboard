@@ -31,16 +31,16 @@ export default function ContatoFormadores({ data }) {
     const map = new Map();
     data.forEach(item => {
       if (!item.nome_formador) return;
-      const key = `${item.nome_formador}-${item.turma}`;
+      const key = `${item.nome_formador}-${item.turmas}`;
       if (!map.has(key)) {
         map.set(key, {
           nome: item.nome_formador,
           email: item['e-mail_formador'] || item.e_mail_formador || item.email_formador || '',
           telefone: item.telefone_formador || '',
-          turma: item.turma || '',
+          turma: item.turmas || '',
           modalidade: item.modalidade || '',
           nre: item.nre_formador || item.nre_tutor || '',
-          classroom: item['Link Classroom'] || item.Link_Classroom || item.link_classroom || '',
+          classroom: item.link || item['Link Classroom'] || item.link || item.link || '',
           diaSemana: item.dia_da_semana || '',
           horarioIni: item.horario_inicial || '',
           horarioFim: item.horario_fim || '',
@@ -59,7 +59,7 @@ export default function ContatoFormadores({ data }) {
     const nres = new Set();
 
     formadoresClasses.forEach(item => {
-      if (item.turma) turmas.add(item.turma);
+      if (item.turmas) turmas.add(item.turmas);
       if (item.modalidade) modalidades.add(item.modalidade);
       if (item.nre) nres.add(item.nre);
     });
@@ -78,7 +78,7 @@ export default function ContatoFormadores({ data }) {
       if (formadorSearch && !item.nome.toLowerCase().includes(formadorSearch.toLowerCase()) && !item.email.toLowerCase().includes(formadorSearch.toLowerCase())) {
         return false;
       }
-      if (turmaFilter && item.turma !== turmaFilter) return false;
+      if (turmaFilter && item.turmas !== turmaFilter) return false;
       if (modalidadeFilter && item.modalidade !== modalidadeFilter) return false;
       if (nreFilter && item.nre !== nreFilter) return false;
       if (somenteNovos && !item.isNovo) return false;
@@ -215,7 +215,7 @@ export default function ContatoFormadores({ data }) {
                         <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Não cadastrado</span>
                       )}
                     </td>
-                    <td style={{ fontSize: '0.85rem' }}>{item.turma || 'Sem Turma'}</td>
+                    <td style={{ fontSize: '0.85rem' }}>{item.turmas || 'Sem Turma'}</td>
                     <td style={{ fontSize: '0.85rem' }}>{horarioDisplay}</td>
                     <td>
                       <div className="actions-cell">

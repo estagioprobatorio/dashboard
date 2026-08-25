@@ -12,7 +12,7 @@ export default function FormularioRemanejamento({ cursistaData, onClose, onSubmi
   const nomeCursista = cursistaData?.nome_cursista || cursistaData?.nome || 'Cursista Logado';
   const cgmCursista = cursistaData?.cgm || 'Não informado';
   const emailCursista = cursistaData?.['e-mail'] || cursistaData?.email || cursistaData?.email_cursista || '';
-  const turmaAtual = cursistaData?.turma || 'Turma não identificada';
+  const turmaAtual = cursistaData?.turmas || 'Turma não identificada';
   const formadorAtual = cursistaData?.nome_formador || 'Formador não informado';
   const tutorAtual = cursistaData?.tutor_responsavel || 'Tutor não informado';
   const nreCursista = cursistaData?.nre_tutor || cursistaData?.nre || 'NRE não informado';

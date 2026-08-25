@@ -6,7 +6,7 @@ export default function TurmaModal({ turmaName, data, onClose }) {
   const turmaInfo = useMemo(() => {
     if (!turmaName || !data) return null;
     const turmaKey = String(turmaName).trim();
-    const matching = data.filter(item => item.turma && String(item.turma).trim() === turmaKey);
+    const matching = data.filter(item => item.turmas && String(item.turmas).trim() === turmaKey);
     if (matching.length === 0) return null;
 
     const first = matching[0];
@@ -41,7 +41,7 @@ export default function TurmaModal({ turmaName, data, onClose }) {
       tutor: first.tutor_responsavel || 'Não Atribuído',
       emailTutor: first.email_tutor || '',
       nreTutor: first.nre_tutor || '',
-      linkClassroom: first['Link Classroom'] || first.link_classroom || first.Link_Classroom || '',
+      linkClassroom: first.link || first['Link Classroom'] || first.link || first.link || '',
       cursistas: Array.from(cursistasMap.values()).sort((a, b) => a.nome.localeCompare(b.nome))
     };
   }, [turmaName, data]);

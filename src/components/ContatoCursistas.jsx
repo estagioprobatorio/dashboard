@@ -77,7 +77,7 @@ export default function ContatoCursistas({ data }) {
       }
       if (cpfCursistaSearch) {
         const cleanQuery = cpfCursistaSearch.replace(/\D/g, '');
-        const cleanCpf = item.cpf_cursista ? item.cpf_cursista.replace(/\D/g, '') : '';
+        const cleanCpf = (item.cpf || item.cpf_cursista) ? (item.cpf || item.cpf_cursista).replace(/\D/g, '') : '';
         if (!cleanCpf.includes(cleanQuery)) return false;
       }
       if (cpfFormadorSearch) {
@@ -271,9 +271,9 @@ export default function ContatoCursistas({ data }) {
                       )}
                     </td>
                     <td>
-                      {item.turma ? (
+                      {item.turmas ? (
                         <button
-                          onClick={() => setSelectedTurma(item.turma)}
+                          onClick={() => setSelectedTurma(item.turmas)}
                           title="Clique para abrir detalhes da turma"
                           style={{
                             display: 'inline-flex',
@@ -301,7 +301,7 @@ export default function ContatoCursistas({ data }) {
                             e.currentTarget.style.color = 'var(--color-primary-dark)';
                           }}
                         >
-                          <span>🏫</span> {item.turma}
+                          <span>🏫</span> {item.turmas}
                         </button>
                       ) : (
                         <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic', fontSize: '0.85rem' }}>-</span>
@@ -322,8 +322,8 @@ export default function ContatoCursistas({ data }) {
                             E-mail
                           </a>
                         )}
-                        {item['Link Classroom'] || item.Link_Classroom || item.link_classroom ? (
-                          <a href={item['Link Classroom'] || item.Link_Classroom || item.link_classroom} target="_blank" rel="noopener noreferrer" className="action-btn classroom">
+                        {item.link || item['Link Classroom'] || item.link || item.link ? (
+                          <a href={item['Link Classroom'] || item.link || item.link} target="_blank" rel="noopener noreferrer" className="action-btn classroom">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '2px'}}><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
                             Classroom
                           </a>

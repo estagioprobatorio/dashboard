@@ -35,14 +35,14 @@ export default function DadosTutoria({ data }) {
     const map = new Map();
     
     data.forEach(item => {
-      if (!item.turma) return;
-      const key = `${item.turma}-${item.tutor_responsavel || ''}`;
+      if (!item.turmas) return;
+      const key = `${item.turmas}-${item.tutor_responsavel || ''}`;
       
       const cursistaName = item.nome_cursista ? item.nome_cursista.toLowerCase() : '';
       
       if (!map.has(key)) {
         map.set(key, {
-          turma: item.turma,
+          turma: item.turmas,
           tutor: item.tutor_responsavel || 'Não Atribuído',
           emailTutor: item.email_tutor || '',
           telefoneTutor: item.telefone_tutor || '',
@@ -200,9 +200,9 @@ export default function DadosTutoria({ data }) {
                 return (
                   <tr key={idx}>
                     <td>
-                      {item.turma ? (
+                      {item.turmas ? (
                         <button
-                          onClick={() => setSelectedTurma(item.turma)}
+                          onClick={() => setSelectedTurma(item.turmas)}
                           title="Clique para abrir detalhes da turma"
                           style={{
                             display: 'inline-flex',
@@ -230,7 +230,7 @@ export default function DadosTutoria({ data }) {
                             e.currentTarget.style.color = 'var(--color-primary-dark)';
                           }}
                         >
-                          <span>🏫</span> {item.turma}
+                          <span>🏫</span> {item.turmas}
                         </button>
                       ) : (
                         '-'

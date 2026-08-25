@@ -42,13 +42,13 @@ export default function AmbienteCursista({ userEmail, records, movimentacoes = [
 
   // 2. Colegas da mesma turma
   const colegasTurma = useMemo(() => {
-    if (!cursistaRecord || !cursistaRecord.turma) return [];
-    const turmaKey = cursistaRecord.turma.trim();
+    if (!cursistaRecord || !cursistaRecord.turmas) return [];
+    const turmaKey = cursistaRecord.turmas.trim();
     
     // Filtrar cursistas que pertencem à mesma turma (excluindo o próprio se desejar ou mantendo)
     const map = new Map();
     records.forEach(item => {
-      if (item.turma && item.turma.trim() === turmaKey) {
+      if (item.turmas && item.turmas.trim() === turmaKey) {
         const key = item.cgm ? String(item.cgm) : (item.nome_cursista || Math.random().toString());
         if (!map.has(key)) {
           map.set(key, {
@@ -177,7 +177,7 @@ export default function AmbienteCursista({ userEmail, records, movimentacoes = [
               </div>
 
               <h3 style={{ fontSize: '1.15rem', color: 'var(--color-primary-dark)', fontWeight: 800, marginBottom: '0.75rem' }}>
-                {cursistaRecord.turma || 'Não enturmado'}
+                {cursistaRecord.turmas || 'Não enturmado'}
               </h3>
 
               <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', display: 'flex', flexDirection: 'column', gap: '0.35rem', marginBottom: '1rem' }}>
@@ -188,15 +188,15 @@ export default function AmbienteCursista({ userEmail, records, movimentacoes = [
 
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <button 
-                  onClick={() => setSelectedTurma(cursistaRecord.turma)}
+                  onClick={() => setSelectedTurma(cursistaRecord.turmas)}
                   className="btn-secondary" 
                   style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem', width: '100%' }}
                 >
                   Ver Detalhes da Turma
                 </button>
-                {(cursistaRecord['Link Classroom'] || cursistaRecord.Link_Classroom || cursistaRecord.link_classroom) && (
+                {(cursistaRecord.link || cursistaRecord['Link Classroom'] || cursistaRecord.link || cursistaRecord.link) && (
                   <a 
-                    href={cursistaRecord['Link Classroom'] || cursistaRecord.Link_Classroom || cursistaRecord.link_classroom} 
+                    href={cursistaRecord.link || cursistaRecord['Link Classroom'] || cursistaRecord.link || cursistaRecord.link} 
                     target="_blank" 
                     rel="noreferrer" 
                     className="action-btn classroom" 
