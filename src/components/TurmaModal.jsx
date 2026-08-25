@@ -106,24 +106,6 @@ export default function TurmaModal({ turmaName, data, onClose }) {
               {turmaInfo.componente} • {turmaInfo.anoFormativo} {turmaInfo.turno ? `(${turmaInfo.turno})` : ''}
             </h2>
           </div>
-          <button
-            onClick={onClose}
-            style={{
-              background: 'rgba(255,255,255,0.15)',
-              border: 'none',
-              color: 'white',
-              width: '32px',
-              height: '32px',
-              borderRadius: '50%',
-              cursor: 'pointer',
-              fontSize: '1.2rem',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-          >
-            ✕
-          </button>
         </div>
 
         {/* Modal Content - Body com rolagem */}

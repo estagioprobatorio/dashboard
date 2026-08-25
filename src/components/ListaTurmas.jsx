@@ -364,31 +364,13 @@ export default function ListaTurmas({ data }) {
               alignItems: 'center'
             }}>
               <div>
-                <span style={{ fontSize: '0.72rem', backgroundColor: 'var(--color-accent-green)', color: 'white', padding: '0.15rem 0.5rem', borderRadius: '4px', textTransform: 'uppercase', fontWeight: 800 }}>
-                  {selectedTurma.anoFormativo} • {selectedTurma.componente}
+                <span style={{ fontSize: '0.75rem', backgroundColor: 'var(--color-accent-green)', color: 'white', padding: '0.2rem 0.6rem', borderRadius: '4px', textTransform: 'uppercase', fontWeight: 800 }}>
+                  🏫 {selectedTurma.turma || selectedTurma.turmas}
                 </span>
-                <h2 style={{ fontSize: '1.3rem', marginTop: '0.3rem', fontWeight: 800 }}>
-                  {selectedTurma.turma || selectedTurma.turmas}
+                <h2 style={{ fontSize: '1.2rem', marginTop: '0.4rem', fontWeight: 700, color: '#f1f5f9' }}>
+                  {selectedTurma.componente} • {selectedTurma.anoFormativo} {selectedTurma.turno ? `(${selectedTurma.turno})` : ''}
                 </h2>
               </div>
-              <button
-                onClick={() => setSelectedTurma(null)}
-                style={{
-                  background: 'rgba(255,255,255,0.15)',
-                  border: 'none',
-                  color: 'white',
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '50%',
-                  cursor: 'pointer',
-                  fontSize: '1.2rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}
-              >
-                ✕
-              </button>
             </div>
 
             {/* Modal Content - Body com rolagem */}
