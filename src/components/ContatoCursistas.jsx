@@ -36,7 +36,7 @@ export default function ContatoCursistas({ data }) {
     return `https://wa.me/${formatted}?text=${message}`;
   };
 
-  // Opções para Filtros
+  // Opções para Filtros (Filtro cascateado: Tutor -> Formadores)
   const filterOptions = useMemo(() => {
     const formadores = new Set();
     const tutores = new Set();
@@ -46,8 +46,10 @@ export default function ContatoCursistas({ data }) {
     const chamamentos = new Set();
 
     data.forEach(item => {
-      if (item.nome_formador) formadores.add(item.nome_formador);
       if (item.tutor_responsavel) tutores.add(item.tutor_responsavel);
+      if (!tutorFilter || item.tutor_responsavel === tutorFilter) {
+        if (item.nome_formador) formadores.add(item.nome_formador);
+      }
       if (item.nre_tutor) nres.add(item.nre_tutor);
       if (item.modalidade) modalidades.add(item.modalidade);
       if (item.turno) turnos.add(item.turno);
@@ -62,18 +64,20 @@ export default function ContatoCursistas({ data }) {
       turnos: Array.from(turnos).sort(),
       chamamentos: Array.from(chamamentos).sort()
     };
-  }, [data]);
+  }, [data, tutorFilter]);
 
   // Filtragem dos registros
   const filteredRecords = useMemo(() => {
     setCurrentPage(1); // Reseta a paginação ao filtrar
     return data.filter(item => {
-      // Filtros de busca digitada
+      // Filtros de busca digitada (Busca por Nome, CGM, Turma ou Componente)
       if (generalSearch) {
-        const query = generalSearch.toLowerCase();
-        const nomeMatch = item.nome_cursista && item.nome_cursista.toLowerCase().includes(query);
-        const cgmMatch = item.cgm && item.cgm.toLowerCase().includes(query);
-        if (!nomeMatch && !cgmMatch) return false;
+        const query = generalSearch.trim().toLowerCase();
+        const nomeMatch = String(item.nome_cursista || '').toLowerCase().includes(query);
+        const cgmMatch = String(item.cgm || '').toLowerCase().includes(query);
+        const turmaMatch = String(item.turmas || item.turma || '').toLowerCase().includes(query);
+        const compMatch = String(item.componente || '').toLowerCase().includes(query);
+        if (!nomeMatch && !cgmMatch && !turmaMatch && !compMatch) return false;
       }
       if (cpfCursistaSearch) {
         const cleanQuery = cpfCursistaSearch.replace(/\D/g, '');
@@ -180,7 +184,7 @@ export default function ContatoCursistas({ data }) {
         {/* Dropdown Tutor */}
         <div className="filter-group">
           <span className="filter-label">Tutor</span>
-          <select className="filter-select" value={tutorFilter} onChange={e => setTutorFilter(e.target.value)}>
+          <select className="filter-select" value={tutorFilter} onChange={e => { setTutorFilter(e.target.value); setFormadorFilter(''); }}>
             <option value="">Todos</option>
             {filterOptions.tutores.map(t => <option key={t} value={t}>{t}</option>)}
           </select>

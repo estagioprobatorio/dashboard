@@ -59,33 +59,41 @@ export default function ListaTurmas({ data }) {
     return Array.from(map.values()).sort((a, b) => a.turma.localeCompare(b.turma));
   }, [data]);
 
-  // Obter listas únicas para popular os seletores dos Filtros
+  // Obter listas únicas para popular os seletores dos Filtros (Filtro cascateado: Tutor -> Formadores)
   const filterOptions = useMemo(() => {
     const tutoresSet = new Set();
     const formadoresSet = new Set();
 
     turmasList.forEach(item => {
-      if (item.tutor && item.tutor !== 'Não Atribuído') tutoresSet.add(item.tutor);
-      if (item.formador && item.formador !== 'SEM FORMADOR') formadoresSet.add(item.formador);
+      if (item.tutor && item.tutor !== 'Não Atribuído') {
+        tutoresSet.add(item.tutor);
+      }
+      // Se um tutor estiver selecionado, exibe apenas os formadores que possuem turmas com esse tutor
+      if (!tutorFilter || item.tutor === tutorFilter) {
+        if (item.formador && item.formador !== 'SEM FORMADOR') {
+          formadoresSet.add(item.formador);
+        }
+      }
     });
 
     return {
       tutores: Array.from(tutoresSet).sort(),
       formadores: Array.from(formadoresSet).sort()
     };
-  }, [turmasList]);
+  }, [turmasList, tutorFilter]);
 
-  // Aplicar filtros
+  // Aplicar filtros com tratamento seguro contra nulos
   const filteredTurmas = useMemo(() => {
     setCurrentPage(1); // Reseta para a primeira página ao alterar o filtro
     return turmasList.filter(item => {
-      if (tutorFilter && item.tutor !== tutorFilter) return false;
-      if (formadorFilter && item.formador !== formadorFilter) return false;
+      if (tutorFilter && (item.tutor || '') !== tutorFilter) return false;
+      if (formadorFilter && (item.formador || '') !== formadorFilter) return false;
       if (turmaSearch) {
-        const query = turmaSearch.toLowerCase();
-        const turmaMatch = (item.turma || item.turmas || '').toLowerCase().includes(query);
-        const compMatch = item.componente.toLowerCase().includes(query);
-        if (!turmaMatch && !compMatch) return false;
+        const query = turmaSearch.trim().toLowerCase();
+        const turmaMatch = String(item.turma || item.turmas || '').toLowerCase().includes(query);
+        const compMatch = String(item.componente || '').toLowerCase().includes(query);
+        const formadorMatch = String(item.formador || '').toLowerCase().includes(query);
+        if (!turmaMatch && !compMatch && !formadorMatch) return false;
       }
       return true;
     });
@@ -150,7 +158,10 @@ export default function ListaTurmas({ data }) {
             </label>
             <select
               value={tutorFilter}
-              onChange={(e) => setTutorFilter(e.target.value)}
+              onChange={(e) => {
+                setTutorFilter(e.target.value);
+                setFormadorFilter('');
+              }}
               style={{ width: '100%', padding: '0.65rem 0.8rem', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', fontSize: '0.88rem' }}
             >
               <option value="">-- Todos os Tutores ({filterOptions.tutores.length}) --</option>

@@ -6,10 +6,14 @@ export default function TurmaModal({ turmaName, data, onClose }) {
   const turmaInfo = useMemo(() => {
     if (!turmaName || !data) return null;
     const turmaKey = String(turmaName).trim();
-    const matching = data.filter(item => item.turmas && String(item.turmas).trim() === turmaKey);
+    const matching = data.filter(item => {
+      const t = item.turmas || item.turma || '';
+      return String(t).trim().toLowerCase() === turmaKey.toLowerCase();
+    });
     if (matching.length === 0) return null;
 
     const first = matching[0];
+    const fullTurmaName = first.turmas || first.turma || turmaKey;
     
     // Agrupar cursistas únicos por CGM ou Nome
     const cursistasMap = new Map();
@@ -28,7 +32,7 @@ export default function TurmaModal({ turmaName, data, onClose }) {
     });
 
     return {
-      turma: turmaKey,
+      turma: fullTurmaName,
       anoFormativo: first.ano_formativo || 'Não informado',
       componente: first.componente || first.componente_conc || 'Não informado',
       modalidade: first.modalidade || '',
@@ -41,7 +45,7 @@ export default function TurmaModal({ turmaName, data, onClose }) {
       tutor: first.tutor_responsavel || 'Não Atribuído',
       emailTutor: first.email_tutor || '',
       nreTutor: first.nre_tutor || '',
-      linkClassroom: first.link || first['Link Classroom'] || first.link || first.link || '',
+      linkClassroom: first.link || first['Link Classroom'] || first.link_classroom || '',
       cursistas: Array.from(cursistasMap.values()).sort((a, b) => a.nome.localeCompare(b.nome))
     };
   }, [turmaName, data]);
@@ -52,9 +56,9 @@ export default function TurmaModal({ turmaName, data, onClose }) {
     if (!cursistaSearch) return true;
     const q = cursistaSearch.toLowerCase();
     return (
-      c.nome.toLowerCase().includes(q) ||
-      c.email.toLowerCase().includes(q) ||
-      String(c.cgm).includes(q)
+      (c.nome || '').toLowerCase().includes(q) ||
+      (c.email || '').toLowerCase().includes(q) ||
+      String(c.cgm || '').includes(q)
     );
   });
 
@@ -95,11 +99,11 @@ export default function TurmaModal({ turmaName, data, onClose }) {
           alignItems: 'center'
         }}>
           <div>
-            <span style={{ fontSize: '0.72rem', backgroundColor: 'var(--color-accent-green)', color: 'white', padding: '0.15rem 0.5rem', borderRadius: '4px', textTransform: 'uppercase', fontWeight: 800 }}>
-              {turmaInfo.anoFormativo} • {turmaInfo.componente}
-            </span>
-            <h2 style={{ fontSize: '1.3rem', marginTop: '0.3rem', fontWeight: 800 }}>
+            <span style={{ fontSize: '0.75rem', backgroundColor: 'var(--color-accent-green)', color: 'white', padding: '0.2rem 0.6rem', borderRadius: '4px', textTransform: 'uppercase', fontWeight: 800, letterSpacing: '0.5px' }}>
               🏫 {turmaInfo.turma}
+            </span>
+            <h2 style={{ fontSize: '1.2rem', marginTop: '0.4rem', fontWeight: 700, color: '#f1f5f9' }}>
+              {turmaInfo.componente} • {turmaInfo.anoFormativo} {turmaInfo.turno ? `(${turmaInfo.turno})` : ''}
             </h2>
           </div>
           <button

@@ -77,8 +77,12 @@ export default function ContatoFormadores({ data }) {
   const filteredRecords = useMemo(() => {
     setCurrentPage(1); // Reseta para primeira página ao filtrar
     return formadoresClasses.filter(item => {
-      if (formadorSearch && !item.nome.toLowerCase().includes(formadorSearch.toLowerCase()) && !item.email.toLowerCase().includes(formadorSearch.toLowerCase())) {
-        return false;
+      if (formadorSearch) {
+        const q = formadorSearch.trim().toLowerCase();
+        const nomeMatch = String(item.nome || '').toLowerCase().includes(q);
+        const emailMatch = String(item.email || '').toLowerCase().includes(q);
+        const turmaMatch = String(item.turma || item.turmas || '').toLowerCase().includes(q);
+        if (!nomeMatch && !emailMatch && !turmaMatch) return false;
       }
       if (turmaFilter && (item.turma || item.turmas) !== turmaFilter) return false;
       if (modalidadeFilter && item.modalidade !== modalidadeFilter) return false;

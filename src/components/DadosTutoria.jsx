@@ -88,11 +88,13 @@ export default function DadosTutoria({ data }) {
   const filteredRecords = useMemo(() => {
     setCurrentPage(1); // Reseta a paginação
     return tutorRecords.filter(item => {
-      // Filtro por Cursista (busca se o nome de algum cursista na turma bate)
+      // Filtro por Cursista ou Nome da Turma / Componente
       if (cursistaSearch) {
-        const query = cursistaSearch.toLowerCase();
-        const hasCursista = item.cursistas.some(name => name.includes(query));
-        if (!hasCursista) return false;
+        const query = cursistaSearch.trim().toLowerCase();
+        const hasCursista = (item.cursistas || []).some(name => String(name || '').toLowerCase().includes(query));
+        const turmaMatch = String(item.turma || item.turmas || '').toLowerCase().includes(query);
+        const compMatch = String(item.componente || '').toLowerCase().includes(query);
+        if (!hasCursista && !turmaMatch && !compMatch) return false;
       }
       
       if (formadorFilter && item.formador !== formadorFilter) return false;
