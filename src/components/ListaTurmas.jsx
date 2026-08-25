@@ -25,6 +25,7 @@ export default function ListaTurmas({ data }) {
       if (!map.has(turmaKey)) {
         map.set(turmaKey, {
           turma: turmaKey,
+          turmas: turmaKey,
           anoFormativo: item.ano_formativo || 'Não informado',
           componente: item.componente || item.componente_conc || 'Não informado',
           modalidade: item.modalidade || '',
@@ -82,7 +83,7 @@ export default function ListaTurmas({ data }) {
       if (formadorFilter && item.formador !== formadorFilter) return false;
       if (turmaSearch) {
         const query = turmaSearch.toLowerCase();
-        const turmaMatch = item.turmas.toLowerCase().includes(query);
+        const turmaMatch = (item.turma || item.turmas || '').toLowerCase().includes(query);
         const compMatch = item.componente.toLowerCase().includes(query);
         if (!turmaMatch && !compMatch) return false;
       }
@@ -216,7 +217,7 @@ export default function ListaTurmas({ data }) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '1.2rem' }}>
           {paginatedTurmas.map((tItem) => (
             <div
-              key={tItem.turmas}
+              key={tItem.turma || tItem.turmas}
               className="glass-panel"
               onClick={() => { setSelectedTurma(tItem); setCursistaSearch(''); }}
               style={{
@@ -256,7 +257,7 @@ export default function ListaTurmas({ data }) {
                 </div>
 
                 <h3 style={{ fontSize: '1.05rem', color: 'var(--color-primary-dark)', marginBottom: '0.6rem', fontWeight: 800, lineHeight: 1.3 }}>
-                  {tItem.turmas}
+                  {tItem.turma || tItem.turmas}
                 </h3>
 
                 <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', display: 'flex', flexDirection: 'column', gap: '0.35rem', marginBottom: '1rem' }}>
@@ -356,7 +357,7 @@ export default function ListaTurmas({ data }) {
                   {selectedTurma.anoFormativo} • {selectedTurma.componente}
                 </span>
                 <h2 style={{ fontSize: '1.3rem', marginTop: '0.3rem', fontWeight: 800 }}>
-                  {selectedTurma.turmas}
+                  {selectedTurma.turma || selectedTurma.turmas}
                 </h2>
               </div>
               <button

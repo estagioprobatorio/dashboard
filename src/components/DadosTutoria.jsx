@@ -43,6 +43,7 @@ export default function DadosTutoria({ data }) {
       if (!map.has(key)) {
         map.set(key, {
           turma: item.turmas,
+          turmas: item.turmas,
           tutor: item.tutor_responsavel || 'Não Atribuído',
           emailTutor: item.email_tutor || '',
           telefoneTutor: item.telefone_tutor || '',
@@ -200,9 +201,9 @@ export default function DadosTutoria({ data }) {
                 return (
                   <tr key={idx}>
                     <td>
-                      {item.turmas ? (
+                      {(item.turma || item.turmas) ? (
                         <button
-                          onClick={() => setSelectedTurma(item.turmas)}
+                          onClick={() => setSelectedTurma(item.turma || item.turmas)}
                           title="Clique para abrir detalhes da turma"
                           style={{
                             display: 'inline-flex',
@@ -230,7 +231,7 @@ export default function DadosTutoria({ data }) {
                             e.currentTarget.style.color = 'var(--color-primary-dark)';
                           }}
                         >
-                          <span>🏫</span> {item.turmas}
+                          <span>🏫</span> {item.turma || item.turmas}
                         </button>
                       ) : (
                         '-'
