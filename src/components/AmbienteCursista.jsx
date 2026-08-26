@@ -1,12 +1,18 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import FormularioRemanejamento from './FormularioRemanejamento';
 import TurmaModal from './TurmaModal';
+import CardVidaFuncional from './CardVidaFuncional';
 
 export default function AmbienteCursista({ userEmail, records, movimentacoes = [], onNovaMovimentacao, subTab = 'turma' }) {
+  const [activeSubTab, setActiveSubTab] = useState(subTab);
   const [showModalForm, setShowModalForm] = useState(false);
   const [selectedTurma, setSelectedTurma] = useState(null);
   const [classmateSearch, setClassmateSearch] = useState('');
   const [deferredPrompt, setDeferredPrompt] = useState(null);
+
+  useEffect(() => {
+    setActiveSubTab(subTab);
+  }, [subTab]);
 
   // Escuta evento de instalação PWA
   useEffect(() => {
@@ -159,8 +165,84 @@ export default function AmbienteCursista({ userEmail, records, movimentacoes = [
           <span>📲</span> Instalar App no Celular
         </button>
       </div>
-         {/* BLOCO 1: MINHA TURMA */}
-      {subTab === 'turma' && (
+
+      {/* Navegação de Sub-abas Internas */}
+      <div style={{
+        display: 'flex',
+        gap: '0.5rem',
+        backgroundColor: '#ffffff',
+        padding: '0.5rem',
+        borderRadius: '12px',
+        border: '1px solid var(--color-card-border)',
+        boxShadow: 'var(--shadow-sm)',
+        flexWrap: 'wrap'
+      }}>
+        <button
+          onClick={() => setActiveSubTab('turma')}
+          style={{
+            flex: 1,
+            minWidth: '140px',
+            padding: '0.6rem 1rem',
+            borderRadius: '8px',
+            border: 'none',
+            fontWeight: 700,
+            fontSize: '0.88rem',
+            cursor: 'pointer',
+            backgroundColor: (activeSubTab === 'turma' || activeSubTab === 'geral') ? 'var(--color-primary-dark)' : 'transparent',
+            color: (activeSubTab === 'turma' || activeSubTab === 'geral') ? '#ffffff' : 'var(--color-text-muted)',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          🏫 Minha Turma
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('card')}
+          style={{
+            flex: 1,
+            minWidth: '160px',
+            padding: '0.6rem 1rem',
+            borderRadius: '8px',
+            border: 'none',
+            fontWeight: 700,
+            fontSize: '0.88rem',
+            cursor: 'pointer',
+            backgroundColor: (activeSubTab === 'card' || activeSubTab === 'vida_funcional') ? '#c59b27' : 'transparent',
+            color: (activeSubTab === 'card' || activeSubTab === 'vida_funcional') ? '#091a2e' : 'var(--color-text-muted)',
+            boxShadow: (activeSubTab === 'card' || activeSubTab === 'vida_funcional') ? '0 2px 8px rgba(197, 155, 39, 0.4)' : 'none',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          🎴 Meu Card Functional
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('solicitacoes')}
+          style={{
+            flex: 1,
+            minWidth: '180px',
+            padding: '0.6rem 1rem',
+            borderRadius: '8px',
+            border: 'none',
+            fontWeight: 700,
+            fontSize: '0.88rem',
+            cursor: 'pointer',
+            backgroundColor: activeSubTab === 'solicitacoes' ? 'var(--color-primary-dark)' : 'transparent',
+            color: activeSubTab === 'solicitacoes' ? '#ffffff' : 'var(--color-text-muted)',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          📝 Suas Solicitações
+        </button>
+      </div>
+
+      {/* BLOCO 0: CARD GAMIFICADO DE VIDA FUNCIONAL */}
+      {(activeSubTab === 'card' || activeSubTab === 'vida_funcional') && (
+        <CardVidaFuncional cursista={cursistaRecord} />
+      )}
+
+      {/* BLOCO 1: MINHA TURMA */}
+      {(activeSubTab === 'turma' || activeSubTab === 'geral') && (
         <>
           {/* Cards da Turma, Formador e Tutor */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem' }}>
@@ -357,7 +439,7 @@ export default function AmbienteCursista({ userEmail, records, movimentacoes = [
       )}
 
       {/* BLOCO 2: MINHAS SOLICITAÇÕES */}
-      {subTab === 'solicitacoes' && (
+      {activeSubTab === 'solicitacoes' && (
         <div className="glass-panel" style={{ padding: '1.25rem' }}>
           <div className="panel-header" style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
             <h2 className="panel-title">

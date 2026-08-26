@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { exportToCSV, printReportPDF } from '../utils/exportUtils';
 
 export default function ListaTurmas({ data }) {
   // Filtros de seleção e busca
@@ -126,6 +127,37 @@ export default function ListaTurmas({ data }) {
     );
   }, [selectedTurma, cursistaSearch]);
 
+  const ensalamentoColumns = [
+    { label: 'Turma', accessor: r => r.turma || '-' },
+    { label: 'Componente Curricular', accessor: r => r.componente || '-' },
+    { label: 'Turno', accessor: r => r.turno || '-' },
+    { label: 'Dia / Horário', accessor: r => `${r.diaSemana || ''} ${r.horarioInicial ? '('+r.horarioInicial+'-'+r.horarioFim+')' : ''}`.trim() || '-' },
+    { label: 'Formador Responsável', accessor: r => r.formador || '-' },
+    { label: 'Tutor Responsável', accessor: r => r.tutor || '-' },
+    { label: 'NRE', accessor: r => r.nreTutor || '-' },
+    { label: 'Total Cursistas Enturmados', accessor: r => r.cursistas ? r.cursistas.length : 0 }
+  ];
+
+  const handleExportCSV = () => {
+    exportToCSV('Relatorio_Ensalamento_Turmas', ensalamentoColumns, filteredTurmas);
+  };
+
+  const handlePrintPDF = () => {
+    const filters = [
+      tutorFilter && `Tutor: ${tutorFilter}`,
+      formadorFilter && `Formador: ${formadorFilter}`,
+      turmaSearch && `Busca: "${turmaSearch}"`
+    ].filter(Boolean).join(' | ') || 'Todas as Turmas';
+
+    printReportPDF({
+      title: 'Relatório Oficial de Ensalamento - Turmas, Formadores e Cursistas',
+      subtitle: 'Distribuição e Ensalamento Geral - SEED-PR',
+      columns: ensalamentoColumns,
+      data: filteredTurmas,
+      filterSummary: filters
+    });
+  };
+
   return (
     <div className="tab-content animate-fade-in" style={{ padding: '0.5rem 0' }}>
       
@@ -133,14 +165,53 @@ export default function ListaTurmas({ data }) {
       <div className="section-header" style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <h2 style={{ fontSize: '1.4rem', color: 'var(--color-primary-dark)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span style={{ fontSize: '1.5rem' }}>🏫</span> Lista de Turmas
+            <span style={{ fontSize: '1.5rem' }}>🏫</span> Ensalamento e Lista de Turmas
           </h2>
           <p style={{ fontSize: '0.88rem', color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>
-            Filtre por Tutor, Formador ou Turma para visualizar a lista de salas e seus cursistas.
+            Visualização e exportação do ensalamento de cursistas e formadores por turma, disciplina e turno.
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-          <div className="kpi-card" style={{ padding: '0.6rem 1.25rem', minWidth: 'auto', background: 'white', borderRadius: '10px', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '0.2rem' }}>
+
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <button
+            onClick={handleExportCSV}
+            style={{
+              backgroundColor: '#0b3c5d',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '8px',
+              padding: '0.5rem 1rem',
+              fontSize: '0.82rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.4rem'
+            }}
+          >
+            <span>📊</span> Exportar Ensalamento (CSV)
+          </button>
+          
+          <button
+            onClick={handlePrintPDF}
+            style={{
+              backgroundColor: '#002d5c',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '8px',
+              padding: '0.5rem 1rem',
+              fontSize: '0.82rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.4rem'
+            }}
+          >
+            <span>📄</span> Imprimir Ensalamento (PDF)
+          </button>
+
+          <div className="kpi-card" style={{ padding: '0.5rem 1rem', minWidth: 'auto', background: 'white', borderRadius: '10px', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '0.1rem' }}>
             <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total de Turmas</span>
             <span style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--color-primary-dark)', fontFamily: 'var(--font-header)' }}>{filteredTurmas.length}</span>
           </div>

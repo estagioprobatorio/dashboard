@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import TurmaModal from './TurmaModal';
+import { exportToCSV, printReportPDF } from '../utils/exportUtils';
 
 export default function ContatoCursistas({ data }) {
   // Filtros de texto/busca
@@ -121,17 +122,91 @@ export default function ContatoCursistas({ data }) {
     setModalidadeFilter('');
     setTurnoFilter('');
     setChamamentoFilter('');
+  const cursistaColumns = [
+    { label: 'CGM', accessor: r => r.cgm || '-' },
+    { label: 'Nome do Cursista', accessor: r => r.nome_cursista || '-' },
+    { label: 'E-mail', accessor: r => r['e-mail'] || r.email || '-' },
+    { label: 'Turma', accessor: r => r.turmas || '-' },
+    { label: 'Formador', accessor: r => r.nome_formador || '-' },
+    { label: 'Tutor', accessor: r => r.tutor_responsavel || '-' },
+    { label: 'NRE', accessor: r => r.nre_tutor || r.nre_cursista || '-' },
+    { label: 'Modalidade', accessor: r => r.modalidade || '-' },
+    { label: 'Chamamento', accessor: r => r.chamamento || '-' }
+  ];
+
+  const handleExportCSV = () => {
+    exportToCSV('Relatorio_Cursistas', cursistaColumns, filteredRecords);
+  };
+
+  const handlePrintPDF = () => {
+    const filters = [
+      generalSearch && `Busca: "${generalSearch}"`,
+      tutorFilter && `Tutor: ${tutorFilter}`,
+      formadorFilter && `Formador: ${formadorFilter}`,
+      nreFilter && `NRE: ${nreFilter}`,
+      modalidadeFilter && `Modalidade: ${modalidadeFilter}`
+    ].filter(Boolean).join(' | ') || 'Nenhum filtro aplicado';
+
+    printReportPDF({
+      title: 'Relatório Oficial de Cursistas - Estágio Probatório',
+      subtitle: 'Listagem Geral e Contatos dos Cursistas',
+      columns: cursistaColumns,
+      data: filteredRecords,
+      filterSummary: filters
+    });
   };
 
   return (
     <div className="glass-panel animate-fade-in">
-      <div className="panel-header">
-        <h2 className="panel-title">
-          <i className="lucide-users"></i> Contato dos Cursistas
-        </h2>
-        <span className="kpi-label" style={{ fontSize: '0.85rem' }}>
-          {filteredRecords.length} cursistas encontrados
-        </span>
+      <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+        <div>
+          <h2 className="panel-title">
+            <i className="lucide-users"></i> Contato dos Cursistas
+          </h2>
+          <span className="kpi-label" style={{ fontSize: '0.85rem' }}>
+            {filteredRecords.length} cursistas encontrados
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button
+            onClick={handleExportCSV}
+            style={{
+              backgroundColor: '#0b3c5d',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '8px',
+              padding: '0.45rem 0.9rem',
+              fontSize: '0.82rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.4rem'
+            }}
+          >
+            <span>📊</span> Baixar CSV
+          </button>
+          
+          <button
+            onClick={handlePrintPDF}
+            style={{
+              backgroundColor: '#002d5c',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '8px',
+              padding: '0.45rem 0.9rem',
+              fontSize: '0.82rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.4rem'
+            }}
+          >
+            <span>📄</span> Imprimir / PDF
+          </button>
+        </div>
       </div>
 
       {/* Grid de Filtros */}
