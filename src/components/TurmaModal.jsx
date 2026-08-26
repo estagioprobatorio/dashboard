@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { exportToCSV, printReportPDF } from '../utils/exportUtils';
 
 export default function TurmaModal({ turmaName, data, onClose }) {
   const [cursistaSearch, setCursistaSearch] = useState('');
@@ -61,6 +62,33 @@ export default function TurmaModal({ turmaName, data, onClose }) {
       String(c.cgm || '').includes(q)
     );
   });
+
+  const modalColumns = [
+    { label: '#', accessor: (r, idx) => idx + 1, align: 'center' },
+    { label: 'Nome do Cursista', accessor: r => r.nome || '-' },
+    { label: 'E-mail', accessor: r => r.email || '-' },
+    { label: 'CGM', accessor: r => r.cgm || '-' },
+    { label: 'Município', accessor: r => r.municipios || '-' }
+  ];
+
+  const handlePrintPDF = () => {
+    if (!turmaInfo) return;
+    const filterInfo = cursistaSearch ? `Filtro de busca: "${cursistaSearch}"` : 'Todos os cursistas da turma';
+    const subtitleText = `Componente: ${turmaInfo.componente} | Formador: ${turmaInfo.formador} | Tutor: ${turmaInfo.tutor} | NRE: ${turmaInfo.nreTutor || '-'}`;
+
+    printReportPDF({
+      title: `Lista de Cursistas - Turma ${turmaInfo.turma}`,
+      subtitle: subtitleText,
+      columns: modalColumns,
+      data: filteredCursistas,
+      filterSummary: filterInfo
+    });
+  };
+
+  const handleExportCSV = () => {
+    if (!turmaInfo) return;
+    exportToCSV(`Cursistas_Turma_${turmaInfo.turma}`, modalColumns, filteredCursistas);
+  };
 
   return (
     <div style={{
@@ -200,13 +228,55 @@ export default function TurmaModal({ turmaName, data, onClose }) {
                 👥 Cursistas da Turma ({turmaInfo.cursistas.length})
               </h3>
               
-              <input
-                type="text"
-                placeholder="Filtrar aluno por nome ou e-mail..."
-                value={cursistaSearch}
-                onChange={(e) => setCursistaSearch(e.target.value)}
-                style={{ padding: '0.45rem 0.8rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem', width: '260px' }}
-              />
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                <input
+                  type="text"
+                  placeholder="Filtrar aluno por nome ou e-mail..."
+                  value={cursistaSearch}
+                  onChange={(e) => setCursistaSearch(e.target.value)}
+                  style={{ padding: '0.45rem 0.8rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem', width: '220px' }}
+                />
+
+                <button
+                  onClick={handleExportCSV}
+                  title="Baixar lista em CSV"
+                  style={{
+                    backgroundColor: '#0b3c5d',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '6px',
+                    padding: '0.45rem 0.75rem',
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.3rem'
+                  }}
+                >
+                  <span>📊</span> CSV
+                </button>
+
+                <button
+                  onClick={handlePrintPDF}
+                  title="Imprimir lista de alunos em PDF"
+                  style={{
+                    backgroundColor: '#002d5c',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '6px',
+                    padding: '0.45rem 0.75rem',
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.3rem'
+                  }}
+                >
+                  <span>📄</span> Imprimir (PDF)
+                </button>
+              </div>
             </div>
 
             <div className="table-responsive" style={{ maxHeight: '350px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
@@ -254,7 +324,47 @@ export default function TurmaModal({ turmaName, data, onClose }) {
         </div>
 
         {/* Modal Footer */}
-        <div style={{ padding: '1rem 1.5rem', backgroundColor: '#f1f5f9', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end' }}>
+        <div style={{ padding: '1rem 1.5rem', backgroundColor: '#f1f5f9', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button
+              onClick={handleExportCSV}
+              style={{
+                backgroundColor: '#0b3c5d',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '6px',
+                padding: '0.5rem 0.9rem',
+                fontSize: '0.82rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem'
+              }}
+            >
+              <span>📊</span> Baixar CSV
+            </button>
+
+            <button
+              onClick={handlePrintPDF}
+              style={{
+                backgroundColor: '#002d5c',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '6px',
+                padding: '0.5rem 0.9rem',
+                fontSize: '0.82rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem'
+              }}
+            >
+              <span>📄</span> Imprimir Lista (PDF)
+            </button>
+          </div>
+
           <button
             onClick={onClose}
             className="btn-secondary"
