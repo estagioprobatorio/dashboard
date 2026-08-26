@@ -122,6 +122,8 @@ export default function ContatoCursistas({ data }) {
     setModalidadeFilter('');
     setTurnoFilter('');
     setChamamentoFilter('');
+  };
+
   const cursistaColumns = [
     { label: 'CGM', accessor: r => r.cgm || '-' },
     { label: 'Nome do Cursista', accessor: r => r.nome_cursista || '-' },
