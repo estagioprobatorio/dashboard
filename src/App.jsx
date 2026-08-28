@@ -351,7 +351,7 @@ export default function App() {
         map.set(email, { email, nome });
       }
     });
-    return Array.from(map.values()).sort((a, b) => a.nome.localeCompare(b.nome));
+    return Array.from(map.values()).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' }));
   }, [enrichedRecords]);
 
   const tutoresExemplo = useMemo(() => {
@@ -371,7 +371,7 @@ export default function App() {
         map.set(email, { email, nome });
       }
     });
-    return Array.from(map.values()).sort((a, b) => a.nome.localeCompare(b.nome));
+    return Array.from(map.values()).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' }));
   }, [tutoresList]);
 
   const cursistasExemplo = useMemo(() => {
@@ -383,7 +383,7 @@ export default function App() {
         map.set(email, { email, nome });
       }
     });
-    return Array.from(map.values()).sort((a, b) => a.nome.localeCompare(b.nome));
+    return Array.from(map.values()).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' }));
   }, [enrichedRecords]);
 
   // E-mail efetivo (Real ou do Exemplo Simulado)
@@ -403,38 +403,49 @@ export default function App() {
   const filteredRecordsForView = useMemo(() => {
     if (!user || !effectiveRole) return [];
     
-    // Admins e Técnicos na visão real veem tudo
-    if (effectiveRole === 'admin' || effectiveRole === 'tecnico') {
-      return enrichedRecords;
+    let result = [];
+
+    // Admins, Técnicos e Tutores no seu login real (sem simulação ativa) possuem acesso a todas as informações
+    if (!simulatedRole && (userRole === 'admin' || userRole === 'tecnico' || userRole === 'tutor')) {
+      result = enrichedRecords;
+    } else {
+      const email = effectiveEmail.toLowerCase();
+
+      // Formadores veem apenas registros pertencentes a eles
+      if (effectiveRole === 'formador') {
+        result = enrichedRecords.filter(item => {
+          const formadorEmail = (item['e-mail_formador'] || item.e_mail_formador || item.email_formador || '').trim().toLowerCase();
+          return formadorEmail === email;
+        });
+      }
+      // Simulação do ambiente do Tutor: exibe apenas os cursistas/formadores pertencentes a esse tutor
+      else if (effectiveRole === 'tutor') {
+        const matchingTutores = tutoresList.filter(t => 
+          (t.email_educ && t.email_educ.trim().toLowerCase() === email) ||
+          (t.email_adm && t.email_adm.trim().toLowerCase() === email)
+        );
+        const tutorNames = new Set(matchingTutores.map(t => (t.tutor_responsavel || '').trim().toUpperCase()).filter(Boolean));
+
+        result = enrichedRecords.filter(item => {
+          const tutorEmail = (item.email_tutor || '').trim().toLowerCase();
+          const tutorName = (item.tutor_responsavel || '').trim().toUpperCase();
+          return tutorEmail === email || tutorNames.has(tutorName);
+        });
+      }
+      // Cursistas (real ou simulado) veem apenas seus próprios registros
+      else if (effectiveRole === 'cursista') {
+        result = enrichedRecords.filter(item => {
+          const cursistaEmail = (item['e-mail'] || item.email || item.email_cursista || '').trim().toLowerCase();
+          return cursistaEmail === email;
+        });
+      }
     }
 
-    const email = effectiveEmail.toLowerCase();
-
-    // Formadores veem apenas registros pertencentes a eles
-    if (effectiveRole === 'formador') {
-      return enrichedRecords.filter(item => {
-        const formadorEmail = (item['e-mail_formador'] || item.email_formador || '').trim().toLowerCase();
-        return formadorEmail === email;
-      });
-    }
-
-    // Tutores veem apenas registros pertencentes a eles
-    if (effectiveRole === 'tutor') {
-      return enrichedRecords.filter(item => {
-        const tutorEmail = (item.email_tutor || '').trim().toLowerCase();
-        return tutorEmail === email;
-      });
-    }
-
-    // Cursistas veem seus próprios registros
-    if (effectiveRole === 'cursista') {
-      return enrichedRecords.filter(item => {
-        const cursistaEmail = (item['e-mail'] || item.email || item.email_cursista || '').trim().toLowerCase();
-        return cursistaEmail === email;
-      });
-    }
-
-  }, [enrichedRecords, user, effectiveRole, effectiveEmail]);
+    // Sempre organizar os dados em ordem alfabética por nome do cursista
+    return [...result].sort((a, b) => 
+      (a.nome_cursista || '').localeCompare(b.nome_cursista || '', 'pt-BR', { sensitivity: 'base' })
+    );
+  }, [enrichedRecords, tutoresList, user, userRole, simulatedRole, effectiveRole, effectiveEmail]);
 
   // Handler para novas solicitações enviadas pelo Cursista
   const handleNovaMovimentacao = (novaSolicitacao) => {

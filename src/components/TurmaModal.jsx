@@ -47,7 +47,7 @@ export default function TurmaModal({ turmaName, data, onClose }) {
       emailTutor: first.email_tutor || '',
       nreTutor: first.nre_tutor || '',
       linkClassroom: first.link || first['Link Classroom'] || first.link_classroom || '',
-      cursistas: Array.from(cursistasMap.values()).sort((a, b) => a.nome.localeCompare(b.nome))
+      cursistas: Array.from(cursistasMap.values()).sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR', { sensitivity: 'base' }))
     };
   }, [turmaName, data]);
 
@@ -61,7 +61,7 @@ export default function TurmaModal({ turmaName, data, onClose }) {
       (c.email || '').toLowerCase().includes(q) ||
       String(c.cgm || '').includes(q)
     );
-  });
+  }).sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR', { sensitivity: 'base' }));
 
   const modalColumns = [
     { label: '#', accessor: (r, idx) => idx + 1, align: 'center' },

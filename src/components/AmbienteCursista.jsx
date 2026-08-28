@@ -68,7 +68,7 @@ export default function AmbienteCursista({ userEmail, records, movimentacoes = [
       }
     });
 
-    return Array.from(map.values()).sort((a, b) => a.nome.localeCompare(b.nome));
+    return Array.from(map.values()).sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR', { sensitivity: 'base' }));
   }, [cursistaRecord, records]);
 
   // Colegas filtrados pela busca

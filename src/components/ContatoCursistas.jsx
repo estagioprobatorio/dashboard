@@ -57,17 +57,19 @@ export default function ContatoCursistas({ data }) {
       if (item.chamamento) chamamentos.add(item.chamamento);
     });
 
+    const sortPtBR = (arr) => Array.from(arr).sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
+
     return {
-      formadores: Array.from(formadores).sort(),
-      tutores: Array.from(tutores).sort(),
-      nres: Array.from(nres).sort(),
-      modalidades: Array.from(modalidades).sort(),
-      turnos: Array.from(turnos).sort(),
-      chamamentos: Array.from(chamamentos).sort()
+      formadores: sortPtBR(formadores),
+      tutores: sortPtBR(tutores),
+      nres: sortPtBR(nres),
+      modalidades: sortPtBR(modalidades),
+      turnos: sortPtBR(turnos),
+      chamamentos: sortPtBR(chamamentos)
     };
   }, [data, tutorFilter]);
 
-  // Filtragem dos registros
+  // Filtragem dos registros com ordenação alfabética
   const filteredRecords = useMemo(() => {
     setCurrentPage(1); // Reseta a paginação ao filtrar
     return data.filter(item => {
@@ -100,7 +102,7 @@ export default function ContatoCursistas({ data }) {
       if (chamamentoFilter && item.chamamento !== chamamentoFilter) return false;
 
       return true;
-    });
+    }).sort((a, b) => (a.nome_cursista || '').localeCompare(b.nome_cursista || '', 'pt-BR', { sensitivity: 'base' }));
   }, [data, generalSearch, cpfCursistaSearch, cpfFormadorSearch, formadorFilter, tutorFilter, nreFilter, modalidadeFilter, turnoFilter, chamamentoFilter]);
 
   // Paginação

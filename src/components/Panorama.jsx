@@ -24,12 +24,14 @@ export default function Panorama({ data }) {
       if (item.turno) turnos.add(item.turno);
     });
 
+    const sortPtBR = (arr) => Array.from(arr).sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
+
     return {
-      nres: Array.from(nres).sort(),
-      chamamentos: Array.from(chamamentos).sort(),
-      modalidades: Array.from(modalidades).sort(),
-      componentes: Array.from(componentes).sort(),
-      turnos: Array.from(turnos).sort()
+      nres: sortPtBR(nres),
+      chamamentos: sortPtBR(chamamentos),
+      modalidades: sortPtBR(modalidades),
+      componentes: sortPtBR(componentes),
+      turnos: sortPtBR(turnos)
     };
   }, [data]);
 

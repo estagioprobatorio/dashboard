@@ -62,7 +62,7 @@ export default function DadosTutoria({ data }) {
       }
     });
 
-    return Array.from(map.values()).sort((a, b) => a.turma.localeCompare(b.turma));
+    return Array.from(map.values()).sort((a, b) => (a.tutor || a.turma || '').localeCompare(b.tutor || b.turma || '', 'pt-BR', { sensitivity: 'base' }));
   }, [data]);
 
   // Opções para Filtros
@@ -77,10 +77,12 @@ export default function DadosTutoria({ data }) {
       if (item.chamamento) chamamentos.add(item.chamamento);
     });
 
+    const sortPtBR = (arr) => Array.from(arr).sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
+
     return {
-      formadores: Array.from(formadores).sort(),
-      modalidades: Array.from(modalidades).sort(),
-      chamamentos: Array.from(chamamentos).sort()
+      formadores: sortPtBR(formadores),
+      modalidades: sortPtBR(modalidades),
+      chamamentos: sortPtBR(chamamentos)
     };
   }, [tutorRecords]);
 
@@ -102,7 +104,7 @@ export default function DadosTutoria({ data }) {
       if (chamamentoFilter && item.chamamento !== chamamentoFilter) return false;
 
       return true;
-    });
+    }).sort((a, b) => (a.tutor || a.turma || '').localeCompare(b.tutor || b.turma || '', 'pt-BR', { sensitivity: 'base' }));
   }, [tutorRecords, cursistaSearch, formadorFilter, modalidadeFilter, chamamentoFilter]);
 
   // Paginação

@@ -83,7 +83,7 @@ export default function ContatoFormadores({ data }) {
         });
       }
     });
-    return Array.from(map.values()).sort((a, b) => a.nome.localeCompare(b.nome));
+    return Array.from(map.values()).sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR', { sensitivity: 'base' }));
   }, [data]);
 
   // Opções para os Filtros
@@ -99,10 +99,12 @@ export default function ContatoFormadores({ data }) {
       if (item.nre) nres.add(item.nre);
     });
 
+    const sortPtBR = (arr) => Array.from(arr).sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
+
     return {
-      turmas: Array.from(turmas).sort(),
-      modalidades: Array.from(modalidades).sort(),
-      nres: Array.from(nres).sort()
+      turmas: sortPtBR(turmas),
+      modalidades: sortPtBR(modalidades),
+      nres: sortPtBR(nres)
     };
   }, [formadoresClasses]);
 
@@ -122,7 +124,7 @@ export default function ContatoFormadores({ data }) {
       if (nreFilter && item.nre !== nreFilter) return false;
       if (somenteNovos && !item.isNovo) return false;
       return true;
-    });
+    }).sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR', { sensitivity: 'base' }));
   }, [formadoresClasses, formadorSearch, turmaFilter, modalidadeFilter, nreFilter, somenteNovos]);
 
   // Paginação - registros visíveis

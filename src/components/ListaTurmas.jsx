@@ -55,9 +55,12 @@ export default function ListaTurmas({ data }) {
         municipios: item.munic_exe || item.municipios || '',
         telefone: item.telefone_cursista || ''
       });
+    // Ordena cursistas de cada turma por nome
+    map.forEach(record => {
+      record.cursistas.sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR', { sensitivity: 'base' }));
     });
 
-    return Array.from(map.values()).sort((a, b) => a.turma.localeCompare(b.turma));
+    return Array.from(map.values()).sort((a, b) => (a.turma || '').localeCompare(b.turma || '', 'pt-BR', { sensitivity: 'base' }));
   }, [data]);
 
   // Obter listas únicas para popular os seletores dos Filtros (Filtro cascateado: Tutor -> Formadores)
@@ -77,13 +80,15 @@ export default function ListaTurmas({ data }) {
       }
     });
 
+    const sortPtBR = (arr) => Array.from(arr).sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
+
     return {
-      tutores: Array.from(tutoresSet).sort(),
-      formadores: Array.from(formadoresSet).sort()
+      tutores: sortPtBR(tutoresSet),
+      formadores: sortPtBR(formadoresSet)
     };
   }, [turmasList, tutorFilter]);
 
-  // Aplicar filtros com tratamento seguro contra nulos
+  // Aplicar filtros com tratamento seguro contra nulos e ordenação alfabética
   const filteredTurmas = useMemo(() => {
     setCurrentPage(1); // Reseta para a primeira página ao alterar o filtro
     return turmasList.filter(item => {
@@ -97,7 +102,7 @@ export default function ListaTurmas({ data }) {
         if (!turmaMatch && !compMatch && !formadorMatch) return false;
       }
       return true;
-    });
+    }).sort((a, b) => (a.turma || '').localeCompare(b.turma || '', 'pt-BR', { sensitivity: 'base' }));
   }, [turmasList, tutorFilter, formadorFilter, turmaSearch]);
 
   // Turmas da página atual
@@ -115,16 +120,17 @@ export default function ListaTurmas({ data }) {
     setTurmaSearch('');
   };
 
-  // Cursistas filtrados dentro do Modal de Detalhes
+  // Cursistas filtrados dentro do Modal de Detalhes (ordenados alfabeticamente)
   const filteredCursistasInModal = useMemo(() => {
     if (!selectedTurma) return [];
-    if (!cursistaSearch) return selectedTurma.cursistas;
-    const q = cursistaSearch.toLowerCase();
-    return selectedTurma.cursistas.filter(c => 
-      c.nome.toLowerCase().includes(q) || 
-      c.email.toLowerCase().includes(q) || 
-      c.cgm.includes(q)
-    );
+    const list = cursistaSearch
+      ? selectedTurma.cursistas.filter(c => 
+          c.nome.toLowerCase().includes(cursistaSearch.toLowerCase()) || 
+          c.email.toLowerCase().includes(cursistaSearch.toLowerCase()) || 
+          c.cgm.includes(cursistaSearch)
+        )
+      : selectedTurma.cursistas;
+    return [...list].sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR', { sensitivity: 'base' }));
   }, [selectedTurma, cursistaSearch]);
 
   const ensalamentoColumns = [
