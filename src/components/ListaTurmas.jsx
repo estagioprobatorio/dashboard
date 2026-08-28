@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { exportToCSV, printReportPDF } from '../utils/exportUtils';
+import { exportToCSV, printReportPDF, printEnsalamentoTurmasPDF } from '../utils/exportUtils';
 
 export default function ListaTurmas({ data }) {
   // Filtros de seleção e busca
@@ -135,19 +135,77 @@ export default function ListaTurmas({ data }) {
     return [...list].sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR', { sensitivity: 'base' }));
   }, [selectedTurma, cursistaSearch]);
 
-  const ensalamentoColumns = [
-    { label: 'Turma', accessor: r => r.turma || '-' },
-    { label: 'Componente Curricular', accessor: r => r.componente || '-' },
-    { label: 'Turno', accessor: r => r.turno || '-' },
-    { label: 'Dia / Horário', accessor: r => `${r.diaSemana || ''} ${r.horarioInicial ? '('+r.horarioInicial+'-'+r.horarioFim+')' : ''}`.trim() || '-' },
-    { label: 'Formador Responsável', accessor: r => r.formador || '-' },
-    { label: 'Tutor Responsável', accessor: r => r.tutor || '-' },
-    { label: 'NRE', accessor: r => r.nreTutor || '-' },
-    { label: 'Total Cursistas Enturmados', accessor: r => r.cursistas ? r.cursistas.length : 0 }
-  ];
-
   const handleExportCSV = () => {
-    exportToCSV('Relatorio_Ensalamento_Turmas', ensalamentoColumns, filteredTurmas);
+    if (!filteredTurmas || !filteredTurmas.length) {
+      alert("Não há turmas para exportar.");
+      return;
+    }
+
+    const rows = [];
+    filteredTurmas.forEach(t => {
+      if (t.cursistas && t.cursistas.length > 0) {
+        t.cursistas.forEach((c, idx) => {
+          rows.push({
+            turma: t.turma || t.turmas || '',
+            componente: t.componente || '',
+            turno: t.turno || '',
+            diaSemana: t.diaSemana || '',
+            horarios: t.horarioInicial ? `${t.horarioInicial} às ${t.horarioFim}` : '',
+            formador: t.formador || '',
+            emailFormador: t.emailFormador || '',
+            tutor: t.tutor || '',
+            emailTutor: t.emailTutor || '',
+            nreTutor: t.nreTutor || '',
+            numeroAluno: idx + 1,
+            nomeCursista: c.nome || '',
+            emailCursista: c.email || '',
+            cgmCursista: c.cgm || '',
+            municipioCursista: c.municipios || '',
+            telefoneCursista: c.telefone || ''
+          });
+        });
+      } else {
+        rows.push({
+          turma: t.turma || t.turmas || '',
+          componente: t.componente || '',
+          turno: t.turno || '',
+          diaSemana: t.diaSemana || '',
+          horarios: t.horarioInicial ? `${t.horarioInicial} às ${t.horarioFim}` : '',
+          formador: t.formador || '',
+          emailFormador: t.emailFormador || '',
+          tutor: t.tutor || '',
+          emailTutor: t.emailTutor || '',
+          nreTutor: t.nreTutor || '',
+          numeroAluno: 0,
+          nomeCursista: 'Sem cursistas enturmados',
+          emailCursista: '',
+          cgmCursista: '',
+          municipioCursista: '',
+          telefoneCursista: ''
+        });
+      }
+    });
+
+    const fullColumns = [
+      { label: 'Turma', accessor: r => r.turma },
+      { label: 'Componente Curricular', accessor: r => r.componente },
+      { label: 'Turno', accessor: r => r.turno },
+      { label: 'Dia da Semana', accessor: r => r.diaSemana },
+      { label: 'Horário', accessor: r => r.horarios },
+      { label: 'Formador Responsável', accessor: r => r.formador },
+      { label: 'E-mail Formador', accessor: r => r.emailFormador },
+      { label: 'Tutor Responsável', accessor: r => r.tutor },
+      { label: 'E-mail Tutor', accessor: r => r.emailTutor },
+      { label: 'NRE', accessor: r => r.nreTutor },
+      { label: '# Cursista', accessor: r => r.numeroAluno },
+      { label: 'Nome Cursista', accessor: r => r.nomeCursista },
+      { label: 'E-mail Cursista', accessor: r => r.emailCursista },
+      { label: 'CGM Cursista', accessor: r => r.cgmCursista },
+      { label: 'Município Cursista', accessor: r => r.municipioCursista },
+      { label: 'Telefone Cursista', accessor: r => r.telefoneCursista }
+    ];
+
+    exportToCSV('Relatorio_Completo_Ensalamento_Turmas', fullColumns, rows);
   };
 
   const handlePrintPDF = () => {
@@ -157,11 +215,10 @@ export default function ListaTurmas({ data }) {
       turmaSearch && `Busca: "${turmaSearch}"`
     ].filter(Boolean).join(' | ') || 'Todas as Turmas';
 
-    printReportPDF({
-      title: 'Relatório Oficial de Ensalamento - Turmas, Formadores e Cursistas',
-      subtitle: 'Distribuição e Ensalamento Geral - SEED-PR',
-      columns: ensalamentoColumns,
-      data: filteredTurmas,
+    printEnsalamentoTurmasPDF({
+      title: 'Relatório Oficial de Ensalamento - Fichas das Turmas e Cursistas',
+      subtitle: 'Secretaria de Estado da Educação do Paraná - SEED/PR',
+      turmas: filteredTurmas,
       filterSummary: filters
     });
   };
