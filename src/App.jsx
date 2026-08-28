@@ -524,7 +524,7 @@ export default function App() {
       case 'turmas':
         return <ListaTurmas data={filteredRecordsForView} />;
       case 'movimentacoes':
-        return <Movimentacoes userEmail={effectiveEmail} userRole={effectiveRole} />;
+        return <Movimentacoes userEmail={effectiveEmail} userRole={effectiveRole} tutorData={enrichedRecords.find(r => (r.email_tutor || '').toLowerCase() === effectiveEmail.toLowerCase())} />;
       case 'admin':
         return (userRole === 'admin' || userRole === 'tecnico')
           ? <AdminPanel data={enrichedRecords} onLocalUpdate={handleLocalUpdate} userRole={userRole} /> 

@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 
 export default function FormularioRemanejamento({ cursistaData, onClose, onSubmitSuccess }) {
+  const [tipoRequerimento, setTipoRequerimento] = useState('Troca de Turma');
   const [motivo, setMotivo] = useState('Choque de horário com trabalho/estudo');
   const [turnoDesejado, setTurnoDesejado] = useState('MANHA');
+  const [modalidadeDesejada, setModalidadeDesejada] = useState('Presencial');
   const [justificativa, setJustificativa] = useState('');
   const [nomeArquivo, setNomeArquivo] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -35,20 +37,31 @@ export default function FormularioRemanejamento({ cursistaData, onClose, onSubmi
 
     setIsSubmitting(true);
 
+    const dataHoraIso = new Date().toISOString();
+    const dataHoraFormatada = new Date().toLocaleString('pt-BR');
+
     const novaSolicitacao = {
       id: `MOV-${Date.now()}`,
-      dataHora: new Date().toLocaleString('pt-BR'),
+      timestamp: dataHoraIso,
+      dataHora: dataHoraFormatada,
       cgm: cgmCursista,
       cpf: cpf,
       rg: rg,
+      nome_cursista: nomeCursista,
       nomeCursista: nomeCursista,
       emailCursista: emailCursista,
+      email: emailCursista,
       nre: nreCursista,
       turmaOrigem: turmaAtual,
+      turma_anterior: turmaAtual,
       formadorOrigem: formadorAtual,
       tutorOrigem: tutorAtual,
-      motivo: motivo,
+      motivo: `${tipoRequerimento} - ${motivo}`,
+      tipo_acao: tipoRequerimento,
+      turnoDesejado: tipoRequerimento === 'Troca de Turma' ? turnoDesejado : 'NSA',
+      modalidadeDesejada: tipoRequerimento === 'Troca de Modalidade' ? modalidadeDesejada : 'NSA',
       justificativa: justificativa,
+      descricao: justificativa,
       comprovante: nomeArquivo || 'Sem anexo',
       status: 'Pendente',
       solicitadoPor: 'Cursista'
@@ -151,10 +164,26 @@ export default function FormularioRemanejamento({ cursistaData, onClose, onSubmi
                 </div>
               </div>
 
+              {/* Seleção do Tipo de Requerimento */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-primary-dark)', marginBottom: '0.4rem' }}>
+                  1. Tipo de Requerimento / Solicitação: <span style={{ color: '#e53e3e' }}>*</span>
+                </label>
+                <select 
+                  value={tipoRequerimento} 
+                  onChange={e => setTipoRequerimento(e.target.value)}
+                  style={{ width: '100%', padding: '0.65rem 0.8rem', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: 'white', fontSize: '0.88rem', fontWeight: 700 }}
+                >
+                  <option value="Troca de Turma">🔄 Troca de Turma</option>
+                  <option value="Troca de Modalidade">💻 Troca de Modalidade (Presencial / EAD)</option>
+                  <option value="Vínculo na AF">🎓 Vínculo na AF (Ano Formativo)</option>
+                </select>
+              </div>
+
               {/* Seleção do Motivo */}
               <div>
                 <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-primary-dark)', marginBottom: '0.4rem' }}>
-                  1. Motivo Principal da Solicitação: <span style={{ color: '#e53e3e' }}>*</span>
+                  2. Motivo Principal da Solicitação: <span style={{ color: '#e53e3e' }}>*</span>
                 </label>
                 <select 
                   value={motivo} 
