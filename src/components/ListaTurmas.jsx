@@ -55,6 +55,8 @@ export default function ListaTurmas({ data }) {
         municipios: item.munic_exe || item.municipios || '',
         telefone: item.telefone_cursista || ''
       });
+    });
+
     // Ordena cursistas de cada turma por nome
     map.forEach(record => {
       record.cursistas.sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR', { sensitivity: 'base' }));
