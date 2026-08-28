@@ -1,11 +1,14 @@
 /**
- * Utilitário para Leitura e Sincronização em Tempo Real com Planilhas do Google Sheets
+ * Utilitário para Leitura e Sincronização com Planilhas do Google Sheets
  * SEED-PR - Estágio Probatório
  * 
- * Planilhas Integradas:
- * 1. Planilha REQUERIMENTOS ADMINISTRATIVOS - 2026 (respostas) -> Aba "Respostas ao formulário 1" (Tutores)
- * 2. Planilha Estágio Probatório - Gestão de turmas - 2026 (respostas) -> Abas "Troca de Turma", "Troca de Modalidade", "Vínculo na AF"
+ * Autenticação Privada via Conta de Serviço:
+ * leitor-tutor-insights@custom-vigil-498821-e8.iam.gserviceaccount.com
  */
+
+export const SERVICE_ACCOUNT_EMAIL = "leitor-tutor-insights@custom-vigil-498821-e8.iam.gserviceaccount.com";
+export const SPREADSHEET_ID_TUTORES = "1FyI4sRFWPOhlym7ZLvHvH2wHeixyicPyYmCF72nN6Mc";
+export const SPREADSHEET_ID_GESTAO_TURMAS = "1sRkA88VrtczqXxQ6PlmgygeCVhPoElRNS8RC1QuQzx0";
 
 // Converte texto CSV em array de objetos
 export function parseCSV(csvText) {
@@ -91,7 +94,6 @@ export function mapSheetRowToMovement(row, idx, tabName = '') {
   const descricao = findValue(['descreva com detalhes', 'descrição', 'justificativa']) || '';
   const comprovante = findValue(['anexe imagem', 'documento', 'comprovante']) || 'Sem anexo';
 
-  // Identificar o Tipo de Ação com base na Aba ou no Motivo
   let tipoAcao = 'Chamado Tutor';
   const lowerTab = tabName.toLowerCase();
   const lowerMotivo = motivo.toLowerCase();
@@ -136,13 +138,49 @@ export function mapSheetRowToMovement(row, idx, tabName = '') {
   };
 }
 
-// Spreadsheet ID da Planilha Oficial
-export const SPREADSHEET_ID_GESTAO_TURMAS = "1sRkA88VrtczqXxQ6PlmgygeCVhPoElRNS8RC1QuQzx0";
+// Tenta realizar o fetch autenticado / via proxy de forma resiliente
+async function tryFetchCSV(directUrl, sheetId, sheetName) {
+  const urlsToTry = [
+    `/api/sheets?sheetId=${sheetId}&range=${encodeURIComponent(sheetName + '!A1:Z500')}`,
+    directUrl,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(directUrl)}`,
+    `https://corsproxy.io/?${encodeURIComponent(directUrl)}`
+  ];
+
+  for (const url of urlsToTry) {
+    try {
+      const response = await fetch(url, { redirect: 'follow' });
+      if (response.ok) {
+        const contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const json = await response.json();
+          if (json.values && json.values.length > 1) {
+            // Converte array da API v4 em objetos
+            const headers = json.values[0];
+            return json.values.slice(1).map((row, idx) => {
+              const obj = {};
+              headers.forEach((h, i) => { obj[h] = row[i] || ''; });
+              return obj;
+            });
+          }
+        } else {
+          const text = await response.text();
+          if (text && text.trim().length > 0 && !text.includes('<!DOCTYPE html>') && !text.includes('ServiceLogin')) {
+            return parseCSV(text);
+          }
+        }
+      }
+    } catch (e) {
+      // Tenta a próxima URL
+    }
+  }
+  return null;
+}
 
 // Faz o fetch de todas as Abas indicadas pelo usuário
 export async function fetchAllGoogleSheetsData() {
   const targetSheets = [
-    { name: 'Respostas ao formulário 1', spreadsheetId: SPREADSHEET_ID_GESTAO_TURMAS, gid: '277467342' },
+    { name: 'Respostas ao formulário 1', spreadsheetId: SPREADSHEET_ID_TUTORES, gid: '921474363' },
     { name: 'Troca de Turma', spreadsheetId: SPREADSHEET_ID_GESTAO_TURMAS },
     { name: 'Troca de Modalidade', spreadsheetId: SPREADSHEET_ID_GESTAO_TURMAS },
     { name: 'Vínculo na AF', spreadsheetId: SPREADSHEET_ID_GESTAO_TURMAS }
@@ -153,26 +191,18 @@ export async function fetchAllGoogleSheetsData() {
   for (const item of targetSheets) {
     const urls = [];
     if (item.gid) {
-      urls.push(`https://docs.google.com/spreadsheets/d/${item.spreadsheetId}/gviz/tq?tqx=out:csv&gid=${item.gid}`);
       urls.push(`https://docs.google.com/spreadsheets/d/${item.spreadsheetId}/export?format=csv&gid=${item.gid}`);
+      urls.push(`https://docs.google.com/spreadsheets/d/${item.spreadsheetId}/gviz/tq?tqx=out:csv&gid=${item.gid}`);
     }
-    urls.push(`https://docs.google.com/spreadsheets/d/${item.spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(item.name)}`);
     urls.push(`https://docs.google.com/spreadsheets/d/${item.spreadsheetId}/export?format=csv&sheet=${encodeURIComponent(item.name)}`);
+    urls.push(`https://docs.google.com/spreadsheets/d/${item.spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(item.name)}`);
 
     for (const url of urls) {
-      try {
-        const response = await fetch(url);
-        if (response.ok) {
-          const text = await response.text();
-          if (text && text.trim().length > 0 && !text.includes('<!DOCTYPE html>')) {
-            const rawRows = parseCSV(text);
-            const mapped = rawRows.map((r, idx) => mapSheetRowToMovement(r, idx, item.name));
-            allMovements.push(...mapped);
-            break; // se obteve sucesso para esta aba, pula para a próxima aba
-          }
-        }
-      } catch (e) {
-        // tenta a próxima URL
+      const rows = await tryFetchCSV(url, item.spreadsheetId, item.name);
+      if (rows && Array.isArray(rows)) {
+        const mapped = rows.map((r, idx) => mapSheetRowToMovement(r, idx, item.name));
+        allMovements.push(...mapped);
+        break; // Sucesso para esta aba, avança para a próxima
       }
     }
   }

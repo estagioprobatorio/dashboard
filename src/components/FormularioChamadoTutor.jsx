@@ -90,23 +90,40 @@ export default function FormularioChamadoTutor({ userEmail, tutorData, onClose, 
     <div style={{
       position: 'fixed',
       top: 0, left: 0, right: 0, bottom: 0,
-      backgroundColor: 'rgba(0, 29, 61, 0.75)',
+      backgroundColor: 'rgba(0, 29, 61, 0.8)',
       backdropFilter: 'blur(6px)',
-      display: 'flex', justifyContent: 'center', alignItems: 'center',
-      zIndex: 1100, padding: '1rem'
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'flex-start',
+      padding: '2rem 1rem',
+      zIndex: 9999,
+      overflowY: 'auto'
     }} onClick={onClose}>
       <div className="animate-fade-in" style={{
-        background: 'white', borderRadius: '16px',
-        width: '100%', maxWidth: '780px', maxHeight: '94vh',
-        display: 'flex', flexDirection: 'column',
-        boxShadow: 'var(--shadow-lg)', overflow: 'hidden'
+        background: 'white',
+        borderRadius: '16px',
+        width: '100%',
+        maxWidth: '780px',
+        maxHeight: '86vh',
+        display: 'flex',
+        flexDirection: 'column',
+        boxShadow: '0 20px 25px -5px rgba(0,0,0,0.3)',
+        overflow: 'hidden',
+        margin: 'auto 0'
       }} onClick={e => e.stopPropagation()}>
 
         {/* Header */}
         <div style={{
           background: 'linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-primary-mid) 100%)',
-          color: 'white', padding: '1.25rem 1.5rem',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+          color: 'white',
+          padding: '1.25rem 1.5rem',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          position: 'sticky',
+          top: 0,
+          zIndex: 20,
+          flexShrink: 0
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             <img src="/brasao_parana.svg" alt="Brasão do Paraná" style={{ height: '36px', width: 'auto' }} />
