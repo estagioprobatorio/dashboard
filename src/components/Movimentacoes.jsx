@@ -3,11 +3,13 @@ import { database, isConfigured as isFirebaseConfigured } from '../firebase';
 import { supabase, isConfigured as isSupabaseConfigured } from '../supabase';
 import { ref, onValue, remove, update } from 'firebase/database';
 import { calculateSLA } from '../utils/slaUtils';
+import { fetchAllGoogleSheetsData } from '../utils/sheetUtils';
 import FormularioChamadoTutor from './FormularioChamadoTutor';
 
 export default function Movimentacoes({ userEmail, userRole, tutorData }) {
   const [movements, setMovements] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [isSyncingSheet, setIsSyncingSheet] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   
   // Abas de Atendimento: 'fila' (Pendentes / Em Análise) vs 'historico' (Deferido / Indeferido / Resolvido)
@@ -40,7 +42,7 @@ export default function Movimentacoes({ userEmail, userRole, tutorData }) {
       tutor: 'DULCE MARA LANGHINOTTI CARPES',
       nre: 'LARANJEIRAS DO SUL',
       status: 'Pendente',
-      solicitadoPor: 'Cursista'
+      solicitadoPor: 'Google Forms'
     },
     {
       id: 'mock-2',
@@ -55,7 +57,7 @@ export default function Movimentacoes({ userEmail, userRole, tutorData }) {
       tutor: 'CLÁUDIA BARBOSA',
       nre: 'TOLEDO',
       status: 'Pendente',
-      solicitadoPor: 'Cursista'
+      solicitadoPor: 'Google Forms'
     },
     {
       id: 'mock-3',
@@ -70,7 +72,7 @@ export default function Movimentacoes({ userEmail, userRole, tutorData }) {
       tutor: 'SIRLEY JEREMIAS',
       nre: 'UNIÃO DA VITÓRIA',
       status: 'Em Análise',
-      solicitadoPor: 'Tutor'
+      solicitadoPor: 'Google Forms'
     },
     {
       id: 'mock-4',
@@ -85,7 +87,7 @@ export default function Movimentacoes({ userEmail, userRole, tutorData }) {
       tutor: 'MARIA CLARICE DIAS ARAÚJO',
       nre: 'TELÊMACO BORBA',
       status: 'Pendente',
-      solicitadoPor: 'Cursista'
+      solicitadoPor: 'Google Forms'
     },
     {
       id: 'mock-5',
@@ -101,11 +103,33 @@ export default function Movimentacoes({ userEmail, userRole, tutorData }) {
       nre: 'CASCAVEL',
       status: 'Deferido',
       nota_resolucao: 'Solicitação analisada e deferida pela Coordenação Estadual.',
-      solicitadoPor: 'Cursista'
+      solicitadoPor: 'Google Forms'
     }
   ], []);
 
+  // Função para carregar dados de todas as abas do Google Sheets
+  const syncGoogleSheets = async () => {
+    setIsSyncingSheet(true);
+    try {
+      const sheetData = await fetchAllGoogleSheetsData();
+      if (sheetData && sheetData.length > 0) {
+        setMovements(prev => {
+          const existingIds = new Set(prev.map(p => p.id));
+          const newFromSheet = sheetData.filter(s => !existingIds.has(s.id));
+          return [...newFromSheet, ...prev];
+        });
+      }
+    } catch (e) {
+      console.warn("Erro ao sincronizar com Google Sheets:", e);
+    } finally {
+      setIsSyncingSheet(false);
+    }
+  };
+
   useEffect(() => {
+    // Sincroniza dados da planilha pública ao montar o componente
+    syncGoogleSheets();
+
     if (isSupabaseConfigured && supabase) {
       setLoading(true);
 
@@ -118,13 +142,14 @@ export default function Movimentacoes({ userEmail, userRole, tutorData }) {
 
           if (error) throw error;
           if (data && data.length > 0) {
-            setMovements(data);
-          } else {
-            setMovements(mockMovements);
+            setMovements(prev => {
+              const existingIds = new Set(data.map(d => d.id));
+              const notInDb = prev.filter(p => !existingIds.has(p.id));
+              return [...data, ...notInDb];
+            });
           }
         } catch (err) {
           console.error("Erro ao carregar movimentações do Supabase:", err);
-          setMovements(mockMovements);
         } finally {
           setLoading(false);
         }
@@ -154,14 +179,15 @@ export default function Movimentacoes({ userEmail, userRole, tutorData }) {
             ...data
           }));
           list.sort((a, b) => new Date(b.timestamp || b.dataHora) - new Date(a.timestamp || a.dataHora));
-          setMovements(list);
-        } else {
-          setMovements(mockMovements);
+          setMovements(prev => {
+            const existingIds = new Set(list.map(d => d.id));
+            const notInDb = prev.filter(p => !existingIds.has(p.id));
+            return [...list, ...notInDb];
+          });
         }
         setLoading(false);
       }, (error) => {
         console.error("Erro ao carregar movimentações do Firebase:", error);
-        setMovements(mockMovements);
         setLoading(false);
       });
 
@@ -389,6 +415,28 @@ export default function Movimentacoes({ userEmail, userRole, tutorData }) {
         </div>
 
         <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Botão de Sincronização em Tempo Real com o Google Sheets */}
+          <button
+            onClick={syncGoogleSheets}
+            disabled={isSyncingSheet}
+            style={{
+              backgroundColor: '#0b3c5d',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '8px',
+              padding: '0.55rem 1rem',
+              fontSize: '0.85rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              boxShadow: '0 2px 6px rgba(11,60,93,0.3)'
+            }}
+          >
+            <span>{isSyncingSheet ? '⏳ Sincronizando...' : '🔄 Sincronizar Google Sheets'}</span>
+          </button>
+
           {/* Botão de Abertura de Chamado para Tutores */}
           {(userRole === 'tutor' || userRole === 'admin' || userRole === 'tecnico') && (
             <button
