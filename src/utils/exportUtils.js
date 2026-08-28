@@ -14,10 +14,10 @@ export function exportToCSV(filename, columns, data) {
   const headers = columns.map(c => c.label).join(';');
   
   // Linhas
-  const rows = data.map(row => {
+  const rows = data.map((row, idx) => {
     return columns.map(col => {
-      let val = col.accessor(row);
-      if (val === null || val === undefined) val = '';
+      let val = col.accessor(row, idx);
+      if (val === null || val === undefined || (typeof val === 'number' && isNaN(val))) val = '';
       val = String(val).replace(/"/g, '""');
       if (val.includes(';') || val.includes('\n') || val.includes('"')) {
         return `"${val}"`;
@@ -59,8 +59,8 @@ export function printReportPDF({ title, subtitle, columns, data, filterSummary =
   
   const tableRowsHtml = data.map((row, idx) => {
     const cells = columns.map(col => {
-      let val = col.accessor(row);
-      if (val === null || val === undefined || val === '') val = '-';
+      let val = col.accessor(row, idx);
+      if (val === null || val === undefined || val === '' || (typeof val === 'number' && isNaN(val))) val = '-';
       return `<td style="text-align: ${col.align || 'left'};">${val}</td>`;
     }).join('');
     return `<tr style="background-color: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">${cells}</tr>`;

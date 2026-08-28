@@ -64,7 +64,7 @@ export default function TurmaModal({ turmaName, data, onClose }) {
   }).sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR', { sensitivity: 'base' }));
 
   const modalColumns = [
-    { label: '#', accessor: (r, idx) => idx + 1, align: 'center' },
+    { label: '#', accessor: (r, idx) => (typeof idx === 'number' && !isNaN(idx) ? idx + 1 : 1), align: 'center' },
     { label: 'Nome do Cursista', accessor: r => r.nome || '-' },
     { label: 'E-mail', accessor: r => r.email || '-' },
     { label: 'CGM', accessor: r => r.cgm || '-' },
@@ -234,48 +234,8 @@ export default function TurmaModal({ turmaName, data, onClose }) {
                   placeholder="Filtrar aluno por nome ou e-mail..."
                   value={cursistaSearch}
                   onChange={(e) => setCursistaSearch(e.target.value)}
-                  style={{ padding: '0.45rem 0.8rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem', width: '220px' }}
+                  style={{ padding: '0.45rem 0.8rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem', width: '260px' }}
                 />
-
-                <button
-                  onClick={handleExportCSV}
-                  title="Baixar lista em CSV"
-                  style={{
-                    backgroundColor: '#0b3c5d',
-                    color: '#ffffff',
-                    border: 'none',
-                    borderRadius: '6px',
-                    padding: '0.45rem 0.75rem',
-                    fontSize: '0.8rem',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.3rem'
-                  }}
-                >
-                  <span>📊</span> CSV
-                </button>
-
-                <button
-                  onClick={handlePrintPDF}
-                  title="Imprimir lista de alunos em PDF"
-                  style={{
-                    backgroundColor: '#002d5c',
-                    color: '#ffffff',
-                    border: 'none',
-                    borderRadius: '6px',
-                    padding: '0.45rem 0.75rem',
-                    fontSize: '0.8rem',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.3rem'
-                  }}
-                >
-                  <span>📄</span> Imprimir (PDF)
-                </button>
               </div>
             </div>
 
