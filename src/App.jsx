@@ -247,15 +247,41 @@ export default function App() {
 
       const fetchSupabaseObservacoes = async () => {
         try {
-          const { data, error } = await supabase
-            .from('observacoes_pratica')
-            .select('*');
-          if (error) throw error;
-          if (data && data.length > 0) {
-            setObservacoesList(data);
+          // Paginação em lotes de 1000 para superar o limite padrão do PostgREST/Supabase
+          let allObs = [];
+          let page = 0;
+          const pageSize = 1000;
+          let hasMore = true;
+
+          while (hasMore) {
+            const from = page * pageSize;
+            const to = from + pageSize - 1;
+
+            const { data, error } = await supabase
+              .from('observacoes_pratica')
+              .select('*')
+              .range(from, to);
+
+            if (error) throw error;
+
+            if (data && data.length > 0) {
+              allObs = allObs.concat(data);
+              if (data.length < pageSize) {
+                hasMore = false;
+              } else {
+                page++;
+              }
+            } else {
+              hasMore = false;
+            }
+          }
+
+          if (allObs.length > 0) {
+            console.log(`Supabase observacoes_pratica carregadas: ${allObs.length} registros no total.`);
+            setObservacoesList(allObs);
           }
         } catch (err) {
-          console.warn("Supabase: observacoes_pratica não disponível ou vazia. Usando dados locais de fallback.");
+          console.warn("Supabase: erro ao carregar observacoes_pratica com paginação. Usando dados locais de fallback:", err);
         }
       };
 
