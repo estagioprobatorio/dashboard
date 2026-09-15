@@ -95,22 +95,47 @@ export default function TurmaModal({ turmaName, data, onClose, observacoes = nul
 
   const effectiveObservacoes = observacoes || observacoesFallback || [];
 
-  const handleOpenObs = (cursista) => {
-    const emailTarget = (cursista.email || '').trim().toLowerCase();
-    const nomeTarget = (cursista.nome || '').trim().toLowerCase();
+  const obsMap = useMemo(() => {
+    const byEmail = new Map();
+    const byNome = new Map();
 
-    // Procurar observação correspondente por e-mail ou nome
-    let found = effectiveObservacoes.find(o => {
-      const oEmail = (o.email_cursista || '').trim().toLowerCase();
-      return oEmail && emailTarget && oEmail === emailTarget;
+    effectiveObservacoes.forEach(o => {
+      const email = (o.email_cursista || '').trim().toLowerCase();
+      if (email && !byEmail.has(email)) {
+        byEmail.set(email, o);
+      }
+      const nome = (o.nome_cursista || '').trim().toLowerCase();
+      if (nome && !byNome.has(nome)) {
+        byNome.set(nome, o);
+      }
     });
 
-    if (!found && nomeTarget) {
-      found = effectiveObservacoes.find(o => {
-        const oNome = (o.nome_cursista || '').trim().toLowerCase();
-        return oNome && oNome === nomeTarget;
-      });
+    return { byEmail, byNome };
+  }, [effectiveObservacoes]);
+
+  const getObsForCursista = (cursista) => {
+    if (!cursista) return null;
+    const emailKey = (cursista.email || '').trim().toLowerCase();
+    if (emailKey && obsMap.byEmail.has(emailKey)) {
+      return obsMap.byEmail.get(emailKey);
     }
+    const nomeKey = (cursista.nome || '').trim().toLowerCase();
+    if (nomeKey && obsMap.byNome.has(nomeKey)) {
+      return obsMap.byNome.get(nomeKey);
+    }
+    return null;
+  };
+
+  const totalObservadosNaTurma = useMemo(() => {
+    if (!turmaInfo || !turmaInfo.cursistas) return 0;
+    return turmaInfo.cursistas.filter(c => {
+      const obs = getObsForCursista(c);
+      return obs && (obs.is_realizada || String(obs.observacao_realizada || '').toLowerCase().includes('sim'));
+    }).length;
+  }, [turmaInfo, obsMap]);
+
+  const handleOpenObs = (cursista) => {
+    const found = getObsForCursista(cursista);
 
     if (found) {
       // Enriquecer caso falte tutor/nre
@@ -136,7 +161,7 @@ export default function TurmaModal({ turmaName, data, onClose, observacoes = nul
         tutor_responsavel: turmaInfo?.tutor || 'Tutor Responsável',
         nre_tutor: turmaInfo?.nreTutor || '',
         nre_exe: turmaInfo?.nreTutor || '',
-        observacao_realizada: 'Não',
+        observacao_realizada: 'Não realizada / Pendente',
         is_realizada: false,
         justificativa_nao_realizada: 'Nenhuma observação ou devolutiva registrada para este cursista até o momento.',
         pontos_fortes: 'Aguardando agendamento ou envio da observação da prática.',
@@ -294,9 +319,22 @@ export default function TurmaModal({ turmaName, data, onClose, observacoes = nul
           {/* Seção da Lista de Cursistas */}
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-              <h3 style={{ fontSize: '1.1rem', color: 'var(--color-primary-dark)', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                👥 Cursistas da Turma ({turmaInfo.cursistas.length})
-              </h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+                <h3 style={{ fontSize: '1.1rem', color: 'var(--color-primary-dark)', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.4rem', margin: 0 }}>
+                  👥 Cursistas da Turma ({turmaInfo.cursistas.length})
+                </h3>
+                <span style={{
+                  fontSize: '0.78rem',
+                  fontWeight: 700,
+                  color: totalObservadosNaTurma > 0 ? '#166534' : '#64748b',
+                  backgroundColor: totalObservadosNaTurma > 0 ? '#dcfce7' : '#f1f5f9',
+                  padding: '0.2rem 0.6rem',
+                  borderRadius: '9999px',
+                  border: totalObservadosNaTurma > 0 ? '1px solid #bbf7d0' : '1px solid #e2e8f0'
+                }}>
+                  🎯 {totalObservadosNaTurma} observados ({Math.round((totalObservadosNaTurma / (turmaInfo.cursistas.length || 1)) * 100)}%)
+                </span>
+              </div>
               
               <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                 <input
@@ -309,73 +347,197 @@ export default function TurmaModal({ turmaName, data, onClose, observacoes = nul
               </div>
             </div>
 
-            <div className="table-responsive" style={{ maxHeight: '350px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
+            <div className="table-responsive" style={{ maxHeight: '380px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
               <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                 <thead>
                   <tr style={{ backgroundColor: 'var(--color-primary-dark)', color: 'white', textAlign: 'left', position: 'sticky', top: 0, zIndex: 10 }}>
-                    <th style={{ padding: '0.65rem 0.8rem', width: '40px' }}>#</th>
+                    <th style={{ padding: '0.65rem 0.8rem', width: '35px' }}>#</th>
                     <th style={{ padding: '0.65rem 0.8rem' }}>Nome do Cursista</th>
                     <th style={{ padding: '0.65rem 0.8rem' }}>E-mail</th>
                     <th style={{ padding: '0.65rem 0.8rem' }}>CGM</th>
                     <th style={{ padding: '0.65rem 0.8rem' }}>Município</th>
-                    <th style={{ padding: '0.65rem 0.8rem', textAlign: 'center', width: '75px' }}>Obs.</th>
+                    <th style={{ padding: '0.65rem 0.8rem', textAlign: 'center', minWidth: '105px' }}>Status Obs.</th>
+                    <th style={{ padding: '0.65rem 0.8rem', textAlign: 'center', minWidth: '170px' }}>Gravações & Links</th>
+                    <th style={{ padding: '0.65rem 0.8rem', textAlign: 'center', width: '55px' }}>Ver</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredCursistas.length === 0 ? (
                     <tr>
-                      <td colSpan="6" style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--color-text-muted)' }}>
+                      <td colSpan="8" style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--color-text-muted)' }}>
                         Nenhum cursista encontrado.
                       </td>
                     </tr>
                   ) : (
-                    filteredCursistas.map((c, idx) => (
-                      <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#f8fafc', borderBottom: '1px solid #edf2f7' }}>
-                        <td style={{ padding: '0.6rem 0.8rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>{idx + 1}</td>
-                        <td style={{ padding: '0.6rem 0.8rem', fontWeight: 700, color: 'var(--color-text-main)' }}>{c.nome}</td>
-                        <td style={{ padding: '0.6rem 0.8rem' }}>
-                          {c.email ? (
-                            <a href={`mailto:${c.email}`} style={{ color: 'var(--color-accent-blue)', textDecoration: 'none' }}>
-                              {c.email}
-                            </a>
-                          ) : (
-                            <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>-</span>
-                          )}
-                        </td>
-                        <td style={{ padding: '0.6rem 0.8rem', color: 'var(--color-text-muted)' }}>{c.cgm || '-'}</td>
-                        <td style={{ padding: '0.6rem 0.8rem', color: 'var(--color-text-muted)' }}>{c.municipios || '-'}</td>
-                        <td style={{ padding: '0.6rem 0.8rem', textAlign: 'center' }}>
-                          <button
-                            type="button"
-                            onClick={() => handleOpenObs(c)}
-                            title={`Abrir observação da prática pedagógica de ${c.nome}`}
-                            style={{
-                              background: 'linear-gradient(135deg, rgba(11,60,93,0.1) 0%, rgba(15,107,173,0.15) 100%)',
-                              border: '1px solid rgba(15,107,173,0.3)',
-                              borderRadius: '8px',
-                              cursor: 'pointer',
-                              padding: '0.35rem 0.6rem',
-                              fontSize: '1rem',
-                              lineHeight: 1,
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              transition: 'all 0.15s ease'
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.transform = 'scale(1.15)';
-                              e.currentTarget.style.backgroundColor = 'rgba(15,107,173,0.25)';
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.transform = 'scale(1)';
-                              e.currentTarget.style.backgroundColor = 'rgba(11,60,93,0.1)';
-                            }}
-                          >
-                            👁️
-                          </button>
-                        </td>
-                      </tr>
-                    ))
+                    filteredCursistas.map((c, idx) => {
+                      const obs = getObsForCursista(c);
+                      const isRealizada = obs && (obs.is_realizada || String(obs.observacao_realizada || '').toLowerCase().includes('sim'));
+                      const hasPratica = obs && obs.link_gravacao_pratica;
+                      const hasFeedback = obs && obs.link_gravacao_feedback;
+                      const hasPlanejamento = obs && obs.link_planejamento;
+
+                      return (
+                        <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#f8fafc', borderBottom: '1px solid #edf2f7' }}>
+                          <td style={{ padding: '0.6rem 0.8rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>{idx + 1}</td>
+                          <td style={{ padding: '0.6rem 0.8rem', fontWeight: 700, color: 'var(--color-text-main)' }}>{c.nome}</td>
+                          <td style={{ padding: '0.6rem 0.8rem' }}>
+                            {c.email ? (
+                              <a href={`mailto:${c.email}`} style={{ color: 'var(--color-accent-blue)', textDecoration: 'none' }}>
+                                {c.email}
+                              </a>
+                            ) : (
+                              <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>-</span>
+                            )}
+                          </td>
+                          <td style={{ padding: '0.6rem 0.8rem', color: 'var(--color-text-muted)' }}>{c.cgm || '-'}</td>
+                          <td style={{ padding: '0.6rem 0.8rem', color: 'var(--color-text-muted)' }}>{c.municipios || '-'}</td>
+                          <td style={{ padding: '0.6rem 0.8rem', textAlign: 'center' }}>
+                            {isRealizada ? (
+                              <span style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.25rem',
+                                padding: '0.2rem 0.55rem',
+                                borderRadius: '9999px',
+                                fontSize: '0.72rem',
+                                fontWeight: 700,
+                                backgroundColor: '#dcfce7',
+                                color: '#15803d',
+                                border: '1px solid #bbf7d0',
+                                whiteSpace: 'nowrap'
+                              }}>
+                                ✓ Realizada
+                              </span>
+                            ) : (
+                              <span style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.25rem',
+                                padding: '0.2rem 0.55rem',
+                                borderRadius: '9999px',
+                                fontSize: '0.72rem',
+                                fontWeight: 600,
+                                backgroundColor: '#f1f5f9',
+                                color: '#64748b',
+                                border: '1px solid #e2e8f0',
+                                whiteSpace: 'nowrap'
+                              }}>
+                                Pendente
+                              </span>
+                            )}
+                          </td>
+                          <td style={{ padding: '0.6rem 0.8rem', textAlign: 'center' }}>
+                            <div style={{ display: 'inline-flex', gap: '0.3rem', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
+                              {hasPratica && (
+                                <a
+                                  href={obs.link_gravacao_pratica}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title="Gravação da Prática Pedagógica"
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.2rem',
+                                    backgroundColor: '#eff6ff',
+                                    color: '#1d4ed8',
+                                    border: '1px solid #bfdbfe',
+                                    padding: '0.2rem 0.45rem',
+                                    borderRadius: '6px',
+                                    fontSize: '0.72rem',
+                                    fontWeight: 700,
+                                    textDecoration: 'none',
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                >
+                                  🎥 Prática
+                                </a>
+                              )}
+                              {hasFeedback && (
+                                <a
+                                  href={obs.link_gravacao_feedback}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title="Gravação do Feedback / Diálogo Formativo"
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.2rem',
+                                    backgroundColor: '#fdf2f8',
+                                    color: '#be185d',
+                                    border: '1px solid #fbcfe8',
+                                    padding: '0.2rem 0.45rem',
+                                    borderRadius: '6px',
+                                    fontSize: '0.72rem',
+                                    fontWeight: 700,
+                                    textDecoration: 'none',
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                >
+                                  🗣️ Feedback
+                                </a>
+                              )}
+                              {hasPlanejamento && (
+                                <a
+                                  href={obs.link_planejamento}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title="Planejamento Pedagógico (PDP)"
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.2rem',
+                                    backgroundColor: '#f0fdf4',
+                                    color: '#15803d',
+                                    border: '1px solid #bbf7d0',
+                                    padding: '0.2rem 0.45rem',
+                                    borderRadius: '6px',
+                                    fontSize: '0.72rem',
+                                    fontWeight: 700,
+                                    textDecoration: 'none',
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                >
+                                  📄 PDP
+                                </a>
+                              )}
+                              {!hasPratica && !hasFeedback && !hasPlanejamento && (
+                                <span style={{ color: '#94a3b8', fontSize: '0.75rem', fontStyle: 'italic' }}>Sem links</span>
+                              )}
+                            </div>
+                          </td>
+                          <td style={{ padding: '0.6rem 0.8rem', textAlign: 'center' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenObs(c)}
+                              title={`Abrir observação da prática pedagógica de ${c.nome}`}
+                              style={{
+                                background: 'linear-gradient(135deg, rgba(11,60,93,0.1) 0%, rgba(15,107,173,0.15) 100%)',
+                                border: '1px solid rgba(15,107,173,0.3)',
+                                borderRadius: '6px',
+                                cursor: 'pointer',
+                                padding: '0.25rem 0.5rem',
+                                fontSize: '0.9rem',
+                                lineHeight: 1,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                transition: 'all 0.15s ease'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.transform = 'scale(1.15)';
+                                e.currentTarget.style.backgroundColor = 'rgba(15,107,173,0.25)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.transform = 'scale(1)';
+                                e.currentTarget.style.backgroundColor = 'rgba(11,60,93,0.1)';
+                              }}
+                            >
+                              👁️
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>

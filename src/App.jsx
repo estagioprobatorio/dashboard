@@ -260,6 +260,7 @@ export default function App() {
             const { data, error } = await supabase
               .from('observacoes_pratica')
               .select('*')
+              .order('id', { ascending: true })
               .range(from, to);
 
             if (error) throw error;
@@ -276,10 +277,8 @@ export default function App() {
             }
           }
 
-          if (allObs.length > 0) {
-            console.log(`Supabase observacoes_pratica carregadas: ${allObs.length} registros no total.`);
-            setObservacoesList(allObs);
-          }
+          console.log(`Supabase observacoes_pratica carregadas: ${allObs.length} registros no total.`);
+          setObservacoesList(allObs);
         } catch (err) {
           console.warn("Supabase: erro ao carregar observacoes_pratica com paginação. Usando dados locais de fallback:", err);
         }
@@ -641,7 +640,7 @@ export default function App() {
       case 'tutoria':
         return <DadosTutoria data={filteredRecordsForView} />;
       case 'turmas':
-        return <ListaTurmas data={filteredRecordsForView} />;
+        return <ListaTurmas data={filteredRecordsForView} observacoes={filteredObservacoesForView} />;
       case 'admin':
         return (userRole === 'admin' || userRole === 'tecnico')
           ? <AdminPanel data={enrichedRecords} onLocalUpdate={handleLocalUpdate} userRole={userRole} /> 
