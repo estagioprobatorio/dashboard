@@ -1,0 +1,18 @@
+{
+  "short_name": "Estágio Probatório",
+  "name": "Estágio Probatório - SEED/PR",
+  "description": "Painel de Acompanhamento e Gestão de Turmas do Estágio Probatório da Secretaria da Educação do Paraná",
+  "icons": [
+    {
+      "src": "/brasao_parana.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192 512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#001d3d",
+  "theme_color": "#001d3d",
+  "display": "standalone",
+  "orientation": "portrait"
+}
