@@ -203,9 +203,9 @@ export default function TurmaModal({ turmaName, data, onClose, observacoes = nul
       <div className="animate-fade-in" style={{
         background: 'white',
         borderRadius: '16px',
-        width: '100%',
-        maxWidth: '900px',
-        maxHeight: '90vh',
+        width: '96%',
+        maxWidth: '1280px',
+        maxHeight: '92vh',
         display: 'flex',
         flexDirection: 'column',
         boxShadow: 'var(--shadow-lg)',
@@ -216,7 +216,7 @@ export default function TurmaModal({ turmaName, data, onClose, observacoes = nul
         <div style={{
           background: 'linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-primary-mid) 100%)',
           color: 'white',
-          padding: '1.25rem 1.5rem',
+          padding: '1.1rem 1.5rem',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center'
@@ -225,10 +225,33 @@ export default function TurmaModal({ turmaName, data, onClose, observacoes = nul
             <span style={{ fontSize: '0.75rem', backgroundColor: 'var(--color-accent-green)', color: 'white', padding: '0.2rem 0.6rem', borderRadius: '4px', textTransform: 'uppercase', fontWeight: 800, letterSpacing: '0.5px' }}>
               🏫 {turmaInfo.turma}
             </span>
-            <h2 style={{ fontSize: '1.2rem', marginTop: '0.4rem', fontWeight: 700, color: '#f1f5f9' }}>
+            <h2 style={{ fontSize: '1.2rem', marginTop: '0.35rem', fontWeight: 700, color: '#f1f5f9', margin: '0.35rem 0 0 0' }}>
               {turmaInfo.componente} • {turmaInfo.anoFormativo} {turmaInfo.turno ? `(${turmaInfo.turno})` : ''}
             </h2>
           </div>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              background: 'rgba(255, 255, 255, 0.15)',
+              border: 'none',
+              color: 'white',
+              borderRadius: '50%',
+              width: '32px',
+              height: '32px',
+              fontSize: '1rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.15s ease'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.3)'}
+            onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)'}
+            title="Fechar modal"
+          >
+            ✕
+          </button>
         </div>
 
         {/* Modal Content - Body com rolagem */}
@@ -347,18 +370,18 @@ export default function TurmaModal({ turmaName, data, onClose, observacoes = nul
               </div>
             </div>
 
-            <div className="table-responsive" style={{ maxHeight: '380px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
-              <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+            <div className="table-responsive" style={{ maxHeight: '420px', overflowY: 'auto', overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
+              <table className="data-table" style={{ width: '100%', minWidth: '940px', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
                 <thead>
                   <tr style={{ backgroundColor: 'var(--color-primary-dark)', color: 'white', textAlign: 'left', position: 'sticky', top: 0, zIndex: 10 }}>
-                    <th style={{ padding: '0.65rem 0.8rem', width: '35px' }}>#</th>
-                    <th style={{ padding: '0.65rem 0.8rem' }}>Nome do Cursista</th>
-                    <th style={{ padding: '0.65rem 0.8rem' }}>E-mail</th>
-                    <th style={{ padding: '0.65rem 0.8rem' }}>CGM</th>
-                    <th style={{ padding: '0.65rem 0.8rem' }}>Município</th>
-                    <th style={{ padding: '0.65rem 0.8rem', textAlign: 'center', minWidth: '105px' }}>Status Obs.</th>
-                    <th style={{ padding: '0.65rem 0.8rem', textAlign: 'center', minWidth: '170px' }}>Gravações & Links</th>
-                    <th style={{ padding: '0.65rem 0.8rem', textAlign: 'center', width: '55px' }}>Ver</th>
+                    <th style={{ padding: '0.65rem 0.6rem', width: '35px', textAlign: 'center' }}>#</th>
+                    <th style={{ padding: '0.65rem 0.8rem', minWidth: '160px' }}>Nome do Cursista</th>
+                    <th style={{ padding: '0.65rem 0.8rem', minWidth: '170px' }}>E-mail</th>
+                    <th style={{ padding: '0.65rem 0.6rem', width: '90px', textAlign: 'center' }}>CGM</th>
+                    <th style={{ padding: '0.65rem 0.8rem', width: '110px' }}>Município</th>
+                    <th style={{ padding: '0.65rem 0.6rem', textAlign: 'center', width: '105px' }}>Status Obs.</th>
+                    <th style={{ padding: '0.65rem 0.6rem', textAlign: 'center', minWidth: '220px' }}>Gravações & Links</th>
+                    <th style={{ padding: '0.65rem 0.6rem', textAlign: 'center', width: '55px' }}>Ver</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -378,20 +401,20 @@ export default function TurmaModal({ turmaName, data, onClose, observacoes = nul
 
                       return (
                         <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#f8fafc', borderBottom: '1px solid #edf2f7' }}>
-                          <td style={{ padding: '0.6rem 0.8rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>{idx + 1}</td>
+                          <td style={{ padding: '0.6rem 0.6rem', fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'center' }}>{idx + 1}</td>
                           <td style={{ padding: '0.6rem 0.8rem', fontWeight: 700, color: 'var(--color-text-main)' }}>{c.nome}</td>
                           <td style={{ padding: '0.6rem 0.8rem' }}>
                             {c.email ? (
-                              <a href={`mailto:${c.email}`} style={{ color: 'var(--color-accent-blue)', textDecoration: 'none' }}>
+                              <a href={`mailto:${c.email}`} style={{ color: 'var(--color-accent-blue)', textDecoration: 'none', wordBreak: 'break-all' }}>
                                 {c.email}
                               </a>
                             ) : (
                               <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>-</span>
                             )}
                           </td>
-                          <td style={{ padding: '0.6rem 0.8rem', color: 'var(--color-text-muted)' }}>{c.cgm || '-'}</td>
+                          <td style={{ padding: '0.6rem 0.6rem', color: 'var(--color-text-muted)', textAlign: 'center', whiteSpace: 'nowrap' }}>{c.cgm || '-'}</td>
                           <td style={{ padding: '0.6rem 0.8rem', color: 'var(--color-text-muted)' }}>{c.municipios || '-'}</td>
-                          <td style={{ padding: '0.6rem 0.8rem', textAlign: 'center' }}>
+                          <td style={{ padding: '0.6rem 0.6rem', textAlign: 'center', whiteSpace: 'nowrap' }}>
                             {isRealizada ? (
                               <span style={{
                                 display: 'inline-flex',
@@ -426,8 +449,8 @@ export default function TurmaModal({ turmaName, data, onClose, observacoes = nul
                               </span>
                             )}
                           </td>
-                          <td style={{ padding: '0.6rem 0.8rem', textAlign: 'center' }}>
-                            <div style={{ display: 'inline-flex', gap: '0.3rem', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
+                          <td style={{ padding: '0.6rem 0.6rem', textAlign: 'center' }}>
+                            <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center', justifyContent: 'center', flexWrap: 'nowrap' }}>
                               {hasPratica && (
                                 <a
                                   href={obs.link_gravacao_pratica}
@@ -441,13 +464,16 @@ export default function TurmaModal({ turmaName, data, onClose, observacoes = nul
                                     backgroundColor: '#eff6ff',
                                     color: '#1d4ed8',
                                     border: '1px solid #bfdbfe',
-                                    padding: '0.2rem 0.45rem',
+                                    padding: '0.25rem 0.45rem',
                                     borderRadius: '6px',
                                     fontSize: '0.72rem',
                                     fontWeight: 700,
                                     textDecoration: 'none',
-                                    whiteSpace: 'nowrap'
+                                    whiteSpace: 'nowrap',
+                                    transition: 'all 0.15s ease'
                                   }}
+                                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#dbeafe'}
+                                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#eff6ff'}
                                 >
                                   🎥 Prática
                                 </a>
@@ -465,13 +491,16 @@ export default function TurmaModal({ turmaName, data, onClose, observacoes = nul
                                     backgroundColor: '#fdf2f8',
                                     color: '#be185d',
                                     border: '1px solid #fbcfe8',
-                                    padding: '0.2rem 0.45rem',
+                                    padding: '0.25rem 0.45rem',
                                     borderRadius: '6px',
                                     fontSize: '0.72rem',
                                     fontWeight: 700,
                                     textDecoration: 'none',
-                                    whiteSpace: 'nowrap'
+                                    whiteSpace: 'nowrap',
+                                    transition: 'all 0.15s ease'
                                   }}
+                                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fce7f3'}
+                                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#fdf2f8'}
                                 >
                                   🗣️ Feedback
                                 </a>
@@ -489,13 +518,16 @@ export default function TurmaModal({ turmaName, data, onClose, observacoes = nul
                                     backgroundColor: '#f0fdf4',
                                     color: '#15803d',
                                     border: '1px solid #bbf7d0',
-                                    padding: '0.2rem 0.45rem',
+                                    padding: '0.25rem 0.45rem',
                                     borderRadius: '6px',
                                     fontSize: '0.72rem',
                                     fontWeight: 700,
                                     textDecoration: 'none',
-                                    whiteSpace: 'nowrap'
+                                    whiteSpace: 'nowrap',
+                                    transition: 'all 0.15s ease'
                                   }}
+                                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#dcfce7'}
+                                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#f0fdf4'}
                                 >
                                   📄 PDP
                                 </a>
@@ -505,7 +537,7 @@ export default function TurmaModal({ turmaName, data, onClose, observacoes = nul
                               )}
                             </div>
                           </td>
-                          <td style={{ padding: '0.6rem 0.8rem', textAlign: 'center' }}>
+                          <td style={{ padding: '0.6rem 0.6rem', textAlign: 'center' }}>
                             <button
                               type="button"
                               onClick={() => handleOpenObs(c)}

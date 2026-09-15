@@ -6,9 +6,11 @@
 -- 1. Limpar todas as 28.834 linhas acumuladas/duplicadas
 TRUNCATE TABLE public.observacoes_pratica RESTART IDENTITY;
 
--- 2. Garantir que a coluna id_origem exista na tabela
-ALTER TABLE public.observacoes_pratica 
-ADD COLUMN IF NOT EXISTS id_origem TEXT;
+-- 2. Garantir que as colunas necessárias existam na tabela
+ALTER TABLE public.observacoes_pratica ADD COLUMN IF NOT EXISTS id_origem TEXT;
+ALTER TABLE public.observacoes_pratica ADD COLUMN IF NOT EXISTS carimbo TEXT;
+ALTER TABLE public.observacoes_pratica ADD COLUMN IF NOT EXISTS semestre TEXT;
+ALTER TABLE public.observacoes_pratica ADD COLUMN IF NOT EXISTS is_realizada BOOLEAN;
 
 -- 3. Criar índice UNIQUE no id_origem para que o UPSERT (on_conflict=id_origem)
 --    atualize registros existentes em vez de inserir duplicatas no futuro
