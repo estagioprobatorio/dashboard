@@ -89,6 +89,14 @@ const PLANILHAS_CONFIG = [
  * =========================================================================================
  */
 function sincronizarTodasAsPlanilhas() {
+  const cleanKey = String(SUPABASE_KEY || "").trim();
+  if (!cleanKey || cleanKey === "SUA_CHAVE_AQUI" || cleanKey.length < 20) {
+    Logger.log("❌ ERRO CRÍTICO: A variável SUPABASE_KEY não foi preenchida ou é inválida!");
+    Logger.log("Por favor, cole a sua chave 'anon' ou 'service_role' do Supabase na linha 53 do script.");
+    Logger.log("Como pegar sua chave no Supabase: Acesse seu painel -> Project Settings (⚙️) -> API -> Project API keys (copie a chave 'anon' ou 'service_role').");
+    return;
+  }
+
   Logger.log("==========================================================================");
   Logger.log("INICIANDO SINCRONIZAÇÃO GERAL DAS 4 PLANILHAS DE OBSERVAÇÃO PEDAGÓGICA");
   Logger.log("==========================================================================");
@@ -604,14 +612,15 @@ function mapRowToObservation(headers, row, sheetName, sheetId, rowNumber, config
  * Garante que se o registro já existir pelo id_origem, ele será apenas atualizado.
  */
 function sendBatchToSupabase(payloadArray) {
+  const cleanKey = String(SUPABASE_KEY || "").trim();
   const endpoint = SUPABASE_URL + "/rest/v1/observacoes_pratica?on_conflict=id_origem";
 
   const options = {
     method: "post",
     contentType: "application/json",
     headers: {
-      "apikey": SUPABASE_KEY,
-      "Authorization": "Bearer " + SUPABASE_KEY,
+      "apikey": cleanKey,
+      "Authorization": "Bearer " + cleanKey,
       "Prefer": "resolution=merge-duplicates,return=minimal"
     },
     payload: JSON.stringify(payloadArray),
