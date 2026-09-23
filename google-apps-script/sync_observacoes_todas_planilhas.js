@@ -22,21 +22,20 @@
  * 
  * =========================================================================================
  * PASSO A PASSO PARA USAR ESTE SCRIPT:
- * 1. Acesse https://script.google.com/ e clique em "+ Novo projeto".
- * 2. Dê um nome ao projeto (ex: "Sincronizador Supabase - Observações Estágio Probatório").
- * 3. Apague qualquer código no editor e cole todo este arquivo.
- * 4. Preencha a constante SUPABASE_KEY com a sua chave (service_role ou anon) do Supabase na linha 48.
- * 5. Clique em Salvar (ícone do disquete 💾).
+ * 1. Acesse https://script.google.com/ e abra seu projeto (ou clique em "+ Novo projeto").
+ * 2. Apague qualquer código anterior e cole todo o conteúdo deste arquivo.
+ * 3. Preencha a constante SUPABASE_KEY com a sua chave (service_role ou anon) do Supabase na linha 53.
+ * 4. Clique em Salvar (ícone do disquete 💾).
  * 
- * 6. COMO RECARREGAR TUDO (CARGA COMPLETA):
- *    - No menu suspenso de funções, selecione "sincronizarTodasAsPlanilhas" e clique em "Executar".
- *    - O script lerá as 4 planilhas sequencialmente e enviará tudo para o Supabase com upsert
- *      (sem risco de duplicatas, pois cada linha tem seu id_origem exclusivo).
+ * 5. COMO SINCRONIZAR MANUALMENTE A QUALQUER MOMENTO:
+ *    - Selecione "sincronizarTodasAsPlanilhas" no menu suspenso de funções e clique em "Executar".
+ *    - Ele sincroniza as 4 planilhas de uma vez (1º e 2º semestres) sem duplicar nada.
  * 
- * 7. COMO ATIVAR GATILHOS AUTOMÁTICOS NAS 2 PLANILHAS ATIVAS:
- *    - No menu suspenso de funções, selecione "instalarGatilhosPlanilhasAtivas" e clique em "Executar".
- *    - O script instalará o gatilho "Ao enviar formulário" APENAS nas duas planilhas ativas.
- *    - As planilhas fechadas NÃO receberão gatilhos.
+ * 6. COMO ATIVAR A ATUALIZAÇÃO DIÁRIA AUTOMÁTICA ÀS 07h15 DA MANHÃ:
+ *    - Selecione a função "configurarGatilhoDiario07h15" no menu suspenso e clique em "Executar".
+ *    - Pronto! O script rodará todos os dias às 07h15 sozinho na nuvem do Google, atualizando
+ *      qualquer resposta nova ou com atraso do 1º e 2º semestre no Supabase.
+ *    - VOCÊ NÃO PRECISA ABRIR NENHUMA PLANILHA!
  * =========================================================================================
  */
 
@@ -179,10 +178,90 @@ function sincronizarTodasAsPlanilhas() {
 
 /**
  * =========================================================================================
- * 2. INSTALAÇÃO DE GATILHOS AUTOMÁTICOS APENAS NAS DUAS PLANILHAS ATIVAS
+ * 2. ACIONADOR DIÁRIO AUTOMÁTICO (ÀS 07h15 DA MANHÃ - HORÁRIO DE BRASÍLIA)
  * =========================================================================================
- * Cria o trigger "Ao enviar formulário" (onFormSubmit) nas planilhas ativas.
- * Planilhas fechadas são ignoradas conforme solicitado.
+ * Execute a função "configurarGatilhoDiario07h15" APENAS UMA VEZ no editor do Apps Script.
+ * Ela agenda a sincronização para rodar todos os dias às 07h15 da manhã.
+ * Não precisa abrir nenhuma planilha! O script roda na nuvem do Google sozinho,
+ * atualizando respostas novas e respostas enviadas com atraso do 1º semestre.
+ */
+function configurarGatilhoDiario07h15() {
+  Logger.log("Iniciando configuração do acionador diário das 07h15...");
+
+  // 1. Remover gatilhos diários anteriores deste projeto para evitar duplicações
+  const existingTriggers = ScriptApp.getProjectTriggers();
+  for (let i = 0; i < existingTriggers.length; i++) {
+    const handler = existingTriggers[i].getHandlerFunction();
+    if (
+      handler === "executarSincronizacaoDiaria07h15" ||
+      handler === "sincronizarDiarioJanela07h" ||
+      handler === "sincronizarTodasAsPlanilhas"
+    ) {
+      ScriptApp.deleteTrigger(existingTriggers[i]);
+      Logger.log("Acionador diário anterior removido: " + handler);
+    }
+  }
+
+  // 2. Calcula o próximo horário das 07h15 (horário de Brasília)
+  const agora = new Date();
+  const proxima = new Date();
+  proxima.setHours(7, 15, 0, 0);
+
+  if (proxima <= agora) {
+    proxima.setDate(proxima.getDate() + 1);
+  }
+
+  ScriptApp.newTrigger("executarSincronizacaoDiaria07h15")
+    .timeBased()
+    .at(proxima)
+    .inTimezone("America/Sao_Paulo")
+    .create();
+
+  Logger.log("✓ ACIONADOR DIÁRIO ATIVADO COM SUCESSO!");
+  Logger.log("Próxima execução agendada para: " + Utilities.formatDate(proxima, "America/Sao_Paulo", "dd/MM/yyyy HH:mm:ss"));
+  Logger.log("O script atualizará todas as 4 planilhas sozinho na nuvem todos os dias às 07h15!");
+}
+
+/**
+ * Função executada automaticamente todos os dias às 07h15
+ */
+function executarSincronizacaoDiaria07h15() {
+  try {
+    Logger.log("⏰ [07h15] Iniciando sincronização diária automática...");
+    sincronizarTodasAsPlanilhas();
+  } catch (err) {
+    Logger.log("❌ Erro na sincronização diária das 07h15: " + err.toString());
+  } finally {
+    // Reagenda para o dia seguinte às 07h15 automaticamente
+    const agora = new Date();
+    const proxima = new Date();
+    proxima.setDate(agora.getDate() + 1);
+    proxima.setHours(7, 15, 0, 0);
+
+    // Remove trigger que acabou de disparar
+    const triggers = ScriptApp.getProjectTriggers();
+    for (let i = 0; i < triggers.length; i++) {
+      if (triggers[i].getHandlerFunction() === "executarSincronizacaoDiaria07h15") {
+        ScriptApp.deleteTrigger(triggers[i]);
+      }
+    }
+
+    ScriptApp.newTrigger("executarSincronizacaoDiaria07h15")
+      .timeBased()
+      .at(proxima)
+      .inTimezone("America/Sao_Paulo")
+      .create();
+
+    Logger.log("✓ Próxima sincronização diária reagendada para: " + Utilities.formatDate(proxima, "America/Sao_Paulo", "dd/MM/yyyy HH:mm:ss"));
+  }
+}
+
+/**
+ * =========================================================================================
+ * 3. INSTALAÇÃO OPCIONAL DE GATILHOS NO ENVIO DE FORMULÁRIO (PLANILHAS ATIVAS)
+ * =========================================================================================
+ * Cria o trigger "Ao enviar formulário" (onFormSubmit) nas planilhas ativas se desejar
+ * sincronização instantânea além da sincronização diária das 07h15.
  */
 function instalarGatilhosPlanilhasAtivas() {
   Logger.log("Iniciando configuração de gatilhos automáticos...");
