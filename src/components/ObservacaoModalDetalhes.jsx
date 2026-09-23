@@ -174,7 +174,11 @@ export default function ObservacaoModalDetalhes({ observacao, onClose }) {
               </div>
               <div>
                 <span style={{ color: 'var(--color-text-muted)', display: 'block', fontSize: '0.75rem' }}>🏷️ Modalidade da Observação:</span>
-                <strong>{observacao.modalidade || 'Docentes'}</strong>
+                <strong>
+                  {observacao.modalidade && !observacao.modalidade.toLowerCase().includes('diálogo') && !observacao.modalidade.toLowerCase().includes('feedback')
+                    ? observacao.modalidade
+                    : (observacao.componente === 'PEDAGÓGICO' ? 'Equipe Gestora' : 'Docentes')}
+                </strong>
               </div>
             </div>
           </div>

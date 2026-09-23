@@ -54,8 +54,14 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
       const emailTutor = obs.email_tutor || (cursistaInfo ? cursistaInfo.email_tutor : null) || '';
       const nre = obs.nre_exe || (cursistaInfo ? (cursistaInfo.nre_exe || cursistaInfo.nre_tutor) : null) || 'NRE Não Identificado';
       const municipio = obs.munic_exe || (cursistaInfo ? cursistaInfo.munic_exe : null) || '';
-      const modalidade = obs.modalidade || (cursistaInfo ? cursistaInfo.modalidade : null) || 'Docentes';
-      const rawComp = obs.componente || (cursistaInfo ? cursistaInfo.componente : null) || '';
+      let modalidade = obs.modalidade || (cursistaInfo ? cursistaInfo.modalidade : null) || 'Docentes';
+      if (modalidade.toLowerCase().includes('feedback') || modalidade.toLowerCase().includes('diálogo') || modalidade.toLowerCase().includes('dialogo')) {
+        modalidade = cursistaInfo?.modalidade || 'Docentes';
+      }
+      if (modalidade.toUpperCase().includes('GESTORA') || modalidade.toUpperCase().includes('PEDAGOG')) {
+        modalidade = 'Equipe Gestora';
+      }
+      const rawComp = obs.componente || (cursistaInfo ? cursistaInfo.componente : null) || (modalidade === 'Equipe Gestora' ? 'PEDAGÓGICO' : '');
       const componente = normalizeComponente(rawComp);
       const isRealizada = obs.is_realizada ?? (obs.observacao_realizada ? obs.observacao_realizada.toLowerCase().includes('sim') : true);
       const semestre = getSemestre(obs);

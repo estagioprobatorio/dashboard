@@ -392,11 +392,45 @@ function mapRowToObservation(headers, row, sheetName, sheetId, rowNumber, config
     }
   }
 
-  // 5. Chamamento e Tema
+  // 5. Modalidade do cursista (Docentes, Equipe Gestora / Pedagogo, Técnico)
+  let modalidadeCursista = getVal([
+    "selecione a modalidade do cursista",
+    "modalidades. selecione a modalidade",
+    "modalidades. selecione",
+    "modalidade do cursista"
+  ]);
+  if (!modalidadeCursista || modalidadeCursista.toLowerCase().includes("feedback") || modalidadeCursista.toLowerCase().includes("diálogo") || modalidadeCursista.toLowerCase().includes("dialogo")) {
+    modalidadeCursista = "Docentes";
+  }
+
+  // Componente curricular (se cursista for Pedagogo / Equipe Gestora, define como PEDAGÓGICO)
+  let componente = getVal(["componente curricular", "componente", "área"]);
+  if (!componente && (modalidadeCursista.toLowerCase().includes("gestora") || modalidadeCursista.toLowerCase().includes("pedagog"))) {
+    componente = "PEDAGÓGICO";
+  }
+
+  // 6. Chamamento, Temática & Referência (busca colunas DOC, EQG e TEC de todas as planilhas)
   let chamamento = getVal(["chamamento"]);
   if (!chamamento && sheetName.toLowerCase().includes("4º chamamento")) chamamento = "4º Chamamento";
 
-  let tema = getVal(["tema relacionado à observação", "tema relacionado", "tema"]);
+  let tema = getVal([
+    "selecione o tema relacionado",
+    "tema relacionado à observação",
+    "tema relacionado a observacao",
+    "tema relacionado",
+    "tema"
+  ]);
+
+  let proposta = getVal([
+    "qual  é a proposta escolhida",
+    "qual é a proposta escolhida",
+    "qual a proposta escolhida",
+    "proposta escolhida"
+  ]);
+
+  if (tema && proposta && !tema.toLowerCase().includes(proposta.toLowerCase())) {
+    tema = tema + " (" + proposta + ")";
+  }
 
   // Identificar carimbo de data/hora original do preenchimento do formulário
   let carimboRaw = getRawVal(["carimbo de data/hora", "carimbo", "timestamp"]);
@@ -432,6 +466,22 @@ function mapRowToObservation(headers, row, sheetName, sheetId, rowNumber, config
   const dataFeedbackRaw = getRawVal(["data do feedback", "data da devolutiva", "devolutiva"]);
   const dataAgendamentoRaw = getRawVal(["data do agendamento", "agendamento"]);
 
+  // Evidências de Planejamento e Prática (compatível com DOC, EQG e TEC)
+  let evidenciasPlanejamento = getVal([
+    "evidências para que o planejamento",
+    "evidências para que a prática seja situada nesse nível do critério 1",
+    "evidências para que a prática seja situada nesse nível do  critério 1",
+    "evidências para que a implementação",
+    "critério 1:"
+  ]);
+
+  let evidenciasPratica = getVal([
+    "evidências para que a implementação",
+    "evidências para que a prática seja situada nesse nível do critério 2",
+    "evidências para que a prática seja situada nesse nível do  critério 2",
+    "critério 2:"
+  ]);
+
   return {
     id_origem: idOrigem,
     carimbo: carimbo || null,
@@ -442,8 +492,8 @@ function mapRowToObservation(headers, row, sheetName, sheetId, rowNumber, config
     nome_formador: nomeFormador || null,
     ano_formativo: config.anoFormativoPadrao,
     chamamento: chamamento || null,
-    modalidade: getVal(["modalidade"]) || "Docentes",
-    componente: getVal(["componente curricular", "componente", "área"]) || null,
+    modalidade: modalidadeCursista,
+    componente: componente || null,
     tema: tema || null,
     observacao_realizada: obsRealizadaRaw || (isRealizada ? "Sim, a observação foi realizada." : "Não"),
     data_pratica: parsedDataPratica,
@@ -457,8 +507,8 @@ function mapRowToObservation(headers, row, sheetName, sheetId, rowNumber, config
     link_gravacao_feedback: getVal(["link da gravação do diálogo formativo", "link da gravação do feedback"]),
     nivel_planejamento: nivelPlanejamento || (isRealizada ? "SUPERA" : null),
     nivel_pratica: nivelPratica || (isRealizada ? "ATENDE INTEGRALMENTE" : null),
-    evidencias_planejamento: getVal(["evidências para que o planejamento", "evidências para que a prática seja situada nesse nível do  critério 1"]),
-    evidencias_pratica: getVal(["evidências para que a implementação", "evidências para que a prática seja situada nesse nível do  critério 2"]),
+    evidencias_planejamento: evidenciasPlanejamento || null,
+    evidencias_pratica: evidenciasPratica || null,
     questionamentos_propositivos: getVal(["questionamentos propositivos"]),
     proposicoes_sugestoes: getVal(["proposições ou sugestões", "proposições"]),
     combinados: getVal(["combinados realizados no feedback", "combinados"]),

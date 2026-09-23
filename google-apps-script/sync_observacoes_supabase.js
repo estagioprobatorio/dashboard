@@ -266,13 +266,44 @@ function mapRowToObservation(headers, row, sheetName, sheetId) {
     }
   }
 
+  // Modalidade do cursista
+  let modalidadeCursista = getVal([
+    "selecione a modalidade do cursista",
+    "modalidades. selecione a modalidade",
+    "modalidades. selecione",
+    "modalidade do cursista"
+  ]);
+  if (!modalidadeCursista || modalidadeCursista.toLowerCase().includes("feedback") || modalidadeCursista.toLowerCase().includes("diálogo") || modalidadeCursista.toLowerCase().includes("dialogo")) {
+    modalidadeCursista = "Docentes";
+  }
+
+  let componenteCurricular = getVal(["componente curricular", "componente", "área"]);
+  if (!componenteCurricular && (modalidadeCursista.toLowerCase().includes("gestora") || modalidadeCursista.toLowerCase().includes("pedagog"))) {
+    componenteCurricular = "PEDAGÓGICO";
+  }
+
   // Chamamento e Tema
   let chamamento = getVal(["chamamento"]);
   if (!chamamento && sheetName.includes("4º chamamento")) chamamento = "4º Chamamento";
 
-  let tema = getVal(["tema relacionado à observação", "tema relacionado", "tema"]);
-  if (!tema && sheetName.includes("tema 3")) tema = "Tema 3";
-  if (!tema && sheetName.includes("tema 4")) tema = "Tema 4";
+  let tema = getVal([
+    "selecione o tema relacionado",
+    "tema relacionado à observação",
+    "tema relacionado a observacao",
+    "tema relacionado",
+    "tema"
+  ]);
+
+  let proposta = getVal([
+    "qual  é a proposta escolhida",
+    "qual é a proposta escolhida",
+    "qual a proposta escolhida",
+    "proposta escolhida"
+  ]);
+
+  if (tema && proposta && !tema.toLowerCase().includes(proposta.toLowerCase())) {
+    tema = tema + " (" + proposta + ")";
+  }
 
   // Mapeamento de datas compatível com 1º ANO e 2º/3º ANO
   const dataPraticaRaw = getRawVal([
@@ -310,8 +341,8 @@ function mapRowToObservation(headers, row, sheetName, sheetId) {
     ano_formativo: anoFormativo,
     semestre: semestre,
     chamamento: chamamento || null,
-    modalidade: getVal(["selecione a modalidade do cursista", "modalidades"]) || "Docentes",
-    componente: getVal(["selecione o componente do cursista", "componente"]),
+    modalidade: modalidadeCursista,
+    componente: componenteCurricular,
     tema: tema || "Tema Geral",
     observacao_realizada: isRealizada ? "Sim, a observação foi realizada." : "Não realizada",
     data_pratica: parsedDataPratica,
