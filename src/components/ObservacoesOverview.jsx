@@ -42,10 +42,21 @@ export const getSemestre = (obs) => {
   // Fallback por carimbo / data
   const dataRef = obs.carimbo || obs.data_pratica || obs.data_observacao || obs.data_feedback || '';
   if (dataRef) {
-    const dStr = String(dataRef);
-    const mes = dStr.includes('/') ? parseInt(dStr.split('/')[1], 10) : dStr.includes('-') ? parseInt(dStr.split('-')[1], 10) : null;
-    if (mes && mes <= 6) return '1º Semestre';
-    if (mes && mes > 6) return '2º Semestre';
+    try {
+      const dStr = String(dataRef);
+      if (dStr.includes('/')) {
+        const parts = dStr.split('/');
+        const mes = parseInt(parts[1], 10);
+        if (mes && mes <= 6) return '1º Semestre';
+        if (mes && mes > 6) return '2º Semestre';
+      }
+      const d = new Date(dStr);
+      if (!isNaN(d.getTime())) {
+        const mes = d.getMonth() + 1;
+        if (mes <= 6) return '1º Semestre';
+        if (mes > 6) return '2º Semestre';
+      }
+    } catch (e) {}
   }
   return '1º Semestre';
 };

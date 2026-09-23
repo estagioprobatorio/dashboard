@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import ObservacaoModalDetalhes from './ObservacaoModalDetalhes';
 import { normalizeComponente, getSemestre } from './ObservacoesOverview';
+import { formatDatePtBr } from '../utils/dateUtils';
 
 export default function ObservacaoPratica({ observacoes = [], cursistas = [], tutores = [], userRole, userEmail }) {
   // Filtros
@@ -230,7 +231,7 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
     const rows = filteredObservacoes.map(o => [
       `"${o.semestre || ''}"`,
       `"${o.ano_formativo || ''}"`,
-      `"${o.carimbo || ''}"`,
+      `"${formatDatePtBr(o.carimbo, true)}"`,
       `"${o.nome_cursista || ''}"`,
       `"${o.email_cursista || ''}"`,
       `"${o.nre_exe || ''}"`,
@@ -240,8 +241,8 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
       `"${o.nome_formador || ''}"`,
       `"${o.tutor_responsavel || ''}"`,
       `"${o.is_realizada ? 'Realizada' : 'Não Realizada'}"`,
-      `"${o.data_pratica || ''}"`,
-      `"${o.data_feedback || ''}"`,
+      `"${formatDatePtBr(o.data_pratica || o.data_observacao)}"`,
+      `"${formatDatePtBr(o.data_feedback)}"`,
       `"${o.modalidade_feedback || ''}"`,
       `"${o.categoria_planejamento || ''}"`,
       `"${o.categoria_pratica || ''}"`,
@@ -662,11 +663,11 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
 
                     <td>
                       <div style={{ fontSize: '0.82rem', fontWeight: 600 }}>
-                        {obs.data_pratica || obs.data_observacao || '-'}
+                        {formatDatePtBr(obs.data_pratica || obs.data_observacao)}
                       </div>
                       {obs.data_feedback && (
                         <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
-                          Devol: {obs.data_feedback}
+                          Devol: {formatDatePtBr(obs.data_feedback)}
                         </div>
                       )}
                     </td>
@@ -674,7 +675,7 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
                     {/* Data/Carimbo de preenchimento do formulário */}
                     <td>
                       <div style={{ fontSize: '0.78rem', color: 'var(--color-text-main)', fontWeight: 600 }}>
-                        {obs.carimbo || obs.data_observacao || '—'}
+                        {formatDatePtBr(obs.carimbo || obs.data_observacao, true)}
                       </div>
                     </td>
 

@@ -265,33 +265,79 @@ function aoReceberFormulario(e) {
  * =========================================================================================
  */
 function mapRowToObservation(headers, row, sheetName, sheetId, rowNumber, config) {
-  function getVal(keywords) {
+  function getRawVal(keywords) {
     for (let i = 0; i < headers.length; i++) {
       const h = String(headers[i] || "").toLowerCase();
       for (let k of keywords) {
         if (h.includes(k.toLowerCase())) {
           const val = row[i];
-          return val !== undefined && val !== null ? String(val).trim() : "";
+          if (val !== undefined && val !== null && val !== "") {
+            return val;
+          }
         }
       }
     }
-    return "";
+    return null;
+  }
+
+  function getVal(keywords) {
+    const raw = getRawVal(keywords);
+    return raw !== null && raw !== undefined ? String(raw).trim() : "";
   }
 
   function parseDate(dateRaw) {
     if (!dateRaw) return null;
     if (dateRaw instanceof Date) {
+      if (isNaN(dateRaw.getTime())) return null;
       return Utilities.formatDate(dateRaw, "America/Sao_Paulo", "yyyy-MM-dd");
     }
     const str = String(dateRaw).trim();
-    const parts = str.split("/");
+    if (!str || str === "-" || str === "—" || str.toLowerCase() === "não informada") return null;
+
+    // Se for string no formato ISO ou Date string com GMT/T
+    if (str.includes("GMT") || str.includes("T") || /^[A-Za-z]{3}\s/.test(str)) {
+      const d = new Date(str);
+      if (!isNaN(d.getTime())) {
+        return Utilities.formatDate(d, "America/Sao_Paulo", "yyyy-MM-dd");
+      }
+    }
+
+    // Se já estiver no formato yyyy-MM-dd
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+      return str;
+    }
+
+    // Se for dd/MM/yyyy ou d/m/yy ou d/m/yyyy
+    const parts = str.split(/[/.-]/);
     if (parts.length === 3) {
+      if (parts[0].length === 4) {
+        // yyyy-mm-dd
+        return parts[0] + "-" + parts[1].padStart(2, "0") + "-" + parts[2].padStart(2, "0");
+      }
       const d = parts[0].padStart(2, "0");
       const m = parts[1].padStart(2, "0");
       const y = parts[2].length === 2 ? "20" + parts[2] : parts[2].slice(0, 4);
       return y + "-" + m + "-" + d;
     }
     return null;
+  }
+
+  function formatCarimbo(dateRaw) {
+    if (!dateRaw) return null;
+    if (dateRaw instanceof Date) {
+      if (isNaN(dateRaw.getTime())) return null;
+      return Utilities.formatDate(dateRaw, "America/Sao_Paulo", "dd/MM/yyyy HH:mm:ss");
+    }
+    const str = String(dateRaw).trim();
+    if (!str || str === "-" || str === "—") return null;
+
+    if (str.includes("GMT") || str.includes("T") || /^[A-Za-z]{3}\s/.test(str)) {
+      const d = new Date(str);
+      if (!isNaN(d.getTime())) {
+        return Utilities.formatDate(d, "America/Sao_Paulo", "dd/MM/yyyy HH:mm:ss");
+      }
+    }
+    return str;
   }
 
   // 1. Identificar e-mail do cursista
@@ -353,10 +399,38 @@ function mapRowToObservation(headers, row, sheetName, sheetId, rowNumber, config
   let tema = getVal(["tema relacionado à observação", "tema relacionado", "tema"]);
 
   // Identificar carimbo de data/hora original do preenchimento do formulário
-  let carimbo = getVal(["carimbo de data/hora", "carimbo", "timestamp"]);
-  if (!carimbo && row[0]) {
-    carimbo = String(row[0]).trim();
+  let carimboRaw = getRawVal(["carimbo de data/hora", "carimbo", "timestamp"]);
+  if (!carimboRaw && row[0]) {
+    carimboRaw = row[0];
   }
+  const carimbo = formatCarimbo(carimboRaw);
+
+  // Mapeamento abrangente de datas (compatível com 1º ANO e 2º/3º ANO)
+  const dataPraticaRaw = getRawVal([
+    "data em que a prática pedagógica foi realizada",
+    "data da realização da prática pedagógica",
+    "data da realização da prática",
+    "data de observação da prática pedagógica",
+    "data da observação da prática pedagógica",
+    "data em que a prática foi realizada",
+    "data da prática pedagógica",
+    "data da prática"
+  ]);
+
+  const dataObservacaoRaw = getRawVal([
+    "data de observação da prática pedagógica",
+    "data da observação da prática pedagógica",
+    "data em que foi realizada a observação",
+    "data da realização da observação",
+    "data da observação",
+    "data de observação"
+  ]);
+
+  const parsedDataPratica = parseDate(dataPraticaRaw) || parseDate(dataObservacaoRaw);
+  const parsedDataObservacao = parseDate(dataObservacaoRaw) || parsedDataPratica;
+
+  const dataFeedbackRaw = getRawVal(["data do feedback", "data da devolutiva", "devolutiva"]);
+  const dataAgendamentoRaw = getRawVal(["data do agendamento", "agendamento"]);
 
   return {
     id_origem: idOrigem,
@@ -372,10 +446,10 @@ function mapRowToObservation(headers, row, sheetName, sheetId, rowNumber, config
     componente: getVal(["componente curricular", "componente", "área"]) || null,
     tema: tema || null,
     observacao_realizada: obsRealizadaRaw || (isRealizada ? "Sim, a observação foi realizada." : "Não"),
-    data_pratica: parseDate(getVal(["data em que a prática pedagógica foi realizada", "data da realização da prática"])),
-    data_observacao: parseDate(getVal(["data em que foi realizada a observação"])),
-    data_feedback: parseDate(getVal(["data do feedback", "devolutiva"])),
-    data_agendamento: parseDate(getVal(["data do agendamento"])),
+    data_pratica: parsedDataPratica,
+    data_observacao: parsedDataObservacao,
+    data_feedback: parseDate(dataFeedbackRaw),
+    data_agendamento: parseDate(dataAgendamentoRaw),
     modalidade_feedback: getVal(["modalidade de feedback formativo", "modalidade de feedback"]) || (isRealizada ? "Diálogo formativo" : null),
     motivo_devolutiva: getVal(["motivo da realização de feedback", "qual foi o motivo"]),
     link_gravacao_pratica: getVal(["link da gravação da prática pedagógica", "link da gravação da prática"]),

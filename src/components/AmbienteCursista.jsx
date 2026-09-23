@@ -3,6 +3,7 @@ import FormularioRemanejamento from './FormularioRemanejamento';
 import TurmaModal from './TurmaModal';
 import CardVidaFuncional from './CardVidaFuncional';
 import ObservacaoModalDetalhes from './ObservacaoModalDetalhes';
+import { formatDatePtBr } from '../utils/dateUtils';
 
 export default function AmbienteCursista({ userEmail, records, observacoes = [], movimentacoes = [], onNovaMovimentacao, subTab = 'turma' }) {
   const [activeSubTab, setActiveSubTab] = useState(subTab);
@@ -604,8 +605,8 @@ export default function AmbienteCursista({ userEmail, records, observacoes = [],
                       </h4>
                       <div style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', marginTop: '0.2rem' }}>
                         Formador: <b>{obs.nome_formador || 'Não informado'}</b>
-                        {obs.data_pratica && ` • Data da Aula: ${obs.data_pratica}`}
-                        {obs.data_feedback && ` • Feedback: ${obs.data_feedback}`}
+                        {(obs.data_pratica || obs.data_observacao) && ` • Data da Aula: ${formatDatePtBr(obs.data_pratica || obs.data_observacao)}`}
+                        {obs.data_feedback && ` • Feedback: ${formatDatePtBr(obs.data_feedback)}`}
                       </div>
                     </div>
 

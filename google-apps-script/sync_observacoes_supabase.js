@@ -134,27 +134,51 @@ function syncSingleRow(sheet, rowNumber) {
 function mapRowToObservation(headers, row, sheetName, sheetId) {
   sheetName = sheetName || "";
 
-  function getVal(keywords) {
+  function getRawVal(keywords) {
     for (let i = 0; i < headers.length; i++) {
       const h = String(headers[i] || "").toLowerCase();
       for (let k of keywords) {
         if (h.includes(k.toLowerCase())) {
           const val = row[i];
-          return val !== undefined && val !== null ? String(val).trim() : "";
+          if (val !== undefined && val !== null && val !== "") {
+            return val;
+          }
         }
       }
     }
-    return "";
+    return null;
+  }
+
+  function getVal(keywords) {
+    const raw = getRawVal(keywords);
+    return raw !== null && raw !== undefined ? String(raw).trim() : "";
   }
 
   function parseDate(dateRaw) {
     if (!dateRaw) return null;
     if (dateRaw instanceof Date) {
+      if (isNaN(dateRaw.getTime())) return null;
       return Utilities.formatDate(dateRaw, "America/Sao_Paulo", "yyyy-MM-dd");
     }
     const str = String(dateRaw).trim();
-    const parts = str.split("/");
+    if (!str || str === "-" || str === "—" || str.toLowerCase() === "não informada") return null;
+
+    if (str.includes("GMT") || str.includes("T") || /^[A-Za-z]{3}\s/.test(str)) {
+      const d = new Date(str);
+      if (!isNaN(d.getTime())) {
+        return Utilities.formatDate(d, "America/Sao_Paulo", "yyyy-MM-dd");
+      }
+    }
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+      return str;
+    }
+
+    const parts = str.split(/[/.-]/);
     if (parts.length === 3) {
+      if (parts[0].length === 4) {
+        return parts[0] + "-" + parts[1].padStart(2, "0") + "-" + parts[2].padStart(2, "0");
+      }
       const d = parts[0].padStart(2, "0");
       const m = parts[1].padStart(2, "0");
       const y = parts[2].length === 2 ? "20" + parts[2] : parts[2].slice(0, 4);
@@ -250,10 +274,34 @@ function mapRowToObservation(headers, row, sheetName, sheetId) {
   if (!tema && sheetName.includes("tema 3")) tema = "Tema 3";
   if (!tema && sheetName.includes("tema 4")) tema = "Tema 4";
 
+  // Mapeamento de datas compatível com 1º ANO e 2º/3º ANO
+  const dataPraticaRaw = getRawVal([
+    "data em que a prática pedagógica foi realizada",
+    "data da realização da prática pedagógica",
+    "data da realização da prática",
+    "data de observação da prática pedagógica",
+    "data da observação da prática pedagógica",
+    "data em que a prática foi realizada",
+    "data da prática pedagógica",
+    "data da prática"
+  ]);
+
+  const dataObservacaoRaw = getRawVal([
+    "data de observação da prática pedagógica",
+    "data da observação da prática pedagógica",
+    "data em que foi realizada a observação",
+    "data da realização da observação",
+    "data da observação",
+    "data de observação"
+  ]);
+
+  const parsedDataPratica = parseDate(dataPraticaRaw) || parseDate(dataObservacaoRaw);
+  const parsedDataObservacao = parseDate(dataObservacaoRaw) || parsedDataPratica;
+
   return {
     // Identificador único da linha de origem para UPSERT inteligente e anti-duplicação
-    // Formato: GID_LINHA (ex: 848666482_15) ou HASH único por resposta
     id_origem: String(sheetId) + "_" + (row[0] ? Utilities.formatDate(new Date(row[0]), "America/Sao_Paulo", "yyyyMMddHHmmss") : Math.random().toString(36).substring(2)) + "_" + emailCursista.replace(/[^a-z0-9]/g, ''),
+    carimbo: row[0] instanceof Date ? Utilities.formatDate(row[0], "America/Sao_Paulo", "dd/MM/yyyy HH:mm:ss") : (row[0] ? String(row[0]).trim() : null),
     carimbo_data_hora: row[0] instanceof Date ? Utilities.formatDate(row[0], "America/Sao_Paulo", "yyyy-MM-dd'T'HH:mm:ss'Z'") : null,
     email_cursista: emailCursista.toLowerCase().trim(),
     nome_cursista: nomeCursista,
@@ -266,8 +314,8 @@ function mapRowToObservation(headers, row, sheetName, sheetId) {
     componente: getVal(["selecione o componente do cursista", "componente"]),
     tema: tema || "Tema Geral",
     observacao_realizada: isRealizada ? "Sim, a observação foi realizada." : "Não realizada",
-    data_pratica: parseDate(getVal(["data da realização da prática", "data da realização"])),
-    data_observacao: parseDate(getVal(["data em que foi realizada a observação"])),
+    data_pratica: parsedDataPratica,
+    data_observacao: parsedDataObservacao,
     data_feedback: parseDate(getVal(["data do feedback", "devolutiva"])),
     data_agendamento: parseDate(getVal(["data do agendamento"])),
     modalidade_feedback: getVal(["modalidade de feedback formativo", "modalidade de feedback"]) || (isRealizada ? "Diálogo formativo" : null),

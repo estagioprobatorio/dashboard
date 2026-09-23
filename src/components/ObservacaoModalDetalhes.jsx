@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatDatePtBr } from '../utils/dateUtils';
 
 export default function ObservacaoModalDetalhes({ observacao, onClose }) {
   if (!observacao) return null;
@@ -161,15 +162,15 @@ export default function ObservacaoModalDetalhes({ observacao, onClose }) {
               </div>
               <div>
                 <span style={{ color: 'var(--color-text-muted)', display: 'block', fontSize: '0.75rem' }}>📅 Data da Prática:</span>
-                <strong>{observacao.data_pratica || observacao.data_observacao || 'Não informada'}</strong>
+                <strong>{formatDatePtBr(observacao.data_pratica || observacao.data_observacao)}</strong>
               </div>
               <div>
                 <span style={{ color: 'var(--color-text-muted)', display: 'block', fontSize: '0.75rem' }}>🗣️ Data do Feedback:</span>
-                <strong>{observacao.data_feedback || 'Não informada'}</strong>
+                <strong>{formatDatePtBr(observacao.data_feedback)}</strong>
               </div>
               <div>
                 <span style={{ color: 'var(--color-text-muted)', display: 'block', fontSize: '0.75rem' }}>📝 Data/Hora de Preenchimento (Formulário):</span>
-                <strong style={{ color: '#0369a1' }}>{observacao.carimbo || observacao.data_observacao || 'Registrado via sistema'}</strong>
+                <strong style={{ color: '#0369a1' }}>{formatDatePtBr(observacao.carimbo || observacao.data_observacao, true)}</strong>
               </div>
               <div>
                 <span style={{ color: 'var(--color-text-muted)', display: 'block', fontSize: '0.75rem' }}>🏷️ Modalidade da Observação:</span>
