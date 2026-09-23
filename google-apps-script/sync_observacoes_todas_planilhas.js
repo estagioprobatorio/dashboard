@@ -24,18 +24,23 @@
  * PASSO A PASSO PARA USAR ESTE SCRIPT:
  * 1. Acesse https://script.google.com/ e abra seu projeto (ou clique em "+ Novo projeto").
  * 2. Apague qualquer código anterior e cole todo o conteúdo deste arquivo.
- * 3. Preencha a constante SUPABASE_KEY com a sua chave (service_role ou anon) do Supabase na linha 53.
+ * 3. Preencha a constante SUPABASE_KEY com a sua chave (service_role ou anon) do Supabase na linha 48.
  * 4. Clique em Salvar (ícone do disquete 💾).
  * 
- * 5. COMO SINCRONIZAR MANUALMENTE A QUALQUER MOMENTO:
- *    - Selecione "sincronizarTodasAsPlanilhas" no menu suspenso de funções e clique em "Executar".
- *    - Ele sincroniza as 4 planilhas de uma vez (1º e 2º semestres) sem duplicar nada.
+ * 5. CARGA INICIAL COMPLETA (HISTÓRICO):
+ *    - Selecione "sincronizarTodasAsPlanilhas" no menu suspenso e clique em "Executar".
+ *    - Ele sincroniza as 4 planilhas de uma vez (1º e 2º semestres) sem duplicar registros.
  * 
- * 6. COMO ATIVAR A ATUALIZAÇÃO DIÁRIA AUTOMÁTICA ÀS 07h15 DA MANHÃ:
- *    - Selecione a função "configurarGatilhoDiario07h15" no menu suspenso e clique em "Executar".
- *    - Pronto! O script rodará todos os dias às 07h15 sozinho na nuvem do Google, atualizando
- *      qualquer resposta nova ou com atraso do 1º e 2º semestre no Supabase.
- *    - VOCÊ NÃO PRECISA ABRIR NENHUMA PLANILHA!
+ * 6. ATUALIZAÇÃO INSTANTÂNEA A CADA FORMULÁRIO ENVIADO (INSERT APENAS DO DADO NOVO):
+ *    - Selecione "configurarGatilhoInstantaneoAoEnviarFormulario" e clique em "Executar".
+ *    - O Google conectará o acionador "Ao enviar formulário" em todas as planilhas.
+ *    - Assim que um formador enviar a resposta, APENAS aquela nova linha é gravada no Supabase
+ *      em menos de 1 segundo! O Dashboard atualiza na hora na tela sem precisar recarregar.
+ * 
+ * 7. ROTINA DIÁRIA DAS 07h15 (REDE DE SEGURANÇA):
+ *    - Selecione "configurarGatilhoDiario07h15" e clique em "Executar".
+ *    - O script rodará todos os dias às 07h15 da manhã sozinho na nuvem para garantir
+ *      que nada fique para trás (como edições manuais ou instabilidade pontual).
  * =========================================================================================
  */
 
@@ -47,39 +52,39 @@ const SUPABASE_KEY = "SUA_CHAVE_AQUI"; // Cole sua service_role_key (recomendada
 const PLANILHAS_CONFIG = [
   {
     sigla: "1ANO_1SEM",
-    nome: "Formador-1ANO_1SEM (Fechado)",
+    nome: "Formador-1ANO_1SEM",
     id: "1KmbMvNOTpj4OaDOdKw5mPVI3iqbo8RbQBqBktM84ToE",
     gid: "1030562032",
     anoFormativoPadrao: "1º ANO",
     semestrePadrao: "1º Semestre/2026",
-    fechada: true // NÃO instala gatilho
+    fechada: false // Habilitado para receber gatilho de formulário (inclusive respostas com atraso)
   },
   {
     sigla: "2e3ANO_2SEM",
-    nome: "Formador-2e3ANO-2SEM (Ativo)",
+    nome: "Formador-2e3ANO-2SEM",
     id: "1uv5QWeqtN5iMkH8nVQUvsYKClv9NaGDHgsdT_D-RPiw",
     gid: "2068065207",
     anoFormativoPadrao: "2º/3º ANO",
     semestrePadrao: "2º Semestre/2026",
-    fechada: false // INSTALA gatilho onFormSubmit
+    fechada: false // Habilitado para receber gatilho de formulário
   },
   {
     sigla: "1ANO_2SEM",
-    nome: "Formador-1ANO_2SEM (Ativo)",
+    nome: "Formador-1ANO_2SEM",
     id: "1dL_Q-_15Idx3SNAZOqmKzrnVqA8tHFBzILA5PZ7p798",
     gid: "425616417",
     anoFormativoPadrao: "1º ANO",
     semestrePadrao: "2º Semestre/2026",
-    fechada: false // INSTALA gatilho onFormSubmit
+    fechada: false // Habilitado para receber gatilho de formulário
   },
   {
     sigla: "2e3ANO_1SEM",
-    nome: "Formador-2e3ANO-1SEM (Fechado)",
+    nome: "Formador-2e3ANO-1SEM",
     id: "1zSnlh7aW8df800lP90rCLVxiHNWAa1f9IGjz2OoDfvU",
     gid: "848666482",
     anoFormativoPadrao: "2º/3º ANO",
     semestrePadrao: "1º Semestre/2026",
-    fechada: true // NÃO instala gatilho
+    fechada: false // Habilitado para receber gatilho de formulário (inclusive respostas com atraso)
   }
 ];
 
@@ -266,27 +271,38 @@ function executarSincronizacaoDiaria07h15() {
 
 /**
  * =========================================================================================
- * 3. INSTALAÇÃO OPCIONAL DE GATILHOS NO ENVIO DE FORMULÁRIO (PLANILHAS ATIVAS)
+ * 3. GATILHO INSTANTÂNEO NO ENVIO DE FORMULÁRIO (INSERT APENAS DO DADO NOVO)
  * =========================================================================================
- * Cria o trigger "Ao enviar formulário" (onFormSubmit) nas planilhas ativas se desejar
- * sincronização instantânea além da sincronização diária das 07h15.
+ * Execute a função "configurarGatilhoInstantaneoAoEnviarFormulario" UMA VEZ no editor.
+ * 
+ * Como funciona:
+ * 1. O Google Apps Script conecta um acionador "Ao enviar formulário" (onFormSubmit) nas planilhas.
+ * 2. Sempre que um formador responder o formulário, o Google dispara "aoReceberFormulario(e)".
+ * 3. A função pega EXATAMENTE a nova linha inserida pelo formulário (e.range.getRow()).
+ * 4. Mapeia e envia APENAS esse novo registro via POST (upsert) para o Supabase.
+ * 5. Leva menos de 1 segundo e o Dashboard web atualiza em tempo real via Supabase Realtime!
+ * =========================================================================================
  */
-function instalarGatilhosPlanilhasAtivas() {
-  Logger.log("Iniciando configuração de gatilhos automáticos...");
 
-  // 1. Remover gatilhos antigos deste projeto para evitar duplicações
+function configurarGatilhoInstantaneoAoEnviarFormulario() {
+  Logger.log("Iniciando configuração de gatilhos automáticos 'Ao enviar formulário'...");
+
+  // 1. Remover APENAS gatilhos anteriores de formulário deste projeto (preserva o gatilho das 07h15!)
   const existingTriggers = ScriptApp.getProjectTriggers();
   for (let i = 0; i < existingTriggers.length; i++) {
-    ScriptApp.deleteTrigger(existingTriggers[i]);
-    Logger.log("Gatilho anterior removido.");
+    const handler = existingTriggers[i].getHandlerFunction();
+    if (handler === "aoReceberFormulario") {
+      ScriptApp.deleteTrigger(existingTriggers[i]);
+      Logger.log("Acionador anterior de formulário removido.");
+    }
   }
 
-  // 2. Instalar gatilho nas planilhas onde fechada === false
+  // 2. Instalar gatilho onFormSubmit nas planilhas configuradas
   let triggersInstalados = 0;
 
   for (let config of PLANILHAS_CONFIG) {
     if (config.fechada) {
-      Logger.log("Planilha [" + config.nome + "] está FECHADA. Nenhum gatilho necessário.");
+      Logger.log("Planilha [" + config.nome + "] marcada como fechada. Pulando.");
       continue;
     }
 
@@ -299,27 +315,47 @@ function instalarGatilhosPlanilhasAtivas() {
         .create();
 
       triggersInstalados++;
-      Logger.log("✓ Gatilho ativado com sucesso para a planilha ATIVA: " + config.nome);
+      Logger.log("✓ Acionador ativado com sucesso para: " + config.nome);
     } catch (err) {
-      Logger.log("❌ Erro ao instalar gatilho para " + config.nome + ": " + err.toString());
+      Logger.log("❌ Erro ao instalar acionador para " + config.nome + ": " + err.toString());
     }
   }
 
-  Logger.log("Finalizado! Total de gatilhos ativos instalados: " + triggersInstalados);
+  Logger.log("==========================================================================");
+  Logger.log("✓ CONFIGURAÇÃO CONCLUÍDA: " + triggersInstalados + " acionadores de formulário ativos!");
+  Logger.log("A partir de agora, cada nova resposta inserirá instantaneamente apenas o dado novo no Supabase.");
+  Logger.log("==========================================================================");
+}
+
+// Alias para compatibilidade
+function instalarGatilhosPlanilhasAtivas() {
+  configurarGatilhoInstantaneoAoEnviarFormulario();
 }
 
 /**
- * =========================================================================================
- * 3. GATILHO AUTOMÁTICO EXECUTADO NO ENVIO DO FORMULÁRIO (PLANILHAS ATIVAS)
- * =========================================================================================
+ * Função executada automaticamente a cada envio de formulário
+ * Captura e envia APENAS a linha recém-adicionada
  */
 function aoReceberFormulario(e) {
   try {
-    const sheet = e ? e.range.getSheet() : SpreadsheetApp.getActiveSheet();
-    const rowNumber = e ? e.range.getRow() : sheet.getLastRow();
-    const ss = sheet.getParent();
-    const ssId = ss.getId();
+    let sheet = null;
+    let rowNumber = null;
+    let ss = null;
 
+    if (e && e.range) {
+      sheet = e.range.getSheet();
+      rowNumber = e.range.getRow();
+      ss = sheet.getParent();
+    } else {
+      // Execução de teste manual no editor: pega a última linha da primeira planilha ativa
+      Logger.log("Executando em modo de teste manual (sem evento 'e')...");
+      const activeCfg = PLANILHAS_CONFIG.find(p => !p.fechada) || PLANILHAS_CONFIG[0];
+      ss = SpreadsheetApp.openById(activeCfg.id);
+      sheet = ss.getSheets()[0];
+      rowNumber = sheet.getLastRow();
+    }
+
+    const ssId = ss.getId();
     const config = PLANILHAS_CONFIG.find(p => p.id === ssId) || {
       sigla: "ATIVA",
       nome: ss.getName(),
@@ -327,7 +363,7 @@ function aoReceberFormulario(e) {
       semestrePadrao: "2026"
     };
 
-    Logger.log("Novo envio detectado na planilha '" + config.nome + "', linha " + rowNumber);
+    Logger.log("⚡ Novo preenchimento detectado na planilha '" + config.nome + "', linha " + rowNumber);
 
     const lastCol = sheet.getLastColumn();
     const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
@@ -336,13 +372,14 @@ function aoReceberFormulario(e) {
     const payload = mapRowToObservation(headers, rowValues, sheet.getName(), sheet.getSheetId(), rowNumber, config);
 
     if (payload && payload.email_cursista) {
+      // Envia APENAS o registro individual recém-adicionado
       sendBatchToSupabase([payload]);
-      Logger.log("✓ Registro sincronizado instantaneamente no Supabase! id_origem: " + payload.id_origem);
+      Logger.log("✓ SUCESSO: Registro inserido instantaneamente no Supabase! id_origem: " + payload.id_origem);
     } else {
-      Logger.log("Linha " + rowNumber + " ignorada: e-mail institucional não identificado.");
+      Logger.log("⚠️ Linha " + rowNumber + " ignorada: e-mail institucional não identificado.");
     }
   } catch (error) {
-    Logger.log("❌ Erro no gatilho aoReceberFormulario: " + error.toString());
+    Logger.log("❌ Erro no acionador aoReceberFormulario: " + error.toString());
   }
 }
 
