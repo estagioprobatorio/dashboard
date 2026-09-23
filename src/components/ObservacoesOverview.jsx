@@ -1,7 +1,58 @@
 import React, { useState, useMemo } from 'react';
 
+// Helper para normalizar componentes curriculares (ex: MATEMÁTICA = MATEMATICA)
+export const normalizeComponente = (text) => {
+  if (!text) return 'Geral';
+  const clean = String(text).trim();
+  const upper = clean.toUpperCase();
+
+  // Mapeamento canônico
+  if (upper.includes('MATEMATICA') || upper.includes('MATEMÁTICA')) return 'MATEMÁTICA';
+  if (upper.includes('CIENCIA') || upper.includes('CIÊNCIA')) return 'CIÊNCIAS';
+  if (upper.includes('FISICA') || upper.includes('FÍSICA')) return 'FÍSICA';
+  if (upper.includes('QUIMICA') || upper.includes('QUÍMICA')) return 'QUÍMICA';
+  if (upper.includes('BIOLOGIA')) return 'BIOLOGIA';
+  if (upper.includes('PORTUGUESA') || upper.includes('PORTUGUES')) return 'LÍNGUA PORTUGUESA';
+  if (upper.includes('INGLESA') || upper.includes('INGLES') || upper.includes('INGLÊS')) return 'LÍNGUA INGLESA';
+  if (upper.includes('HISTORIA') || upper.includes('HISTÓRIA')) return 'HISTÓRIA';
+  if (upper.includes('GEOGRAFIA')) return 'GEOGRAFIA';
+  if (upper.includes('EDUCACAO FISICA') || upper.includes('EDUCAÇÃO FÍSICA') || upper.includes('ED. FISICA')) return 'EDUCAÇÃO FÍSICA';
+  if (upper.includes('ARTE') || upper.includes('ARTES')) return 'ARTE';
+  if (upper.includes('FILOSOFIA')) return 'FILOSOFIA';
+  if (upper.includes('SOCIOLOGIA')) return 'SOCIOLOGIA';
+  if (upper.includes('PEDAGOG') || upper.includes('PEDAGÓG')) return 'PEDAGÓGICO';
+  if (upper.includes('ROBOTICA') || upper.includes('ROBÓTICA')) return 'ROBÓTICA';
+  if (upper.includes('FINANCEIRA')) return 'EDUCAÇÃO FINANCEIRA';
+
+  return upper;
+};
+
+// Helper para identificar o semestre
+export const getSemestre = (obs) => {
+  if (obs.semestre) {
+    const s = String(obs.semestre).toLowerCase();
+    if (s.includes('1') || s.includes('1º')) return '1º Semestre';
+    if (s.includes('2') || s.includes('2º')) return '2º Semestre';
+    return obs.semestre;
+  }
+  const idOrigem = String(obs.id_origem || '').toUpperCase();
+  if (idOrigem.includes('1SEM')) return '1º Semestre';
+  if (idOrigem.includes('2SEM')) return '2º Semestre';
+
+  // Fallback por carimbo / data
+  const dataRef = obs.carimbo || obs.data_pratica || obs.data_observacao || obs.data_feedback || '';
+  if (dataRef) {
+    const dStr = String(dataRef);
+    const mes = dStr.includes('/') ? parseInt(dStr.split('/')[1], 10) : dStr.includes('-') ? parseInt(dStr.split('-')[1], 10) : null;
+    if (mes && mes <= 6) return '1º Semestre';
+    if (mes && mes > 6) return '2º Semestre';
+  }
+  return '1º Semestre';
+};
+
 export default function ObservacoesOverview({ observacoes = [], cursistas = [], tutores = [] }) {
   // Filtros Globais do Overview
+  const [semestreFilter, setSemestreFilter] = useState('');
   const [anoFilter, setAnoFilter] = useState('');
   const [modalidadeFilter, setModalidadeFilter] = useState('');
   const [nreFilter, setNreFilter] = useState('');
@@ -36,12 +87,15 @@ export default function ObservacoesOverview({ observacoes = [], cursistas = [], 
 
       const nre = obs.nre_exe || (cursistaInfo ? (cursistaInfo.nre_exe || cursistaInfo.nre_tutor) : null) || 'NRE Não Identificado';
       const modalidade = obs.modalidade || (cursistaInfo ? cursistaInfo.modalidade : null) || 'Docentes';
-      const componente = obs.componente || (cursistaInfo ? cursistaInfo.componente : null) || 'Geral';
+      const rawComp = obs.componente || (cursistaInfo ? cursistaInfo.componente : null) || 'Geral';
+      const componente = normalizeComponente(rawComp);
       const anoFormativo = obs.ano_formativo || '1º ANO';
       const isRealizada = obs.is_realizada ?? (obs.observacao_realizada ? obs.observacao_realizada.toLowerCase().includes('sim') : true);
+      const semestre = getSemestre(obs);
 
       return {
         ...obs,
+        semestre,
         nre_exe: nre,
         modalidade,
         componente,
@@ -55,12 +109,14 @@ export default function ObservacoesOverview({ observacoes = [], cursistas = [], 
 
   // Opções de Filtro
   const filterOptions = useMemo(() => {
+    const semestres = new Set();
     const anos = new Set();
     const modalidades = new Set();
     const nres = new Set();
     const componentes = new Set();
 
     enrichedData.forEach(o => {
+      if (o.semestre) semestres.add(o.semestre);
       if (o.ano_formativo) anos.add(o.ano_formativo);
       if (o.modalidade) modalidades.add(o.modalidade);
       if (o.nre_exe && o.nre_exe !== 'NRE Não Identificado') nres.add(o.nre_exe);
@@ -70,6 +126,7 @@ export default function ObservacoesOverview({ observacoes = [], cursistas = [], 
     const sortPt = (set) => Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
 
     return {
+      semestres: sortPt(semestres),
       anos: sortPt(anos),
       modalidades: sortPt(modalidades),
       nres: sortPt(nres),
@@ -80,17 +137,18 @@ export default function ObservacoesOverview({ observacoes = [], cursistas = [], 
   // Dados filtrados
   const filtered = useMemo(() => {
     return enrichedData.filter(o => {
+      if (semestreFilter && o.semestre !== semestreFilter) return false;
       if (anoFilter && o.ano_formativo !== anoFilter) return false;
       if (modalidadeFilter && o.modalidade !== modalidadeFilter) return false;
       if (nreFilter && o.nre_exe !== nreFilter) return false;
       if (componenteFilter && o.componente !== componenteFilter) return false;
       return true;
     });
-  }, [enrichedData, anoFilter, modalidadeFilter, nreFilter, componenteFilter]);
+  }, [enrichedData, semestreFilter, anoFilter, modalidadeFilter, nreFilter, componenteFilter]);
 
   // Estatísticas e Agregações Executivas
   const stats = useMemo(() => {
-    const total = filtered.length;
+    const total = filtered.length; // Registros Efetuados no formulário
     if (total === 0) {
       return {
         total: 0,
@@ -100,6 +158,8 @@ export default function ObservacoesOverview({ observacoes = [], cursistas = [], 
         percNaoRealizadas: 0,
         dialogos: 0,
         percDialogos: 0,
+        devolutivasGravadas: 0,
+        percDevolutivas: 0,
         countPrat: {},
         countPlan: {},
         nreDistribution: [],
@@ -109,6 +169,7 @@ export default function ObservacoesOverview({ observacoes = [], cursistas = [], 
 
     let realizadas = 0;
     let dialogos = 0;
+    let devolutivasGravadas = 0;
 
     const countPrat = { SUPERA: 0, 'ATINGE INTEGRALMENTE': 0, 'ATINGE PARCIALMENTE': 0, 'NÃO ATINGE': 0, 'NÃO INFORMADO': 0 };
     const countPlan = { SUPERA: 0, 'ATINGE INTEGRALMENTE': 0, 'ATINGE PARCIALMENTE': 0, 'NÃO ATINGE': 0, 'NÃO INFORMADO': 0 };
@@ -117,8 +178,13 @@ export default function ObservacoesOverview({ observacoes = [], cursistas = [], 
 
     filtered.forEach(o => {
       if (o.is_realizada) realizadas++;
-      if ((o.modalidade_feedback || '').toLowerCase().includes('diálogo') || (o.modalidade_feedback || '').toLowerCase().includes('dialogo')) {
+
+      const feedbackStr = (o.modalidade_feedback || '').toLowerCase();
+      if (feedbackStr.includes('diálogo') || feedbackStr.includes('dialogo')) {
         dialogos++;
+      }
+      if (o.link_gravacao_feedback || o.data_feedback) {
+        devolutivasGravadas++;
       }
 
       if (countPrat[o.cat_pratica] !== undefined) countPrat[o.cat_pratica]++;
@@ -139,6 +205,8 @@ export default function ObservacoesOverview({ observacoes = [], cursistas = [], 
       if (o.is_realizada) compMap[c].realizadas++;
       if (o.cat_pratica === 'SUPERA' || o.cat_pratica === 'ATINGE INTEGRALMENTE') compMap[c].superam++;
     });
+
+    const naoRealizadas = total - realizadas;
 
     const nreDistribution = Object.entries(nreMap)
       .map(([name, data]) => ({
@@ -162,10 +230,12 @@ export default function ObservacoesOverview({ observacoes = [], cursistas = [], 
       total,
       realizadas,
       percRealizadas: Math.round((realizadas / total) * 100),
-      naoRealizadas: total - realizadas,
-      percNaoRealizadas: Math.round(((total - realizadas) / total) * 100),
+      naoRealizadas,
+      percNaoRealizadas: Math.round((naoRealizadas / total) * 100),
       dialogos,
-      percDialogos: realizadas > 0 ? Math.round((dialogos / realizadas) * 100) : 0,
+      percDialogos: total > 0 ? Math.round((dialogos / total) * 100) : 0,
+      devolutivasGravadas,
+      percDevolutivas: realizadas > 0 ? Math.round((devolutivasGravadas / realizadas) * 100) : 0,
       countPrat,
       countPlan,
       nreDistribution,
@@ -173,7 +243,7 @@ export default function ObservacoesOverview({ observacoes = [], cursistas = [], 
     };
   }, [filtered]);
 
-  // Cálculos percentuais para as barras do gráfico
+  // Cálculos percentuais para as barras do gráfico (baseado nas aulas efetivamente realizadas)
   const basePrat = stats.realizadas || 1;
   const percSuperaPrat = Math.round(((stats.countPrat?.SUPERA || 0) / basePrat) * 100);
   const percIntegralPrat = Math.round(((stats.countPrat?.['ATINGE INTEGRALMENTE'] || 0) / basePrat) * 100);
@@ -214,9 +284,9 @@ export default function ObservacoesOverview({ observacoes = [], cursistas = [], 
         </div>
 
         {/* Botão limpar filtros */}
-        {(anoFilter || modalidadeFilter || nreFilter || componenteFilter) && (
+        {(semestreFilter || anoFilter || modalidadeFilter || nreFilter || componenteFilter) && (
           <button
-            onClick={() => { setAnoFilter(''); setModalidadeFilter(''); setNreFilter(''); setComponenteFilter(''); }}
+            onClick={() => { setSemestreFilter(''); setAnoFilter(''); setModalidadeFilter(''); setNreFilter(''); setComponenteFilter(''); }}
             style={{
               backgroundColor: '#fee2e2',
               color: '#b91c1c',
@@ -235,7 +305,25 @@ export default function ObservacoesOverview({ observacoes = [], cursistas = [], 
 
       {/* Barra de Filtros Globais */}
       <div className="glass-panel" style={{ padding: '1rem 1.5rem', marginBottom: '1.5rem' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', alignItems: 'flex-end' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', alignItems: 'flex-end' }}>
+          
+          {/* Filtro Semestre */}
+          <div>
+            <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-primary-dark)', display: 'block', marginBottom: '0.3rem' }}>
+              Semestre:
+            </label>
+            <select
+              value={semestreFilter}
+              onChange={e => setSemestreFilter(e.target.value)}
+              style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+            >
+              <option value="">Todos os Semestres</option>
+              <option value="1º Semestre">1º Semestre</option>
+              <option value="2º Semestre">2º Semestre</option>
+            </select>
+          </div>
+
+          {/* Filtro Ano Formativo */}
           <div>
             <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-primary-dark)', display: 'block', marginBottom: '0.3rem' }}>
               Ano Formativo:
@@ -250,9 +338,10 @@ export default function ObservacoesOverview({ observacoes = [], cursistas = [], 
             </select>
           </div>
 
+          {/* Filtro Modalidade da Observação */}
           <div>
             <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-primary-dark)', display: 'block', marginBottom: '0.3rem' }}>
-              Modalidade:
+              Modalidade da Observação:
             </label>
             <select
               value={modalidadeFilter}
@@ -264,6 +353,7 @@ export default function ObservacoesOverview({ observacoes = [], cursistas = [], 
             </select>
           </div>
 
+          {/* Filtro NRE */}
           <div>
             <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-primary-dark)', display: 'block', marginBottom: '0.3rem' }}>
               NRE:
@@ -278,6 +368,7 @@ export default function ObservacoesOverview({ observacoes = [], cursistas = [], 
             </select>
           </div>
 
+          {/* Filtro Componente Curricular */}
           <div>
             <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-primary-dark)', display: 'block', marginBottom: '0.3rem' }}>
               Componente Curricular:
@@ -294,69 +385,94 @@ export default function ObservacoesOverview({ observacoes = [], cursistas = [], 
         </div>
       </div>
 
-      {/* 4 KPIs de Alto Impacto Executivo */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem', marginBottom: '1.5rem' }}>
-        {/* KPI 1 */}
+      {/* 4 KPIs de Alto Impacto Executivo Reformulados */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1.25rem', marginBottom: '1.5rem' }}>
+        
+        {/* KPI 1: Registros Efetuados */}
         <div className="glass-panel" style={{ padding: '1.5rem', borderTop: '4px solid var(--color-primary-mid)', background: '#fff' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
             <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
-              Total de Observações
+              Registros Efetuados
             </span>
-            <span style={{ fontSize: '1.3rem' }}>📊</span>
+            <span style={{ fontSize: '1.3rem' }}>📋</span>
           </div>
           <div style={{ fontSize: '2.5rem', fontWeight: 800, color: 'var(--color-primary-dark)', fontFamily: 'var(--font-header)' }}>
             {stats.total.toLocaleString('pt-BR')}
           </div>
-          <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '0.3rem' }}>
-            {stats.realizadas.toLocaleString('pt-BR')} realizadas ({stats.percRealizadas}%)
+          <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginTop: '0.4rem', borderTop: '1px solid #e2e8f0', paddingTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+            <div>Registros: <b>{stats.total.toLocaleString('pt-BR')}</b></div>
+            <div>Observações Realizadas: <b style={{ color: '#166534' }}>{stats.realizadas.toLocaleString('pt-BR')}</b></div>
+            <div>Observações Não Realizadas: <b style={{ color: '#b91c1c' }}>{stats.naoRealizadas.toLocaleString('pt-BR')}</b></div>
           </div>
         </div>
 
-        {/* KPI 2 */}
+        {/* KPI 2: % Observações Realizadas e % Não Realizadas */}
         <div className="glass-panel" style={{ padding: '1.5rem', borderTop: '4px solid var(--color-accent-green)', background: '#fff' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
             <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--color-accent-green)', textTransform: 'uppercase' }}>
-              Superação da Prática
+              % Realizadas & Não Realizadas
             </span>
-            <span style={{ fontSize: '1.3rem' }}>🌟</span>
+            <span style={{ fontSize: '1.3rem' }}>📊</span>
           </div>
-          <div style={{ fontSize: '2.5rem', fontWeight: 800, color: '#15803d', fontFamily: 'var(--font-header)' }}>
-            {percSuperaPrat}%
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.75rem' }}>
+            <div style={{ fontSize: '2.3rem', fontWeight: 800, color: '#166534', fontFamily: 'var(--font-header)' }}>
+              {stats.percRealizadas}%
+            </div>
+            <span style={{ fontSize: '0.85rem', color: '#15803d', fontWeight: 700 }}>
+              realizadas
+            </span>
           </div>
-          <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '0.3rem' }}>
-            <b>{stats.countPrat?.SUPERA?.toLocaleString('pt-BR')}</b> cursistas no nível máximo
+          {/* Barras de Proporção Dupla */}
+          <div style={{ width: '100%', height: '8px', backgroundColor: '#fee2e2', borderRadius: '4px', overflow: 'hidden', margin: '0.5rem 0' }}>
+            <div style={{ width: `${Math.min(stats.percRealizadas, 100)}%`, height: '100%', backgroundColor: 'var(--color-accent-green)', borderRadius: '4px', transition: 'width 0.4s ease' }} />
+          </div>
+          <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', display: 'flex', justifyContent: 'space-between', marginTop: '0.3rem' }}>
+            <span>% Realizadas: <b style={{ color: '#166534' }}>{stats.percRealizadas}%</b></span>
+            <span>% Não Realizadas: <b style={{ color: '#b91c1c' }}>{stats.percNaoRealizadas}%</b></span>
           </div>
         </div>
 
-        {/* KPI 3 */}
+        {/* KPI 3: Supera & Atinge Integralmente */}
         <div className="glass-panel" style={{ padding: '1.5rem', borderTop: '4px solid var(--color-accent-blue)', background: '#fff' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
             <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--color-accent-blue)', textTransform: 'uppercase' }}>
-              Atendimento Integral
+              Supera & Atinge Integralmente
             </span>
-            <span style={{ fontSize: '1.3rem' }}>🎯</span>
+            <span style={{ fontSize: '1.3rem' }}>🌟</span>
           </div>
-          <div style={{ fontSize: '2.5rem', fontWeight: 800, color: '#0369a1', fontFamily: 'var(--font-header)' }}>
-            {percIntegralPrat}%
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem' }}>
+            <div style={{ fontSize: '2.3rem', fontWeight: 800, color: '#7c3aed', fontFamily: 'var(--font-header)' }}>
+              {percSuperaPrat}%
+            </div>
+            <span style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
+              Supera ({stats.countPrat?.SUPERA || 0})
+            </span>
           </div>
-          <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '0.3rem' }}>
-            <b>{stats.countPrat?.['ATINGE INTEGRALMENTE']?.toLocaleString('pt-BR')}</b> atingem integralmente
+          <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', borderTop: '1px solid #e2e8f0', paddingTop: '0.5rem', marginTop: '0.5rem' }}>
+            <div>Atinge Integralmente: <b style={{ color: '#0369a1' }}>{percIntegralPrat}%</b> ({stats.countPrat?.['ATINGE INTEGRALMENTE'] || 0})</div>
+            <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.2rem' }}>Base: {stats.realizadas} registros observados</div>
           </div>
         </div>
 
-        {/* KPI 4 */}
+        {/* KPI 4: Diálogo & Devolutivas */}
         <div className="glass-panel" style={{ padding: '1.5rem', borderTop: '4px solid #8b5cf6', background: '#fff' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
             <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase' }}>
-              Devolutivas Gravadas
+              Diálogo & Devolutivas
             </span>
             <span style={{ fontSize: '1.3rem' }}>🗣️</span>
           </div>
-          <div style={{ fontSize: '2.5rem', fontWeight: 800, color: '#6d28d9', fontFamily: 'var(--font-header)' }}>
-            {stats.percDialogos}%
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.6rem' }}>
+            <div style={{ fontSize: '2.3rem', fontWeight: 800, color: '#6d28d9', fontFamily: 'var(--font-header)' }}>
+              {stats.percDialogos}%
+            </div>
+            <span style={{ fontSize: '0.82rem', color: '#7c3aed', fontWeight: 700 }}>
+              diálogos formativos
+            </span>
           </div>
-          <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '0.3rem' }}>
-            <b>{stats.dialogos.toLocaleString('pt-BR')}</b> diálogos formativos realizados
+          <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', borderTop: '1px solid #e2e8f0', paddingTop: '0.5rem', marginTop: '0.5rem' }}>
+            <div>% Devolutivas Gravadas: <b style={{ color: '#4338ca' }}>{stats.percDevolutivas}%</b> ({stats.devolutivasGravadas})</div>
+            <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.2rem' }}>{stats.dialogos} diálogos registrados no formulário</div>
           </div>
         </div>
       </div>
@@ -371,7 +487,7 @@ export default function ObservacoesOverview({ observacoes = [], cursistas = [], 
               <span>🎯</span> Níveis de Desempenho na Prática Observada
             </h3>
             <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', backgroundColor: '#f1f5f9', padding: '0.2rem 0.5rem', borderRadius: '4px' }}>
-              Base: {stats.realizadas} Aulas
+              Base: {stats.realizadas} Aulas Observadas
             </span>
           </div>
 
@@ -429,7 +545,7 @@ export default function ObservacoesOverview({ observacoes = [], cursistas = [], 
               <span>📝</span> Níveis de Desempenho no Planejamento (PDP)
             </h3>
             <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', backgroundColor: '#f1f5f9', padding: '0.2rem 0.5rem', borderRadius: '4px' }}>
-              Base: {stats.realizadas} Planos
+              Base: {stats.realizadas} Planos Observados
             </span>
           </div>
 
@@ -498,7 +614,7 @@ export default function ObservacoesOverview({ observacoes = [], cursistas = [], 
                   <div style={{ width: `${comp.percAtingimento}%`, height: '100%', backgroundColor: 'var(--color-accent-blue)', borderRadius: '3px' }} />
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '0.35rem' }}>
-                  <span>Total: <b>{comp.total}</b></span>
+                  <span>Total Registros: <b>{comp.total}</b></span>
                   <span>Superam/Atingem: <b>{comp.superam}</b></span>
                 </div>
               </div>
@@ -523,11 +639,11 @@ export default function ObservacoesOverview({ observacoes = [], cursistas = [], 
             <thead>
               <tr>
                 <th style={{ minWidth: '180px' }}>Núcleo Regional (NRE)</th>
-                <th style={{ textAlign: 'center' }}>Total Cursistas</th>
-                <th style={{ textAlign: 'center' }}>Realizadas</th>
-                <th style={{ textAlign: 'center', minWidth: '160px' }}>Taxa de Conclusão</th>
+                <th style={{ textAlign: 'center' }}>Total Registros</th>
+                <th style={{ textAlign: 'center' }}>Observações Realizadas</th>
+                <th style={{ textAlign: 'center', minWidth: '160px' }}>% Realização</th>
                 <th style={{ textAlign: 'center' }}>Supera (🌟)</th>
-                <th style={{ textAlign: 'center' }}>Atende (✓)</th>
+                <th style={{ textAlign: 'center' }}>Atinge Integralmente (✓)</th>
                 <th style={{ textAlign: 'center' }}>Índice de Atingimento</th>
               </tr>
             </thead>

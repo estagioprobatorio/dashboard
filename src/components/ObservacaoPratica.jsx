@@ -1,17 +1,17 @@
 import React, { useState, useMemo } from 'react';
 import ObservacaoModalDetalhes from './ObservacaoModalDetalhes';
+import { normalizeComponente, getSemestre } from './ObservacoesOverview';
 
 export default function ObservacaoPratica({ observacoes = [], cursistas = [], tutores = [], userRole, userEmail }) {
   // Filtros
   const [searchTerm, setSearchTerm] = useState('');
+  const [semestreFilter, setSemestreFilter] = useState('');
   const [tutorFilter, setTutorFilter] = useState('');
   const [nreFilter, setNreFilter] = useState('');
   const [modalidadeFilter, setModalidadeFilter] = useState('');
   const [componenteFilter, setComponenteFilter] = useState('');
   const [anoFilter, setAnoFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState(''); // 'realizada', 'nao_realizada'
-  const [nivelPlanejamentoFilter, setNivelPlanejamentoFilter] = useState('');
-  const [nivelPraticaFilter, setNivelPraticaFilter] = useState('');
 
   // Paginação
   const [currentPage, setCurrentPage] = useState(1);
@@ -43,7 +43,7 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
     return map;
   }, [cursistas]);
 
-  // Lista de observações enriquecidas com NRE, Tutor e dados funcionais
+  // Lista de observações enriquecidas com NRE, Tutor, Semestre e Componente Normalizado
   const enrichedObservacoes = useMemo(() => {
     return observacoes.map(obs => {
       const emailCursista = (obs.email_cursista || '').trim().toLowerCase();
@@ -54,11 +54,14 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
       const nre = obs.nre_exe || (cursistaInfo ? (cursistaInfo.nre_exe || cursistaInfo.nre_tutor) : null) || 'NRE Não Identificado';
       const municipio = obs.munic_exe || (cursistaInfo ? cursistaInfo.munic_exe : null) || '';
       const modalidade = obs.modalidade || (cursistaInfo ? cursistaInfo.modalidade : null) || 'Docentes';
-      const componente = obs.componente || (cursistaInfo ? cursistaInfo.componente : null) || '';
+      const rawComp = obs.componente || (cursistaInfo ? cursistaInfo.componente : null) || '';
+      const componente = normalizeComponente(rawComp);
       const isRealizada = obs.is_realizada ?? (obs.observacao_realizada ? obs.observacao_realizada.toLowerCase().includes('sim') : true);
+      const semestre = getSemestre(obs);
 
       return {
         ...obs,
+        semestre,
         tutor_responsavel: tutorResponsavel,
         email_tutor: emailTutor,
         nre_tutor: (cursistaInfo ? (cursistaInfo.nre_tutor || cursistaInfo.nre_exe) : null) || obs.nre_tutor || '',
@@ -75,6 +78,7 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
 
   // Opções para dropdowns de filtros
   const filterOptions = useMemo(() => {
+    const semestresSet = new Set();
     const tutoresSet = new Set();
     const nresSet = new Set();
     const modalidadesSet = new Set();
@@ -82,6 +86,7 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
     const anosSet = new Set();
 
     enrichedObservacoes.forEach(obs => {
+      if (obs.semestre) semestresSet.add(obs.semestre);
       if (obs.tutor_responsavel && obs.tutor_responsavel !== 'Não atribuído') tutoresSet.add(obs.tutor_responsavel);
       if (obs.nre_exe && obs.nre_exe !== 'NRE Não Identificado') nresSet.add(obs.nre_exe);
       if (obs.modalidade) modalidadesSet.add(obs.modalidade);
@@ -92,6 +97,7 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
     const sortPt = (set) => Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
 
     return {
+      semestres: sortPt(semestresSet),
       tutores: sortPt(tutoresSet),
       nres: sortPt(nresSet),
       modalidades: sortPt(modalidadesSet),
@@ -109,8 +115,12 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
         const nomeMatch = (obs.nome_cursista || '').toLowerCase().includes(q);
         const emailMatch = (obs.email_cursista || '').toLowerCase().includes(q);
         const formadorMatch = (obs.nome_formador || '').toLowerCase().includes(q);
-        if (!nomeMatch && !emailMatch && !formadorMatch) return false;
+        const temaMatch = (obs.tema || '').toLowerCase().includes(q);
+        if (!nomeMatch && !emailMatch && !formadorMatch && !temaMatch) return false;
       }
+
+      // Semestre
+      if (semestreFilter && obs.semestre !== semestreFilter) return false;
 
       // Tutor
       if (tutorFilter && obs.tutor_responsavel !== tutorFilter) return false;
@@ -121,7 +131,7 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
       // Modalidade
       if (modalidadeFilter && obs.modalidade !== modalidadeFilter) return false;
 
-      // Componente
+      // Componente Curricular
       if (componenteFilter && obs.componente !== componenteFilter) return false;
 
       // Ano Formativo
@@ -131,15 +141,9 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
       if (statusFilter === 'realizada' && !obs.is_realizada) return false;
       if (statusFilter === 'nao_realizada' && obs.is_realizada) return false;
 
-      // Nível Planejamento
-      if (nivelPlanejamentoFilter && obs.categoria_planejamento !== nivelPlanejamentoFilter) return false;
-
-      // Nível Prática
-      if (nivelPraticaFilter && obs.categoria_pratica !== nivelPraticaFilter) return false;
-
       return true;
     });
-  }, [enrichedObservacoes, searchTerm, tutorFilter, nreFilter, modalidadeFilter, componenteFilter, anoFilter, statusFilter, nivelPlanejamentoFilter, nivelPraticaFilter]);
+  }, [enrichedObservacoes, searchTerm, semestreFilter, tutorFilter, nreFilter, modalidadeFilter, componenteFilter, anoFilter, statusFilter]);
 
   // Indicadores (KPIs)
   const kpis = useMemo(() => {
@@ -150,39 +154,46 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
         realizadas: 0, 
         percentRealizadas: 0, 
         naoRealizadas: 0,
+        percentNaoRealizadas: 0,
         dialogos: 0, 
         percentDialogos: 0, 
+        devolutivasGravadas: 0,
+        percentDevolutivas: 0,
         superamPlan: 0,
         atingemPlan: 0,
         superamPrat: 0,
         atingemPrat: 0,
-        percentExcelenciaPratica: 0 
+        percentSuperaPrat: 0,
+        percentIntegralPrat: 0
       };
     }
 
     const realizadas = filteredObservacoes.filter(o => o.is_realizada).length;
     const naoRealizadas = total - realizadas;
     const dialogos = filteredObservacoes.filter(o => (o.modalidade_feedback || '').toLowerCase().includes('diálogo') || (o.modalidade_feedback || '').toLowerCase().includes('dialogo')).length;
+    const devolutivasGravadas = filteredObservacoes.filter(o => o.link_gravacao_feedback || o.data_feedback).length;
     
     const superamPlan = filteredObservacoes.filter(o => o.categoria_planejamento === 'SUPERA').length;
     const atingemPlan = filteredObservacoes.filter(o => o.categoria_planejamento === 'ATINGE INTEGRALMENTE').length;
     const superamPrat = filteredObservacoes.filter(o => o.categoria_pratica === 'SUPERA').length;
     const atingemPrat = filteredObservacoes.filter(o => o.categoria_pratica === 'ATINGE INTEGRALMENTE').length;
-    const totalPositivosPrat = superamPrat + atingemPrat;
 
     return {
       total,
       realizadas,
       percentRealizadas: Math.round((realizadas / total) * 100),
       naoRealizadas,
+      percentNaoRealizadas: Math.round((naoRealizadas / total) * 100),
       dialogos,
-      percentDialogos: realizadas > 0 ? Math.round((dialogos / realizadas) * 100) : 0,
+      percentDialogos: total > 0 ? Math.round((dialogos / total) * 100) : 0,
+      devolutivasGravadas,
+      percentDevolutivas: realizadas > 0 ? Math.round((devolutivasGravadas / realizadas) * 100) : 0,
       superamPlan,
       atingemPlan,
       superamPrat,
       atingemPrat,
-      totalPositivosPrat,
-      percentExcelenciaPratica: realizadas > 0 ? Math.round((totalPositivosPrat / realizadas) * 100) : 0
+      percentSuperaPrat: realizadas > 0 ? Math.round((superamPrat / realizadas) * 100) : 0,
+      percentIntegralPrat: realizadas > 0 ? Math.round((atingemPrat / realizadas) * 100) : 0
     };
   }, [filteredObservacoes]);
 
@@ -215,22 +226,25 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
   const handleExportCSV = () => {
     if (filteredObservacoes.length === 0) return;
 
-    const headers = ['Ano Formativo', 'Cursista', 'E-mail Cursista', 'NRE', 'Componente', 'Modalidade', 'Formador', 'Tutor', 'Status', 'Data Prática', 'Data Feedback', 'Feedback', 'Nível Planejamento', 'Nível Prática', 'Link Prática', 'Link PDP', 'Combinados'];
+    const headers = ['Semestre', 'Ano Formativo', 'Data Formulário (Carimbo)', 'Cursista', 'E-mail Cursista', 'NRE', 'Componente', 'Modalidade da Observação', 'Temática / Referência', 'Formador', 'Tutor', 'Status', 'Data Prática', 'Data Feedback', 'Feedback', 'Nível Planejamento', 'Nível Prática', 'Link Prática', 'Link PDP', 'Combinados'];
     const rows = filteredObservacoes.map(o => [
+      `"${o.semestre || ''}"`,
       `"${o.ano_formativo || ''}"`,
+      `"${o.carimbo || ''}"`,
       `"${o.nome_cursista || ''}"`,
       `"${o.email_cursista || ''}"`,
       `"${o.nre_exe || ''}"`,
       `"${o.componente || ''}"`,
       `"${o.modalidade || ''}"`,
+      `"${(o.tema || '').replace(/"/g, '""')}"`,
       `"${o.nome_formador || ''}"`,
       `"${o.tutor_responsavel || ''}"`,
       `"${o.is_realizada ? 'Realizada' : 'Não Realizada'}"`,
       `"${o.data_pratica || ''}"`,
       `"${o.data_feedback || ''}"`,
       `"${o.modalidade_feedback || ''}"`,
-      `"${o.nivel_planejamento || ''}"`,
-      `"${o.nivel_pratica || ''}"`,
+      `"${o.categoria_planejamento || ''}"`,
+      `"${o.categoria_pratica || ''}"`,
       `"${o.link_gravacao_pratica || ''}"`,
       `"${o.link_planejamento || ''}"`,
       `"${(o.combinados || '').replace(/"/g, '""')}"`
@@ -274,14 +288,14 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
         </button>
       </div>
 
-      {/* Cards de Métricas (KPIs) - Design Moderno e Espaçoso */}
+      {/* Cards de Métricas (KPIs) - Reformulados conforme Documento 23-09 */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
         gap: '1.25rem',
         marginBottom: '1.5rem'
       }}>
-        {/* KPI 1: Volume Total & Execução */}
+        {/* KPI 1: Registros Efetuados */}
         <div className="glass-panel" style={{
           padding: '1.4rem 1.6rem',
           position: 'relative',
@@ -291,7 +305,7 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
             <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              Volume de Avaliações
+              Registros Efetuados
             </span>
             <span style={{ fontSize: '1.4rem' }}>📋</span>
           </div>
@@ -300,16 +314,17 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
               {kpis.total.toLocaleString('pt-BR')}
             </span>
             <span style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
-              registros filtrados
+              registros observados
             </span>
           </div>
-          <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e2e8f0', paddingTop: '0.6rem', marginTop: '0.4rem' }}>
-            <span>Base total: <b>{enrichedObservacoes.length.toLocaleString('pt-BR')}</b></span>
-            <span>Realizadas: <b style={{ color: 'var(--color-accent-green)' }}>{kpis.realizadas.toLocaleString('pt-BR')}</b></span>
+          <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', display: 'flex', flexDirection: 'column', gap: '0.2rem', borderTop: '1px solid #e2e8f0', paddingTop: '0.6rem', marginTop: '0.4rem' }}>
+            <div>Registros: <b>{kpis.total.toLocaleString('pt-BR')}</b></div>
+            <div>Observações Realizadas: <b style={{ color: 'var(--color-accent-green)' }}>{kpis.realizadas.toLocaleString('pt-BR')}</b></div>
+            <div>Observações Não Realizadas: <b style={{ color: '#b91c1c' }}>{kpis.naoRealizadas.toLocaleString('pt-BR')}</b></div>
           </div>
         </div>
 
-        {/* KPI 2: Taxa de Observações Concluídas */}
+        {/* KPI 2: % Observações Realizadas e % Não Realizadas */}
         <div className="glass-panel" style={{
           padding: '1.4rem 1.6rem',
           position: 'relative',
@@ -319,29 +334,29 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
             <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-accent-green)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              Taxa de Conclusão
+              % Realizadas & Não Realizadas
             </span>
-            <span style={{ fontSize: '1.4rem' }}>✅</span>
+            <span style={{ fontSize: '1.4rem' }}>📊</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', marginBottom: '0.5rem' }}>
             <span style={{ fontSize: '2.4rem', fontWeight: 800, color: '#166534', fontFamily: 'var(--font-header)', lineHeight: 1 }}>
               {kpis.percentRealizadas}%
             </span>
             <span style={{ fontSize: '0.82rem', color: '#15803d', fontWeight: 700 }}>
-              {kpis.realizadas} de {kpis.total}
+              realizadas
             </span>
           </div>
           {/* Barra de Progresso Visual */}
-          <div style={{ width: '100%', height: '7px', backgroundColor: '#dcfce7', borderRadius: '4px', overflow: 'hidden', margin: '0.4rem 0' }}>
+          <div style={{ width: '100%', height: '8px', backgroundColor: '#fee2e2', borderRadius: '4px', overflow: 'hidden', margin: '0.4rem 0' }}>
             <div style={{ width: `${Math.min(kpis.percentRealizadas, 100)}%`, height: '100%', backgroundColor: 'var(--color-accent-green)', borderRadius: '4px', transition: 'width 0.4s ease' }} />
           </div>
-          <div style={{ fontSize: '0.78rem', color: '#4b5563', display: 'flex', justifyContent: 'space-between', paddingTop: '0.2rem' }}>
-            <span>Realizadas: <b>{kpis.realizadas}</b></span>
-            <span style={{ color: '#b91c1c' }}>Pendentes/Justif: <b>{kpis.naoRealizadas}</b></span>
+          <div style={{ fontSize: '0.78rem', color: '#4b5563', display: 'flex', justifyContent: 'space-between', paddingTop: '0.3rem' }}>
+            <span>% Realizadas: <b style={{ color: '#166534' }}>{kpis.percentRealizadas}%</b> ({kpis.realizadas})</span>
+            <span>% Não Realizadas: <b style={{ color: '#b91c1c' }}>{kpis.percentNaoRealizadas}%</b> ({kpis.naoRealizadas})</span>
           </div>
         </div>
 
-        {/* KPI 3: Desempenho na Prática (Supera + Integral) */}
+        {/* KPI 3: Supera & Atinge Integralmente */}
         <div className="glass-panel" style={{
           padding: '1.4rem 1.6rem',
           position: 'relative',
@@ -351,25 +366,24 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
             <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-accent-blue)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              Atingimento da Prática
+              Supera & Atinge Integralmente
             </span>
             <span style={{ fontSize: '1.4rem' }}>🌟</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', marginBottom: '0.5rem' }}>
-            <span style={{ fontSize: '2.4rem', fontWeight: 800, color: 'var(--color-primary-dark)', fontFamily: 'var(--font-header)', lineHeight: 1 }}>
-              {kpis.percentExcelenciaPratica}%
+            <span style={{ fontSize: '2.4rem', fontWeight: 800, color: '#7c3aed', fontFamily: 'var(--font-header)', lineHeight: 1 }}>
+              {kpis.percentSuperaPrat}%
             </span>
-            <span style={{ fontSize: '0.82rem', color: '#0369a1', fontWeight: 700 }}>
-              Atingem ou Superam
+            <span style={{ fontSize: '0.82rem', color: '#7c3aed', fontWeight: 700 }}>
+              Supera ({kpis.superamPrat})
             </span>
           </div>
           <div style={{ fontSize: '0.78rem', color: '#4b5563', display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e2e8f0', paddingTop: '0.6rem', marginTop: '0.4rem' }}>
-            <span>Supera: <b style={{ color: '#7c3aed' }}>{kpis.superamPrat}</b></span>
-            <span>Integral: <b style={{ color: '#0284c7' }}>{kpis.atingemPrat}</b></span>
+            <span>Atinge Integralmente: <b style={{ color: '#0284c7' }}>{kpis.percentIntegralPrat}%</b> ({kpis.atingemPrat})</span>
           </div>
         </div>
 
-        {/* KPI 4: Diálogo Formativo / Vídeos */}
+        {/* KPI 4: Diálogo Formativo & Devolutivas */}
         <div className="glass-panel" style={{
           padding: '1.4rem 1.6rem',
           position: 'relative',
@@ -379,7 +393,7 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
             <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#6d28d9', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              Diálogo Formativo
+              Diálogo & Devolutivas
             </span>
             <span style={{ fontSize: '1.4rem' }}>🗣️</span>
           </div>
@@ -388,11 +402,11 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
               {kpis.percentDialogos}%
             </span>
             <span style={{ fontSize: '0.82rem', color: '#6d28d9', fontWeight: 700 }}>
-              {kpis.dialogos} devolutivas
+              diálogos formativos
             </span>
           </div>
           <div style={{ fontSize: '0.78rem', color: '#4b5563', display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e2e8f0', paddingTop: '0.6rem', marginTop: '0.4rem' }}>
-            <span>Sessões síncronas / ao vivo gravadas</span>
+            <span>% Devolutivas Gravadas: <b style={{ color: '#4338ca' }}>{kpis.percentDevolutivas}%</b> ({kpis.devolutivasGravadas})</span>
           </div>
         </div>
       </div>
@@ -403,18 +417,17 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
           <strong style={{ fontSize: '0.9rem', color: 'var(--color-primary-dark)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
             🔍 Filtros de Consulta Pedagógica
           </strong>
-          {(searchTerm || tutorFilter || nreFilter || modalidadeFilter || componenteFilter || anoFilter || statusFilter || nivelPlanejamentoFilter || nivelPraticaFilter) && (
+          {(searchTerm || semestreFilter || tutorFilter || nreFilter || modalidadeFilter || componenteFilter || anoFilter || statusFilter) && (
             <button
               onClick={() => {
                 setSearchTerm('');
+                setSemestreFilter('');
                 setTutorFilter('');
                 setNreFilter('');
                 setModalidadeFilter('');
                 setComponenteFilter('');
                 setAnoFilter('');
                 setStatusFilter('');
-                setNivelPlanejamentoFilter('');
-                setNivelPraticaFilter('');
                 setCurrentPage(1);
               }}
               style={{ background: 'none', border: 'none', color: '#e53e3e', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}
@@ -428,30 +441,46 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
           {/* Campo de Busca Texto */}
           <div style={{ gridColumn: 'span 2' }}>
             <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', display: 'block', marginBottom: '0.25rem' }}>
-              Buscar Cursista ou Formador:
+              Buscar Cursista, Formador ou Tema:
             </label>
             <input
               type="text"
-              placeholder="Digite nome ou e-mail..."
+              placeholder="Digite nome, e-mail ou temática..."
               value={searchTerm}
               onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
               style={{ width: '100%', padding: '0.45rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
             />
           </div>
 
-          {/* Filtro por Tutor */}
+          {/* Filtro por Semestre */}
           <div>
             <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', display: 'block', marginBottom: '0.25rem' }}>
-              Tutor Responsável:
+              Semestre:
             </label>
             <select
-              value={tutorFilter}
-              onChange={e => { setTutorFilter(e.target.value); setCurrentPage(1); }}
+              value={semestreFilter}
+              onChange={e => { setSemestreFilter(e.target.value); setCurrentPage(1); }}
               style={{ width: '100%', padding: '0.45rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
             >
-              <option value="">Todos os Tutores ({filterOptions.tutores.length})</option>
-              {filterOptions.tutores.map(t => (
-                <option key={t} value={t}>{t}</option>
+              <option value="">Todos os Semestres</option>
+              <option value="1º Semestre">1º Semestre</option>
+              <option value="2º Semestre">2º Semestre</option>
+            </select>
+          </div>
+
+          {/* Filtro por Ano Formativo */}
+          <div>
+            <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', display: 'block', marginBottom: '0.25rem' }}>
+              Ano Formativo:
+            </label>
+            <select
+              value={anoFilter}
+              onChange={e => { setAnoFilter(e.target.value); setCurrentPage(1); }}
+              style={{ width: '100%', padding: '0.45rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+            >
+              <option value="">Todos os Anos</option>
+              {filterOptions.anos.map(a => (
+                <option key={a} value={a}>{a}</option>
               ))}
             </select>
           </div>
@@ -473,27 +502,27 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
             </select>
           </div>
 
-          {/* Filtro por Ano Formativo */}
+          {/* Filtro por Componente Curricular */}
           <div>
             <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', display: 'block', marginBottom: '0.25rem' }}>
-              Ano Formativo:
+              Componente Curricular:
             </label>
             <select
-              value={anoFilter}
-              onChange={e => { setAnoFilter(e.target.value); setCurrentPage(1); }}
+              value={componenteFilter}
+              onChange={e => { setComponenteFilter(e.target.value); setCurrentPage(1); }}
               style={{ width: '100%', padding: '0.45rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
             >
-              <option value="">Todos os Anos</option>
-              {filterOptions.anos.map(a => (
-                <option key={a} value={a}>{a}</option>
+              <option value="">Todos os Componentes</option>
+              {filterOptions.componentes.map(c => (
+                <option key={c} value={c}>{c}</option>
               ))}
             </select>
           </div>
 
-          {/* Filtro por Modalidade */}
+          {/* Filtro por Modalidade da Observação */}
           <div>
             <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', display: 'block', marginBottom: '0.25rem' }}>
-              Modalidade:
+              Modalidade da Observação:
             </label>
             <select
               value={modalidadeFilter}
@@ -503,6 +532,23 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
               <option value="">Todas as Modalidades</option>
               {filterOptions.modalidades.map(m => (
                 <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Filtro por Tutor */}
+          <div>
+            <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', display: 'block', marginBottom: '0.25rem' }}>
+              Tutor Responsável:
+            </label>
+            <select
+              value={tutorFilter}
+              onChange={e => { setTutorFilter(e.target.value); setCurrentPage(1); }}
+              style={{ width: '100%', padding: '0.45rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+            >
+              <option value="">Todos os Tutores ({filterOptions.tutores.length})</option>
+              {filterOptions.tutores.map(t => (
+                <option key={t} value={t}>{t}</option>
               ))}
             </select>
           </div>
@@ -522,42 +568,6 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
               <option value="nao_realizada">⚠️ Não Realizada / Justificada</option>
             </select>
           </div>
-
-          {/* Filtro por Nível de Planejamento */}
-          <div>
-            <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', display: 'block', marginBottom: '0.25rem' }}>
-              Nível Planejamento:
-            </label>
-            <select
-              value={nivelPlanejamentoFilter}
-              onChange={e => { setNivelPlanejamentoFilter(e.target.value); setCurrentPage(1); }}
-              style={{ width: '100%', padding: '0.45rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
-            >
-              <option value="">Todos os Níveis (Planejamento)</option>
-              <option value="SUPERA">🌟 SUPERA</option>
-              <option value="ATINGE INTEGRALMENTE">✓ ATINGE INTEGRALMENTE</option>
-              <option value="ATINGE PARCIALMENTE">⚠️ ATINGE PARCIALMENTE</option>
-              <option value="NÃO ATINGE">✕ NÃO ATINGE</option>
-            </select>
-          </div>
-
-          {/* Filtro por Nível de Prática */}
-          <div>
-            <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text-muted)', display: 'block', marginBottom: '0.25rem' }}>
-              Nível Prática:
-            </label>
-            <select
-              value={nivelPraticaFilter}
-              onChange={e => { setNivelPraticaFilter(e.target.value); setCurrentPage(1); }}
-              style={{ width: '100%', padding: '0.45rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
-            >
-              <option value="">Todos os Níveis (Prática)</option>
-              <option value="SUPERA">🌟 SUPERA</option>
-              <option value="ATINGE INTEGRALMENTE">✓ ATINGE INTEGRALMENTE</option>
-              <option value="ATINGE PARCIALMENTE">⚠️ ATINGE PARCIALMENTE</option>
-              <option value="NÃO ATINGE">✕ NÃO ATINGE</option>
-            </select>
-          </div>
         </div>
       </div>
 
@@ -566,24 +576,26 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
         <span>💡</span> <i>Clique em qualquer linha da tabela para abrir a análise pedagógica completa e os feedbacks em modal.</i>
       </div>
 
-      {/* Tabela de Observações (Sem coluna Ações, clique direto na linha) */}
+      {/* Tabela de Observações com Temática e Data do Formulário */}
       <div className="table-responsive glass-panel" style={{ padding: '0.5rem', marginBottom: '1rem' }}>
         <table className="custom-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
-              <th style={{ minWidth: '190px' }}>Cursista</th>
-              <th>Ano / NRE</th>
+              <th style={{ minWidth: '180px' }}>Cursista</th>
+              <th>Ano / Semestre</th>
               <th>Componente</th>
+              <th>Temática & Referência</th>
               <th>Formador / Tutor</th>
               <th>Data Prática</th>
+              <th>Data Formulário</th>
               <th>Status / Feedback</th>
-              <th style={{ minWidth: '180px' }}>Níveis Avaliados</th>
+              <th style={{ minWidth: '170px' }}>Níveis Avaliados</th>
             </tr>
           </thead>
           <tbody>
             {paginatedObservacoes.length === 0 ? (
               <tr>
-                <td colSpan="7" style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--color-text-muted)' }}>
+                <td colSpan="9" style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--color-text-muted)' }}>
                   Nenhuma observação encontrada com os filtros selecionados.
                 </td>
               </tr>
@@ -611,7 +623,10 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
                       <span className="logo-badge" style={{ backgroundColor: '#e2e8f0', color: '#1e293b', fontSize: '0.7rem' }}>
                         {obs.ano_formativo || '1º ANO'}
                       </span>
-                      <div style={{ fontSize: '0.78rem', marginTop: '0.2rem', color: 'var(--color-text-main)' }}>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--color-accent-blue)', fontWeight: 600, marginTop: '0.2rem' }}>
+                        {obs.semestre}
+                      </div>
+                      <div style={{ fontSize: '0.75rem', marginTop: '0.1rem', color: 'var(--color-text-muted)' }}>
                         {obs.nre_exe}
                       </div>
                     </td>
@@ -622,6 +637,17 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
                       </div>
                       <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
                         {obs.modalidade}
+                      </div>
+                    </td>
+
+                    {/* Temática e Referência da Observação */}
+                    <td style={{ maxWidth: '220px' }}>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-primary-dark)', lineHeight: '1.25' }}>
+                        {obs.tema ? (
+                          <span>🎯 {obs.tema}</span>
+                        ) : (
+                          <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>Não especificado</span>
+                        )}
                       </div>
                     </td>
 
@@ -645,6 +671,13 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
                       )}
                     </td>
 
+                    {/* Data/Carimbo de preenchimento do formulário */}
+                    <td>
+                      <div style={{ fontSize: '0.78rem', color: 'var(--color-text-main)', fontWeight: 600 }}>
+                        {obs.carimbo || obs.data_observacao || '—'}
+                      </div>
+                    </td>
+
                     <td>
                       <span className={`status-pill ${isRealizada ? 'status-active' : 'status-pending'}`} style={{ fontSize: '0.7rem' }}>
                         {isRealizada ? '✓ Realizada' : '⚠️ Não Realizada'}
@@ -659,13 +692,13 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
                     <td>
                       {isRealizada ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                          {obs.nivel_planejamento && (
-                            <span className={`badge-nivel ${getNivelBadgeClass(obs.nivel_planejamento)}`} style={{ fontSize: '0.68rem', padding: '0.15rem 0.45rem' }}>
+                          {obs.categoria_planejamento && (
+                            <span className={`badge-nivel ${getNivelBadgeClass(obs.categoria_planejamento)}`} style={{ fontSize: '0.68rem', padding: '0.15rem 0.45rem' }}>
                               Plan: {obs.categoria_planejamento}
                             </span>
                           )}
-                          {obs.nivel_pratica && (
-                            <span className={`badge-nivel ${getNivelBadgeClass(obs.nivel_pratica)}`} style={{ fontSize: '0.68rem', padding: '0.15rem 0.45rem' }}>
+                          {obs.categoria_pratica && (
+                            <span className={`badge-nivel ${getNivelBadgeClass(obs.categoria_pratica)}`} style={{ fontSize: '0.68rem', padding: '0.15rem 0.45rem' }}>
                               Prát: {obs.categoria_pratica}
                             </span>
                           )}

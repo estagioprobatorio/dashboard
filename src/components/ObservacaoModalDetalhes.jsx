@@ -15,6 +15,16 @@ export default function ObservacaoModalDetalhes({ observacao, onClose }) {
     return 'badge-neutral';
   };
 
+  const formatNivelLabel = (nivel) => {
+    if (!nivel) return 'NÃO INFORMADO';
+    const t = String(nivel).toUpperCase();
+    if (t.includes('SUPERA') || t.includes('SUPEROU')) return 'SUPERA';
+    if (t.includes('INTEGRAL') || (t.includes('ATENDE') && !t.includes('PARCIAL') && !t.includes('NÃO') && !t.includes('NAO')) || (t.includes('ATINGE') && !t.includes('PARCIAL') && !t.includes('NÃO') && !t.includes('NAO'))) return 'ATINGE INTEGRALMENTE';
+    if (t.includes('PARCIAL')) return 'ATINGE PARCIALMENTE';
+    if (t.includes('NÃO') || t.includes('NAO')) return 'NÃO ATINGE';
+    return nivel;
+  };
+
   const isRealizada = observacao.is_realizada ?? (observacao.observacao_realizada?.toLowerCase().includes('sim'));
 
   return (
@@ -42,7 +52,7 @@ export default function ObservacaoModalDetalhes({ observacao, onClose }) {
           background: '#ffffff',
           borderRadius: '16px',
           width: '100%',
-          maxWidth: '900px',
+          maxWidth: '920px',
           maxHeight: '90vh',
           display: 'flex',
           flexDirection: 'column',
@@ -66,6 +76,11 @@ export default function ObservacaoModalDetalhes({ observacao, onClose }) {
               <span style={{ fontSize: '0.72rem', backgroundColor: 'var(--color-accent-green)', color: '#ffffff', padding: '0.15rem 0.55rem', borderRadius: '4px', textTransform: 'uppercase', fontWeight: 800 }}>
                 {observacao.ano_formativo || 'Formação'}
               </span>
+              {observacao.semestre && (
+                <span style={{ fontSize: '0.72rem', backgroundColor: 'rgba(255,255,255,0.25)', color: '#ffffff', padding: '0.15rem 0.55rem', borderRadius: '4px', fontWeight: 700 }}>
+                  📅 {observacao.semestre}
+                </span>
+              )}
               <span style={{ fontSize: '0.72rem', backgroundColor: isRealizada ? 'rgba(255,255,255,0.2)' : '#fee2e2', color: isRealizada ? '#ffffff' : '#b91c1c', padding: '0.15rem 0.55rem', borderRadius: '4px', fontWeight: 700 }}>
                 {isRealizada ? '✓ Observação Realizada' : '⚠️ Não Realizada'}
               </span>
@@ -79,7 +94,7 @@ export default function ObservacaoModalDetalhes({ observacao, onClose }) {
               {observacao.nome_cursista || 'Cursista'}
             </h2>
             <p style={{ margin: 0, color: 'rgba(255, 255, 255, 0.8)', fontSize: '0.82rem' }}>
-              {observacao.email_cursista} • {observacao.componente || 'Componente'} ({observacao.modalidade || 'Docente'})
+              {observacao.email_cursista} • {observacao.componente || 'Componente'} (Modalidade da Observação: {observacao.modalidade || 'Docente'})
             </p>
           </div>
 
@@ -108,9 +123,21 @@ export default function ObservacaoModalDetalhes({ observacao, onClose }) {
         {/* Modal Body com Rolagem Interna */}
         <div style={{ padding: '1.75rem', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '1.3rem' }}>
           
-          {/* Informações de Vínculo e Datas */}
+          {/* Destaque de Temática & Referência da Observação */}
+          {observacao.tema && (
+            <div style={{ backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '12px', padding: '1rem 1.25rem' }}>
+              <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#1e40af', fontWeight: 800, marginBottom: '0.25rem' }}>
+                🎯 Temática & Referência da Observação Pedagógica
+              </div>
+              <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--color-primary-dark)' }}>
+                {observacao.tema}
+              </div>
+            </div>
+          )}
+
+          {/* Informações de Vínculo, Formulário e Datas */}
           <div style={{ backgroundColor: '#f8fafc', padding: '1rem 1.25rem', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem', fontSize: '0.85rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.85rem', fontSize: '0.85rem' }}>
               <div>
                 <span style={{ color: 'var(--color-text-muted)', display: 'block', fontSize: '0.75rem' }}>👨‍🏫 Formador Responsável:</span>
                 <strong style={{ color: 'var(--color-primary-dark)' }}>{observacao.nome_formador || 'Não informado'}</strong>
@@ -140,13 +167,15 @@ export default function ObservacaoModalDetalhes({ observacao, onClose }) {
                 <span style={{ color: 'var(--color-text-muted)', display: 'block', fontSize: '0.75rem' }}>🗣️ Data do Feedback:</span>
                 <strong>{observacao.data_feedback || 'Não informada'}</strong>
               </div>
-            </div>
-            {observacao.tema && (
-              <div style={{ marginTop: '0.75rem', paddingTop: '0.5rem', borderTop: '1px dashed #cbd5e1', fontSize: '0.85rem' }}>
-                <span style={{ color: 'var(--color-text-muted)' }}>🎯 Tema Avaliado: </span>
-                <strong style={{ color: 'var(--color-primary-mid)' }}>{observacao.tema}</strong>
+              <div>
+                <span style={{ color: 'var(--color-text-muted)', display: 'block', fontSize: '0.75rem' }}>📝 Data/Hora de Preenchimento (Formulário):</span>
+                <strong style={{ color: '#0369a1' }}>{observacao.carimbo || observacao.data_observacao || 'Registrado via sistema'}</strong>
               </div>
-            )}
+              <div>
+                <span style={{ color: 'var(--color-text-muted)', display: 'block', fontSize: '0.75rem' }}>🏷️ Modalidade da Observação:</span>
+                <strong>{observacao.modalidade || 'Docentes'}</strong>
+              </div>
+            </div>
           </div>
 
           {/* Links de Vídeo e Planejamento */}
@@ -203,7 +232,7 @@ export default function ObservacaoModalDetalhes({ observacao, onClose }) {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                   <strong style={{ fontSize: '0.88rem', color: 'var(--color-primary-dark)' }}>📝 Nível do Planejamento</strong>
                   <span className={`badge-nivel ${getNivelBadgeClass(observacao.nivel_planejamento)}`}>
-                    {observacao.nivel_planejamento || 'NÃO ESPECIFICADO'}
+                    {formatNivelLabel(observacao.nivel_planejamento)}
                   </span>
                 </div>
                 <p style={{ fontSize: '0.85rem', color: 'var(--color-text-main)', whiteSpace: 'pre-wrap', lineHeight: '1.5', margin: 0 }}>
@@ -216,7 +245,7 @@ export default function ObservacaoModalDetalhes({ observacao, onClose }) {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                   <strong style={{ fontSize: '0.88rem', color: 'var(--color-primary-dark)' }}>🏫 Nível da Prática em Sala</strong>
                   <span className={`badge-nivel ${getNivelBadgeClass(observacao.nivel_pratica)}`}>
-                    {observacao.nivel_pratica || 'NÃO ESPECIFICADO'}
+                    {formatNivelLabel(observacao.nivel_pratica)}
                   </span>
                 </div>
                 <p style={{ fontSize: '0.85rem', color: 'var(--color-text-main)', whiteSpace: 'pre-wrap', lineHeight: '1.5', margin: 0 }}>

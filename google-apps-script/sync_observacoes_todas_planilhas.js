@@ -352,8 +352,16 @@ function mapRowToObservation(headers, row, sheetName, sheetId, rowNumber, config
 
   let tema = getVal(["tema relacionado à observação", "tema relacionado", "tema"]);
 
+  // Identificar carimbo de data/hora original do preenchimento do formulário
+  let carimbo = getVal(["carimbo de data/hora", "carimbo", "timestamp"]);
+  if (!carimbo && row[0]) {
+    carimbo = String(row[0]).trim();
+  }
+
   return {
     id_origem: idOrigem,
+    carimbo: carimbo || null,
+    semestre: config.semestrePadrao,
     email_cursista: emailCursista,
     nome_cursista: nomeCursista || "",
     email_formador: emailFormador || null,
