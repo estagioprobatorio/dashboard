@@ -14,6 +14,10 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
   const [anoFilter, setAnoFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState(''); // 'realizada', 'nao_realizada'
 
+  // Ordenação de colunas
+  const [sortField, setSortField] = useState('cursista');
+  const [sortDirection, setSortDirection] = useState('asc'); // 'asc' ou 'desc'
+
   // Paginação
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(15);
@@ -204,12 +208,105 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
     };
   }, [filteredObservacoes]);
 
-  // Paginação
-  const totalPages = Math.ceil(filteredObservacoes.length / itemsPerPage) || 1;
+  // Alternância de ordenação por coluna (ascendente / descendente)
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+    setCurrentPage(1);
+  };
+
+  // Ordenação dos registros filtrados
+  const sortedObservacoes = useMemo(() => {
+    if (!sortField) return filteredObservacoes;
+
+    const parseDateToTimestamp = (d) => {
+      if (!d) return 0;
+      if (d instanceof Date) return isNaN(d.getTime()) ? 0 : d.getTime();
+      const str = String(d).trim();
+      if (!str || str === '-' || str === '—') return 0;
+
+      const brMatch = str.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
+      if (brMatch) {
+        const day = parseInt(brMatch[1], 10);
+        const month = parseInt(brMatch[2], 10) - 1;
+        let year = parseInt(brMatch[3], 10);
+        if (year < 100) year += 2000;
+        const hour = brMatch[4] ? parseInt(brMatch[4], 10) : 0;
+        const min = brMatch[5] ? parseInt(brMatch[5], 10) : 0;
+        const sec = brMatch[6] ? parseInt(brMatch[6], 10) : 0;
+        return new Date(year, month, day, hour, min, sec).getTime();
+      }
+
+      const parsed = Date.parse(str);
+      return !isNaN(parsed) ? parsed : 0;
+    };
+
+    return [...filteredObservacoes].sort((a, b) => {
+      let comparison = 0;
+
+      if (sortField === 'data_pratica') {
+        const timeA = parseDateToTimestamp(a.data_pratica || a.data_observacao);
+        const timeB = parseDateToTimestamp(b.data_pratica || b.data_observacao);
+        comparison = timeA - timeB;
+      } else if (sortField === 'data_formulario') {
+        const timeA = parseDateToTimestamp(a.carimbo || a.data_observacao);
+        const timeB = parseDateToTimestamp(b.carimbo || b.data_observacao);
+        comparison = timeA - timeB;
+      } else {
+        let valA = '';
+        let valB = '';
+
+        switch (sortField) {
+          case 'cursista':
+            valA = a.nome_cursista || a.email_cursista || '';
+            valB = b.nome_cursista || b.email_cursista || '';
+            break;
+          case 'ano_semestre':
+            valA = `${a.ano_formativo || ''} ${a.semestre || ''} ${a.nre_exe || ''}`;
+            valB = `${b.ano_formativo || ''} ${b.semestre || ''} ${b.nre_exe || ''}`;
+            break;
+          case 'componente':
+            valA = `${a.componente || ''} ${a.modalidade || ''}`;
+            valB = `${b.componente || ''} ${b.modalidade || ''}`;
+            break;
+          case 'tematica':
+            valA = a.tema || '';
+            valB = b.tema || '';
+            break;
+          case 'formador_tutor':
+            valA = `${a.nome_formador || ''} ${a.tutor_responsavel || ''}`;
+            valB = `${b.nome_formador || ''} ${b.tutor_responsavel || ''}`;
+            break;
+          case 'status':
+            valA = `${a.is_realizada ? 'Realizada' : 'Não Realizada'} ${a.modalidade_feedback || ''}`;
+            valB = `${b.is_realizada ? 'Realizada' : 'Não Realizada'} ${b.modalidade_feedback || ''}`;
+            break;
+          case 'niveis':
+            valA = `${a.categoria_planejamento || ''} ${a.categoria_pratica || ''}`;
+            valB = `${b.categoria_planejamento || ''} ${b.categoria_pratica || ''}`;
+            break;
+          default:
+            valA = a[sortField] || '';
+            valB = b[sortField] || '';
+        }
+
+        comparison = String(valA).localeCompare(String(valB), 'pt-BR', { sensitivity: 'base', numeric: true });
+      }
+
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [filteredObservacoes, sortField, sortDirection]);
+
+  // Paginação sobre os dados ordenados
+  const totalPages = Math.ceil(sortedObservacoes.length / itemsPerPage) || 1;
   const paginatedObservacoes = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
-    return filteredObservacoes.slice(start, start + itemsPerPage);
-  }, [filteredObservacoes, currentPage, itemsPerPage]);
+    return sortedObservacoes.slice(start, start + itemsPerPage);
+  }, [sortedObservacoes, currentPage, itemsPerPage]);
 
   const handlePageChange = (page) => {
     if (page >= 1 && page <= totalPages) {
@@ -229,12 +326,12 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
     return 'badge-neutral';
   };
 
-  // Exportar para CSV
+  // Exportar para CSV (respeitando a ordenação ativa)
   const handleExportCSV = () => {
-    if (filteredObservacoes.length === 0) return;
+    if (sortedObservacoes.length === 0) return;
 
     const headers = ['Semestre', 'Ano Formativo', 'Data Formulário (Carimbo)', 'Cursista', 'E-mail Cursista', 'NRE', 'Componente', 'Modalidade da Observação', 'Temática / Referência', 'Formador', 'Tutor', 'Status', 'Data Prática', 'Data Feedback', 'Feedback', 'Nível Planejamento', 'Nível Prática', 'Link Prática', 'Link PDP', 'Combinados'];
-    const rows = filteredObservacoes.map(o => [
+    const rows = sortedObservacoes.map(o => [
       `"${o.semestre || ''}"`,
       `"${o.ano_formativo || ''}"`,
       `"${formatDatePtBr(o.carimbo, true)}"`,
@@ -266,6 +363,39 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  // Helper para renderizar cabeçalhos de coluna ordenáveis
+  const renderSortableTh = (field, label, style = {}) => {
+    const isActive = sortField === field;
+    return (
+      <th
+        onClick={() => handleSort(field)}
+        className="sortable-th"
+        style={{
+          cursor: 'pointer',
+          userSelect: 'none',
+          backgroundColor: isActive ? 'rgba(0, 45, 92, 0.08)' : undefined,
+          ...style
+        }}
+        title={`Clique para ordenar por ${label} (${isActive && sortDirection === 'asc' ? 'Decrescente Z-A' : 'Crescente A-Z'})`}
+      >
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'space-between', width: '100%' }}>
+          <span>{label}</span>
+          <span 
+            style={{ 
+              fontSize: '0.78rem', 
+              color: isActive ? 'var(--color-accent-blue)' : '#94a3b8', 
+              fontWeight: isActive ? 800 : 400,
+              display: 'inline-flex',
+              alignItems: 'center'
+            }}
+          >
+            {isActive ? (sortDirection === 'asc' ? '▲' : '▼') : '⇅'}
+          </span>
+        </div>
+      </th>
+    );
   };
 
   return (
@@ -580,7 +710,7 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
 
       {/* Dica de usabilidade */}
       <div style={{ marginBottom: '0.6rem', fontSize: '0.8rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-        <span>💡</span> <i>Clique em qualquer linha da tabela para abrir a análise pedagógica completa e os feedbacks em modal.</i>
+        <span>💡</span> <i>Clique no nome de qualquer coluna para ordenar (A-Z ou Z-A). Clique em qualquer linha para abrir a análise pedagógica completa em modal.</i>
       </div>
 
       {/* Tabela de Observações com Temática e Data do Formulário */}
@@ -588,15 +718,15 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
         <table className="custom-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
-              <th style={{ minWidth: '180px' }}>Cursista</th>
-              <th>Ano / Semestre</th>
-              <th>Componente</th>
-              <th>Temática & Referência</th>
-              <th>Formador / Tutor</th>
-              <th>Data Prática</th>
-              <th>Data Formulário</th>
-              <th>Status / Feedback</th>
-              <th style={{ minWidth: '170px' }}>Níveis Avaliados</th>
+              {renderSortableTh('cursista', 'Cursista', { minWidth: '180px' })}
+              {renderSortableTh('ano_semestre', 'Ano / Semestre')}
+              {renderSortableTh('componente', 'Componente')}
+              {renderSortableTh('tematica', 'Temática & Referência')}
+              {renderSortableTh('formador_tutor', 'Formador / Tutor')}
+              {renderSortableTh('data_pratica', 'Data Prática')}
+              {renderSortableTh('data_formulario', 'Data Formulário')}
+              {renderSortableTh('status', 'Status / Feedback')}
+              {renderSortableTh('niveis', 'Níveis Avaliados', { minWidth: '170px' })}
             </tr>
           </thead>
           <tbody>
