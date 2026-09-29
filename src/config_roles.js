@@ -8,10 +8,20 @@
 
 export const DEFAULT_ADMINS = [
   "alexandrebomfim@escola.pr.gov.br",
+  "fernanda.ambonatti@escola.pr.gov.br",
+  "estagioprobatorio@escola.pr.gov.br", // Adicionando placeholder para testes
+  "est.probmatricula@escola.pr.gov.br",
+  "eliane.bruning@escola.pr.gov.br",
+  "miweinertcordeiro@escola.pr.gov.br",
+  "mariangela.iurk@escola.pr.gov.br",
+  "ana.paulados.santos@escola.pr.gov.br",
+  "angelita.jesus@escola.pr.gov.br",
+  "chrystiankrone@escola.pr.gov.br",
   "jorge.dotti@escola.pr.gov.br",
-  "estagioprobatorio@escola.pr.gov.br",
-  "est.probmatricula@escola.pr.gov.br"
+  "pedfor.epap@escola.pr.gov.br",
+  "toky.coelho@escola.pr.gov.br"    // Placeholder geral
 ];
+
 
 export const DEFAULT_TECNICOS = [
 ];
