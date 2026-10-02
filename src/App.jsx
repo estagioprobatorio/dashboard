@@ -498,8 +498,8 @@ export default function App() {
   const filteredObservacoesForView = useMemo(() => {
     if (!user || !effectiveRole) return [];
 
-    // Admins e Técnicos veem todas as observações
-    if (!simulatedRole && (userRole === 'admin' || userRole === 'tecnico')) {
+    // Admins, Técnicos e Tutores veem todas as observações
+    if (!simulatedRole && (userRole === 'admin' || userRole === 'tecnico' || userRole === 'tutor')) {
       return observacoesList;
     }
 
@@ -642,7 +642,7 @@ export default function App() {
       case 'turmas':
         return <ListaTurmas data={filteredRecordsForView} observacoes={filteredObservacoesForView} />;
       case 'admin':
-        return (userRole === 'admin' || userRole === 'tecnico')
+        return (userRole === 'admin' || userRole === 'tecnico' || userRole === 'tutor')
           ? <AdminPanel data={enrichedRecords} onLocalUpdate={handleLocalUpdate} userRole={userRole} /> 
           : <Panorama data={filteredRecordsForView} />;
       default:
@@ -899,8 +899,8 @@ export default function App() {
                 🏫 Lista de Turmas
               </button>
 
-              {/* Aba de Admin: Apenas para Admin Real */}
-              {userRole === 'admin' && !simulatedRole && (
+              {/* Aba de Admin: Para Admin, Técnico e Tutor */}
+              {(userRole === 'admin' || userRole === 'tecnico' || userRole === 'tutor') && !simulatedRole && (
                 <button 
                   className={`tab-btn ${activeTab === 'admin' ? 'active' : ''}`}
                   onClick={() => setActiveTab('admin')}
