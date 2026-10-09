@@ -88,3 +88,46 @@ export function formatDatePtBr(val, includeTime = false) {
 
   return String(val);
 }
+
+/**
+ * Converte qualquer formato de data brasileira (DD/MM/YYYY), ISO (YYYY-MM-DD),
+ * timestamp numérico ou string em um timestamp numérico (milissegundos) confiável para ordenação.
+ */
+export function parseDateToTimestamp(val) {
+  if (!val) return 0;
+  if (val instanceof Date) return isNaN(val.getTime()) ? 0 : val.getTime();
+  if (typeof val === 'number') return val;
+  if (typeof val !== 'string') return 0;
+  
+  const trimmed = val.trim();
+  if (!trimmed || trimmed === '-' || trimmed === '—') return 0;
+
+  // 1. Formato brasileiro: DD/MM/YYYY ou DD/MM/YYYY HH:mm(:ss)
+  const brMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (brMatch) {
+    const day = parseInt(brMatch[1], 10);
+    const month = parseInt(brMatch[2], 10) - 1;
+    let year = parseInt(brMatch[3], 10);
+    if (year < 100) year += 2000;
+    const hh = brMatch[4] ? parseInt(brMatch[4], 10) : 0;
+    const mm = brMatch[5] ? parseInt(brMatch[5], 10) : 0;
+    const ss = brMatch[6] ? parseInt(brMatch[6], 10) : 0;
+    return new Date(year, month, day, hh, mm, ss).getTime();
+  }
+
+  // 2. Formato ISO ou SQL Date: YYYY-MM-DD ou YYYY-MM-DDTHH:mm:ss
+  const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/);
+  if (isoMatch) {
+    const year = parseInt(isoMatch[1], 10);
+    const month = parseInt(isoMatch[2], 10) - 1;
+    const day = parseInt(isoMatch[3], 10);
+    const hh = isoMatch[4] ? parseInt(isoMatch[4], 10) : 0;
+    const mm = isoMatch[5] ? parseInt(isoMatch[5], 10) : 0;
+    const ss = isoMatch[6] ? parseInt(isoMatch[6], 10) : 0;
+    return new Date(year, month, day, hh, mm, ss).getTime();
+  }
+
+  const d = new Date(trimmed);
+  return isNaN(d.getTime()) ? 0 : d.getTime();
+}
+

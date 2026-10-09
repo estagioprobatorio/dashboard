@@ -1,18 +1,20 @@
 import React, { useState, useMemo } from 'react';
 import { exportToCSV, printReportPDF, printEnsalamentoTurmasPDF } from '../utils/exportUtils';
 import ObservacaoModalDetalhes from './ObservacaoModalDetalhes';
+import DossieCursistaModal from './DossieCursistaModal';
 import observacoesFallback from '../observacoes_fallback.json';
 
-export default function ListaTurmas({ data, observacoes = [] }) {
+export default function ListaTurmas({ data, observacoes = [], onNovaObservacao }) {
   // Filtros de seleção e busca
   const [tutorFilter, setTutorFilter] = useState('');
   const [formadorFilter, setFormadorFilter] = useState('');
   const [turmaSearch, setTurmaSearch] = useState('');
 
-  // Modal de Detalhes da Turma e Observação
+  // Modal de Detalhes da Turma, Observação e Dossiê
   const [selectedTurma, setSelectedTurma] = useState(null);
   const [cursistaSearch, setCursistaSearch] = useState('');
   const [selectedObs, setSelectedObs] = useState(null);
+  const [selectedCursistaDossie, setSelectedCursistaDossie] = useState(null);
 
   // Paginação
   const [currentPage, setCurrentPage] = useState(1);
@@ -734,7 +736,7 @@ export default function ListaTurmas({ data, observacoes = [] }) {
                         <th style={{ padding: '0.65rem 0.8rem', width: '110px' }}>Município</th>
                         <th style={{ padding: '0.65rem 0.6rem', textAlign: 'center', width: '105px' }}>Status Obs.</th>
                         <th style={{ padding: '0.65rem 0.6rem', textAlign: 'center', minWidth: '220px' }}>Gravações & Links</th>
-                        <th style={{ padding: '0.65rem 0.6rem', textAlign: 'center', width: '55px' }}>Ver</th>
+                        <th style={{ padding: '0.65rem 0.6rem', textAlign: 'center', width: '110px' }}>Dossiê & Obs</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -755,7 +757,31 @@ export default function ListaTurmas({ data, observacoes = [] }) {
                           return (
                             <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#f8fafc', borderBottom: '1px solid #edf2f7' }}>
                               <td style={{ padding: '0.6rem 0.6rem', fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'center' }}>{idx + 1}</td>
-                              <td style={{ padding: '0.6rem 0.8rem', fontWeight: 700, color: 'var(--color-text-main)' }}>{c.nome}</td>
+                              <td style={{ padding: '0.6rem 0.8rem', fontWeight: 700 }}>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedCursistaDossie(c)}
+                                  style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    padding: 0,
+                                    margin: 0,
+                                    font: 'inherit',
+                                    fontWeight: 700,
+                                    color: 'var(--color-primary-dark)',
+                                    cursor: 'pointer',
+                                    textAlign: 'left',
+                                    textDecoration: 'underline',
+                                    textDecorationColor: 'transparent',
+                                    transition: 'all 0.15s ease'
+                                  }}
+                                  onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--color-accent-blue)'; e.currentTarget.style.textDecorationColor = 'var(--color-accent-blue)'; }}
+                                  onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--color-primary-dark)'; e.currentTarget.style.textDecorationColor = 'transparent'; }}
+                                  title={`Clique para abrir o Dossiê Pedagógico de ${c.nome}`}
+                                >
+                                  {c.nome}
+                                </button>
+                              </td>
                               <td style={{ padding: '0.6rem 0.8rem' }}>
                                 {c.email ? (
                                   <a href={`mailto:${c.email}`} style={{ color: 'var(--color-accent-blue)', textDecoration: 'none', wordBreak: 'break-all' }}>
@@ -893,31 +919,34 @@ export default function ListaTurmas({ data, observacoes = [] }) {
                               <td style={{ padding: '0.6rem 0.6rem', textAlign: 'center' }}>
                                 <button
                                   type="button"
-                                  onClick={() => handleOpenObsDetails(c, obs)}
-                                  title={`Ver detalhes da observação de ${c.nome}`}
+                                  onClick={() => setSelectedCursistaDossie(c)}
+                                  title={`Ver Dossiê Pedagógico, Evolução e Observações de ${c.nome}`}
                                   style={{
-                                    background: 'linear-gradient(135deg, rgba(11,60,93,0.1) 0%, rgba(15,107,173,0.15) 100%)',
-                                    border: '1px solid rgba(15,107,173,0.3)',
+                                    background: 'linear-gradient(135deg, #0b3c5d 0%, #0072bc 100%)',
+                                    color: '#ffffff',
+                                    border: 'none',
                                     borderRadius: '6px',
                                     cursor: 'pointer',
-                                    padding: '0.25rem 0.5rem',
-                                    fontSize: '0.9rem',
+                                    padding: '0.3rem 0.55rem',
+                                    fontSize: '0.76rem',
+                                    fontWeight: 700,
                                     lineHeight: 1,
                                     display: 'inline-flex',
                                     alignItems: 'center',
-                                    justifyContent: 'center',
+                                    gap: '0.3rem',
+                                    boxShadow: '0 2px 4px rgba(0,0,0,0.12)',
                                     transition: 'all 0.15s ease'
                                   }}
                                   onMouseEnter={(e) => {
-                                    e.currentTarget.style.transform = 'scale(1.15)';
-                                    e.currentTarget.style.backgroundColor = 'rgba(15,107,173,0.25)';
+                                    e.currentTarget.style.transform = 'translateY(-1px)';
+                                    e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.18)';
                                   }}
                                   onMouseLeave={(e) => {
-                                    e.currentTarget.style.transform = 'scale(1)';
-                                    e.currentTarget.style.backgroundColor = 'rgba(11,60,93,0.1)';
+                                    e.currentTarget.style.transform = 'translateY(0)';
+                                    e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.12)';
                                   }}
                                 >
-                                  👁️
+                                  📊 Dossiê
                                 </button>
                               </td>
                             </tr>
@@ -951,6 +980,17 @@ export default function ListaTurmas({ data, observacoes = [] }) {
         <ObservacaoModalDetalhes
           observacao={selectedObs}
           onClose={() => setSelectedObs(null)}
+        />
+      )}
+
+      {/* Modal de Dossiê Pedagógico Completo do Cursista com Gráficos e Inserção de Observação */}
+      {selectedCursistaDossie && (
+        <DossieCursistaModal
+          cursista={selectedCursistaDossie}
+          turmaInfo={selectedTurma}
+          observacoes={effectiveObservacoes}
+          onClose={() => setSelectedCursistaDossie(null)}
+          onSaveObservacao={onNovaObservacao}
         />
       )}
 

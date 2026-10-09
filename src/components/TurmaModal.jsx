@@ -1,11 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import { exportToCSV, printReportPDF } from '../utils/exportUtils';
 import ObservacaoModalDetalhes from './ObservacaoModalDetalhes';
+import DossieCursistaModal from './DossieCursistaModal';
 import observacoesFallback from '../observacoes_fallback.json';
 
-export default function TurmaModal({ turmaName, data, onClose, observacoes = null }) {
+export default function TurmaModal({ turmaName, data, onClose, observacoes = null, onSaveObservacao = null }) {
   const [cursistaSearch, setCursistaSearch] = useState('');
   const [selectedObs, setSelectedObs] = useState(null);
+  const [selectedCursistaDossie, setSelectedCursistaDossie] = useState(null);
 
   const turmaInfo = useMemo(() => {
     if (!turmaName || !data) return null;
@@ -135,55 +137,8 @@ export default function TurmaModal({ turmaName, data, onClose, observacoes = nul
   }, [turmaInfo, obsMap]);
 
   const handleOpenObs = (cursista) => {
-    const found = getObsForCursista(cursista);
-
-    if (found) {
-      // Enriquecer caso falte tutor/nre
-      const enriched = {
-        ...found,
-        tutor_responsavel: found.tutor_responsavel || turmaInfo?.tutor || 'Não atribuído',
-        nre_tutor: found.nre_tutor || turmaInfo?.nreTutor || '',
-        nre_exe: found.nre_exe || turmaInfo?.nreTutor || '',
-        componente: found.componente || turmaInfo?.componente || '',
-        turma: found.turma || turmaInfo?.turma || '',
-        munic_exe: found.munic_exe || cursista.municipios || ''
-      };
-      setSelectedObs(enriched);
-    } else {
-      // Se ainda não houver observação registrada, criar registro sintético informativo para abrir no modal
-      setSelectedObs({
-        nome_cursista: cursista.nome,
-        email_cursista: cursista.email,
-        cgm: cursista.cgm,
-        munic_exe: cursista.municipios,
-        turma: turmaInfo?.turma || '',
-        componente: turmaInfo?.componente || '',
-        tutor_responsavel: turmaInfo?.tutor || 'Tutor Responsável',
-        nre_tutor: turmaInfo?.nreTutor || '',
-        nre_exe: turmaInfo?.nreTutor || '',
-        observacao_realizada: 'Não realizada / Pendente',
-        is_realizada: false,
-        justificativa_nao_realizada: 'Nenhuma observação ou devolutiva registrada para este cursista até o momento.',
-        pontos_fortes: 'Aguardando agendamento ou envio da observação da prática.',
-        pontos_desenvolver: 'Aguardando devolutiva pedagógica.',
-        feedback_combinados: 'Nenhum plano de ação registrado no momento.',
-        nivel_atingimento: 'PENDENTE'
-      });
-    }
+    setSelectedCursistaDossie(cursista);
   };
-
-  // Quando clica no olho, fecha este e abre o modal de observação
-  if (selectedObs) {
-    return (
-      <ObservacaoModalDetalhes 
-        observacao={selectedObs} 
-        onClose={() => {
-          setSelectedObs(null);
-          if (onClose) onClose();
-        }} 
-      />
-    );
-  }
 
   return (
     <div style={{
@@ -402,7 +357,31 @@ export default function TurmaModal({ turmaName, data, onClose, observacoes = nul
                       return (
                         <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#f8fafc', borderBottom: '1px solid #edf2f7' }}>
                           <td style={{ padding: '0.6rem 0.6rem', fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'center' }}>{idx + 1}</td>
-                          <td style={{ padding: '0.6rem 0.8rem', fontWeight: 700, color: 'var(--color-text-main)' }}>{c.nome}</td>
+                          <td style={{ padding: '0.6rem 0.8rem', fontWeight: 700 }}>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedCursistaDossie(c)}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                padding: 0,
+                                margin: 0,
+                                font: 'inherit',
+                                fontWeight: 700,
+                                color: 'var(--color-primary-dark)',
+                                cursor: 'pointer',
+                                textAlign: 'left',
+                                textDecoration: 'underline',
+                                textDecorationColor: 'transparent',
+                                transition: 'all 0.15s ease'
+                              }}
+                              onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--color-accent-blue)'; e.currentTarget.style.textDecorationColor = 'var(--color-accent-blue)'; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--color-primary-dark)'; e.currentTarget.style.textDecorationColor = 'transparent'; }}
+                              title={`Abrir Dossiê Pedagógico de ${c.nome}`}
+                            >
+                              {c.nome}
+                            </button>
+                          </td>
                           <td style={{ padding: '0.6rem 0.8rem' }}>
                             {c.email ? (
                               <a href={`mailto:${c.email}`} style={{ color: 'var(--color-accent-blue)', textDecoration: 'none', wordBreak: 'break-all' }}>
@@ -541,30 +520,33 @@ export default function TurmaModal({ turmaName, data, onClose, observacoes = nul
                             <button
                               type="button"
                               onClick={() => handleOpenObs(c)}
-                              title={`Abrir observação da prática pedagógica de ${c.nome}`}
+                              title={`Abrir Dossiê Pedagógico, Evolução e Observações de ${c.nome}`}
                               style={{
-                                background: 'linear-gradient(135deg, rgba(11,60,93,0.1) 0%, rgba(15,107,173,0.15) 100%)',
-                                border: '1px solid rgba(15,107,173,0.3)',
+                                background: 'linear-gradient(135deg, #0b3c5d 0%, #0072bc 100%)',
+                                color: '#ffffff',
+                                border: 'none',
                                 borderRadius: '6px',
                                 cursor: 'pointer',
-                                padding: '0.25rem 0.5rem',
-                                fontSize: '0.9rem',
+                                padding: '0.3rem 0.55rem',
+                                fontSize: '0.76rem',
+                                fontWeight: 700,
                                 lineHeight: 1,
                                 display: 'inline-flex',
                                 alignItems: 'center',
-                                justifyContent: 'center',
+                                gap: '0.3rem',
+                                boxShadow: '0 2px 4px rgba(0,0,0,0.12)',
                                 transition: 'all 0.15s ease'
                               }}
                               onMouseEnter={(e) => {
-                                e.currentTarget.style.transform = 'scale(1.15)';
-                                e.currentTarget.style.backgroundColor = 'rgba(15,107,173,0.25)';
+                                e.currentTarget.style.transform = 'translateY(-1px)';
+                                e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.18)';
                               }}
                               onMouseLeave={(e) => {
-                                e.currentTarget.style.transform = 'scale(1)';
-                                e.currentTarget.style.backgroundColor = 'rgba(11,60,93,0.1)';
+                                e.currentTarget.style.transform = 'translateY(0)';
+                                e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.12)';
                               }}
                             >
-                              👁️
+                              📊 Dossiê
                             </button>
                           </td>
                         </tr>
@@ -630,6 +612,17 @@ export default function TurmaModal({ turmaName, data, onClose, observacoes = nul
         </div>
 
       </div>
+
+      {/* Modal de Dossiê Pedagógico Completo */}
+      {selectedCursistaDossie && (
+        <DossieCursistaModal
+          cursista={selectedCursistaDossie}
+          turmaInfo={turmaInfo}
+          observacoes={effectiveObservacoes}
+          onClose={() => setSelectedCursistaDossie(null)}
+          onSaveObservacao={onSaveObservacao}
+        />
+      )}
     </div>
   );
 }

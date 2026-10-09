@@ -19,6 +19,8 @@ import AmbienteCursista from './components/AmbienteCursista';
 import ObservacaoPratica from './components/ObservacaoPratica';
 import ObservacoesOverview from './components/ObservacoesOverview';
 
+import { salvarObservacaoIntegrada, getObservacoesLocaisNovas } from './utils/observacoesSyncService';
+
 // Importando dados iniciais locais
 import fallbackData from './data_fallback.json';
 import tutoresFallback from './tutores_fallback.json';
@@ -28,7 +30,10 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('panorama');
   const [records, setRecords] = useState(fallbackData);
   const [tutoresList, setTutoresList] = useState(tutoresFallback);
-  const [observacoesList, setObservacoesList] = useState(observacoesFallback);
+  const [observacoesList, setObservacoesList] = useState(() => {
+    const locais = getObservacoesLocaisNovas();
+    return [...locais, ...observacoesFallback];
+  });
   const [movimentacoesList, setMovimentacoesList] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [firebaseActive, setFirebaseActive] = useState(false);
@@ -387,6 +392,13 @@ export default function App() {
     });
   };
 
+  // Callback para salvar e refletir nova observação em tempo real
+  const handleNovaObservacao = async (novaObs) => {
+    const salva = await salvarObservacaoIntegrada(novaObs);
+    setObservacoesList(prev => [salva, ...prev]);
+    return salva;
+  };
+
   const [simulatedEmail, setSimulatedEmail] = useState('');
 
   const formadoresExemplo = useMemo(() => {
@@ -631,6 +643,7 @@ export default function App() {
             tutores={tutoresList}
             userRole={effectiveRole}
             userEmail={effectiveEmail}
+            onNovaObservacao={handleNovaObservacao}
           />
         );
       case 'formadores':
@@ -640,7 +653,13 @@ export default function App() {
       case 'tutoria':
         return <DadosTutoria data={filteredRecordsForView} />;
       case 'turmas':
-        return <ListaTurmas data={filteredRecordsForView} observacoes={filteredObservacoesForView} />;
+        return (
+          <ListaTurmas 
+            data={filteredRecordsForView} 
+            observacoes={filteredObservacoesForView} 
+            onNovaObservacao={handleNovaObservacao}
+          />
+        );
       case 'admin':
         return (userRole === 'admin' || userRole === 'tecnico')
           ? <AdminPanel data={enrichedRecords} onLocalUpdate={handleLocalUpdate} userRole={userRole} /> 

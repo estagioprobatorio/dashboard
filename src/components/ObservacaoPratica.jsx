@@ -1,11 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import ObservacaoModalDetalhes from './ObservacaoModalDetalhes';
+import FormularioInserirObservacao from './FormularioInserirObservacao';
 import { normalizeComponente, getSemestre } from './ObservacoesOverview';
 import { formatDatePtBr } from '../utils/dateUtils';
 
-export default function ObservacaoPratica({ observacoes = [], cursistas = [], tutores = [], userRole, userEmail }) {
+export default function ObservacaoPratica({ observacoes = [], cursistas = [], tutores = [], userRole, userEmail, onNovaObservacao }) {
   // Filtros
   const [searchTerm, setSearchTerm] = useState('');
+  const [showFormInserir, setShowFormInserir] = useState(false);
   const [semestreFilter, setSemestreFilter] = useState('');
   const [tutorFilter, setTutorFilter] = useState('');
   const [nreFilter, setNreFilter] = useState('');
@@ -416,13 +418,31 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
           </p>
         </div>
 
-        <button 
-          className="btn-secondary" 
-          onClick={handleExportCSV}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem', padding: '0.5rem 1rem' }}
-        >
-          📥 Exportar Relatório CSV
-        </button>
+        <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <button 
+            className="btn-primary" 
+            onClick={() => setShowFormInserir(true)}
+            style={{ 
+              display: 'inline-flex', 
+              alignItems: 'center', 
+              gap: '0.4rem', 
+              fontSize: '0.82rem', 
+              padding: '0.5rem 1rem',
+              backgroundColor: 'var(--color-accent-green)',
+              borderColor: 'var(--color-accent-green)'
+            }}
+          >
+            ➕ Inserir Observação
+          </button>
+
+          <button 
+            className="btn-secondary" 
+            onClick={handleExportCSV}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem', padding: '0.5rem 1rem' }}
+          >
+            📥 Exportar Relatório CSV
+          </button>
+        </div>
       </div>
 
       {/* Cards de Métricas (KPIs) - Reformulados conforme Documento 23-09 */}
@@ -892,6 +912,19 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
         <ObservacaoModalDetalhes 
           observacao={selectedObs} 
           onClose={() => setSelectedObs(null)} 
+        />
+      )}
+
+      {/* Modal para Inserir Nova Observação da Prática */}
+      {showFormInserir && (
+        <FormularioInserirObservacao
+          onSave={async (novaObs) => {
+            if (onNovaObservacao) {
+              await onNovaObservacao(novaObs);
+            }
+            setShowFormInserir(false);
+          }}
+          onClose={() => setShowFormInserir(false)}
         />
       )}
     </div>

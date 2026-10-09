@@ -706,3 +706,119 @@ function limparTabelaSupabase() {
     Logger.log("DICA: Caso dê erro de permissão RLS, limpe via Supabase Dashboard -> SQL Editor com: TRUNCATE TABLE observacoes_pratica RESTART IDENTITY;");
   }
 }
+
+/**
+ * =========================================================================================
+ * 7. ENDPOINT WEB (doPost): RECEBER OBSERVAÇÃO INSERIDA PELO DASHBOARD
+ * =========================================================================================
+ * Permite que o Dashboard insira uma observação diretamente na planilha correta do Google Sheets
+ * e replique no Supabase em tempo real.
+ * 
+ * Para ativar como Web App:
+ * No editor do Google Apps Script:
+ * 1. Clique em "Implantar" (Deploy) -> "Nova implantação" (New deployment).
+ * 2. Selecione o tipo "Aplicativo da Web" (Web app).
+ * 3. Executar como: "Eu" (seu e-mail).
+ * 4. Quem tem acesso: "Qualquer pessoa" (Anyone).
+ * 5. Copie a URL gerada e configure no .env como VITE_APPS_SCRIPT_URL.
+ */
+function doPost(e) {
+  try {
+    const rawData = e && e.postData && e.postData.contents ? JSON.parse(e.postData.contents) : null;
+    if (!rawData || !rawData.dados) {
+      return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "Dados não fornecidos" }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    const d = rawData.dados;
+    
+    // Identificar a planilha destino conforme ano_formativo e semestre
+    const ano = String(d.ano_formativo || "").toUpperCase();
+    let targetConfig = PLANILHAS_CONFIG.find(p => p.sigla === "1ANO_2SEM"); // Padrão ativo 2026
+
+    if (ano.includes("2") || ano.includes("3")) {
+      targetConfig = PLANILHAS_CONFIG.find(p => p.sigla === "2e3ANO_2SEM") || targetConfig;
+    }
+
+    if (targetConfig) {
+      const ss = SpreadsheetApp.openById(targetConfig.id);
+      const sheet = targetConfig.gid ? getSheetByGid(ss, targetConfig.gid) : ss.getSheets()[0];
+      
+      if (sheet) {
+        // Formatar carimbo
+        const carimbo = d.carimbo || Utilities.formatDate(new Date(), "America/Sao_Paulo", "dd/MM/yyyy HH:mm:ss");
+        
+        // Montar linha de resposta do formulário
+        sheet.appendRow([
+          carimbo,
+          d.email_formador || "",
+          d.nome_formador || "",
+          d.email_cursista || "",
+          d.nome_cursista || "",
+          d.componente || "",
+          d.tema || "",
+          d.observacao_realizada || "Sim",
+          d.data_pratica || "",
+          d.data_observacao || "",
+          d.data_feedback || "",
+          d.modalidade_feedback || "",
+          d.link_gravacao_pratica || "",
+          d.link_planejamento || "",
+          d.link_gravacao_feedback || "",
+          d.nivel_planejamento || "",
+          d.nivel_pratica || "",
+          d.evidencias_planejamento || "",
+          d.evidencias_pratica || "",
+          d.questionamentos_propositivos || "",
+          d.proposicoes_sugestoes || "",
+          d.combinados || "",
+          d.justificativa_nao_realizada || ""
+        ]);
+        Logger.log("Linha anexada com sucesso na planilha " + targetConfig.nome);
+      }
+    }
+
+    // Também replica no Supabase
+    const payloadSupabase = {
+      id_origem: d.id_origem || ("DASH_" + Date.now()),
+      carimbo: d.carimbo || Utilities.formatDate(new Date(), "America/Sao_Paulo", "dd/MM/yyyy HH:mm:ss"),
+      email_cursista: d.email_cursista,
+      nome_cursista: d.nome_cursista,
+      email_formador: d.email_formador,
+      nome_formador: d.nome_formador,
+      ano_formativo: d.ano_formativo,
+      semestre: d.semestre,
+      modalidade: d.modalidade,
+      componente: d.componente,
+      tema: d.tema,
+      observacao_realizada: d.observacao_realizada,
+      is_realizada: Boolean(d.is_realizada),
+      data_pratica: d.data_pratica || null,
+      data_observacao: d.data_observacao || null,
+      data_feedback: d.data_feedback || null,
+      modalidade_feedback: d.modalidade_feedback,
+      link_gravacao_pratica: d.link_gravacao_pratica || null,
+      link_planejamento: d.link_planejamento || null,
+      link_gravacao_feedback: d.link_gravacao_feedback || null,
+      nivel_planejamento: d.nivel_planejamento || null,
+      nivel_pratica: d.nivel_pratica || null,
+      evidencias_planejamento: d.evidencias_planejamento || null,
+      evidencias_pratica: d.evidencias_pratica || null,
+      questionamentos_propositivos: d.questionamentos_propositivos || null,
+      proposicoes_sugestoes: d.proposicoes_sugestoes || null,
+      combinados: d.combinados || null,
+      justificativa_nao_realizada: d.justificativa_nao_realizada || null
+    };
+
+    sendBatchToSupabase([payloadSupabase]);
+
+    return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Observação gravada com sucesso" }))
+      .setMimeType(ContentService.MimeType.JSON);
+
+  } catch (err) {
+    Logger.log("Erro no doPost: " + err);
+    return ContentService.createTextOutput(JSON.stringify({ status: "error", message: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
