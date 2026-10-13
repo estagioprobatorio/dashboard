@@ -19,7 +19,8 @@ export const DEFAULT_ADMINS = [
   "chrystiankrone@escola.pr.gov.br",
   "jorge.dotti@escola.pr.gov.br",
   "pedfor.epap@escola.pr.gov.br",
-  "toky.coelho@escola.pr.gov.br"    // Placeholder geral
+  "toky.coelho@escola.pr.gov.br",
+  "ivatiuk@escola.pr.gov.br"    // Placeholder geral
 ];
 
 
