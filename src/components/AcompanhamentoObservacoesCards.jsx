@@ -1054,7 +1054,22 @@ export default function AcompanhamentoObservacoesCards({
                         <button
                           type="button"
                           onClick={() => {
-                            setCursistaParaNovaObs(item.raw);
+                            const dadosCompletos = {
+                              ...(item.raw || {}),
+                              nome: item.nome,
+                              nome_cursista: item.nome,
+                              email: item.email,
+                              email_cursista: item.email,
+                              cgm: item.cgm,
+                              turma: item.turma,
+                              turmas: item.turma,
+                              componente: item.componente,
+                              ano_formativo: item.raw?.ano_formativo || '1º ANO',
+                              nome_formador: item.formador,
+                              formador: item.formador,
+                              nre: item.nre
+                            };
+                            setCursistaParaNovaObs(dadosCompletos);
                             setShowFormNovaObs(true);
                           }}
                           style={{
@@ -1309,7 +1324,22 @@ export default function AcompanhamentoObservacoesCards({
                     type="button"
                     title="Inserir Nova Observação para este professor"
                     onClick={() => {
-                      setCursistaParaNovaObs(item.raw);
+                      const dadosCompletos = {
+                        ...(item.raw || {}),
+                        nome: item.nome,
+                        nome_cursista: item.nome,
+                        email: item.email,
+                        email_cursista: item.email,
+                        cgm: item.cgm,
+                        turma: item.turma,
+                        turmas: item.turma,
+                        componente: item.componente,
+                        ano_formativo: item.raw?.ano_formativo || '1º ANO',
+                        nome_formador: item.formador,
+                        formador: item.formador,
+                        nre: item.nre
+                      };
+                      setCursistaParaNovaObs(dadosCompletos);
                       setShowFormNovaObs(true);
                     }}
                     style={{
@@ -1488,16 +1518,26 @@ export default function AcompanhamentoObservacoesCards({
       )}
 
       {/* MODAL PARA INSERIR NOVA OBSERVAÇÃO */}
-      {showFormNovaObs && (
+      {showFormNovaObs && cursistaParaNovaObs && (
         <FormularioInserirObservacao
+          cursista={cursistaParaNovaObs}
           cursistaPreSelecionado={cursistaParaNovaObs}
-          turmaInfoPreSelecionada={{
-            turma: cursistaParaNovaObs?.turmas || cursistaParaNovaObs?.turma,
-            formador: cursistaParaNovaObs?.nome_formador || cursistaParaNovaObs?.formador,
-            componente: cursistaParaNovaObs?.componente,
-            anoFormativo: cursistaParaNovaObs?.ano_formativo || '1º ANO'
+          turmaInfo={{
+            turma: cursistaParaNovaObs.turmas || cursistaParaNovaObs.turma,
+            formador: cursistaParaNovaObs.nome_formador || cursistaParaNovaObs.formador,
+            componente: cursistaParaNovaObs.componente,
+            anoFormativo: cursistaParaNovaObs.ano_formativo || '1º ANO'
           }}
-          onClose={() => {
+          turmaInfoPreSelecionada={{
+            turma: cursistaParaNovaObs.turmas || cursistaParaNovaObs.turma,
+            formador: cursistaParaNovaObs.nome_formador || cursistaParaNovaObs.formador,
+            componente: cursistaParaNovaObs.componente,
+            anoFormativo: cursistaParaNovaObs.ano_formativo || '1º ANO'
+          }}
+          onSave={async (novaObs) => {
+            if (onNovaObservacao) {
+              await onNovaObservacao(novaObs);
+            }
             setShowFormNovaObs(false);
             setCursistaParaNovaObs(null);
           }}
@@ -1505,6 +1545,10 @@ export default function AcompanhamentoObservacoesCards({
             if (onNovaObservacao) {
               await onNovaObservacao(novaObs);
             }
+            setShowFormNovaObs(false);
+            setCursistaParaNovaObs(null);
+          }}
+          onClose={() => {
             setShowFormNovaObs(false);
             setCursistaParaNovaObs(null);
           }}

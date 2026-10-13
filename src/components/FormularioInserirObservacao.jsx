@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   TEMATICAS_1ANO, 
   TEMATICAS_2_3_ANO, 
@@ -6,7 +6,19 @@ import {
   ESCALA_BOAS_PRATICAS 
 } from '../data/rubricasData';
 
-export default function FormularioInserirObservacao({ cursista, turmaInfo, onSave, onClose }) {
+export default function FormularioInserirObservacao({ 
+  cursista, 
+  cursistaPreSelecionado, 
+  turmaInfo, 
+  turmaInfoPreSelecionada, 
+  onSave, 
+  onSuccess, 
+  onClose 
+}) {
+  const effectiveCursista = cursista || cursistaPreSelecionado || {};
+  const effectiveTurmaInfo = turmaInfo || turmaInfoPreSelecionada || {};
+  const handleSaveCallback = onSave || onSuccess;
+
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
   const [sucesso, setSucesso] = useState(false);
@@ -16,7 +28,13 @@ export default function FormularioInserirObservacao({ cursista, turmaInfo, onSav
 
   // Determinar ano formativo inicial a partir do cursista ou da turma
   const detectAnoFormativo = () => {
-    const raw = String(cursista?.ano_formativo || turmaInfo?.anoFormativo || '').toUpperCase();
+    const raw = String(
+      effectiveCursista?.ano_formativo || 
+      effectiveCursista?.anoFormativo || 
+      effectiveTurmaInfo?.anoFormativo || 
+      effectiveTurmaInfo?.ano_formativo || 
+      ''
+    ).toUpperCase();
     if (raw.includes('2') || raw.includes('3')) {
       return '2º ANO';
     }
@@ -24,20 +42,25 @@ export default function FormularioInserirObservacao({ cursista, turmaInfo, onSav
   };
 
   const anoCarregado = detectAnoFormativo();
-  const componenteCarregado = cursista?.componente || turmaInfo?.componente || 'Não informado';
-  const semestreCarregado = cursista?.semestre || turmaInfo?.semestre || '2º Semestre';
+  const componenteCarregado = (
+    effectiveCursista?.componente || 
+    effectiveCursista?.componente_conc || 
+    effectiveTurmaInfo?.componente || 
+    'Não informado'
+  );
+  const semestreCarregado = effectiveCursista?.semestre || effectiveTurmaInfo?.semestre || '2º Semestre';
 
   // Form State com valores travados e inteligentes pré-preenchidos
   const [formData, setFormData] = useState({
-    nome_cursista: cursista?.nome || cursista?.nome_cursista || '',
-    email_cursista: (cursista?.email || cursista?.email_cursista || '').trim().toLowerCase(),
-    cgm: cursista?.cgm || '',
-    turma: turmaInfo?.turma || cursista?.turma || '',
+    nome_cursista: effectiveCursista?.nome_cursista || effectiveCursista?.nome || '',
+    email_cursista: (effectiveCursista?.['e-mail'] || effectiveCursista?.email || effectiveCursista?.email_cursista || '').trim().toLowerCase(),
+    cgm: effectiveCursista?.cgm || '',
+    turma: effectiveTurmaInfo?.turma || effectiveTurmaInfo?.turmas || effectiveCursista?.turmas || effectiveCursista?.turma || '',
     componente: componenteCarregado,
-    nome_formador: turmaInfo?.formador || '',
-    email_formador: turmaInfo?.emailFormador || '',
-    tutor_responsavel: turmaInfo?.tutor || '',
-    email_tutor: turmaInfo?.emailTutor || '',
+    nome_formador: effectiveTurmaInfo?.formador || effectiveTurmaInfo?.nome_formador || effectiveCursista?.nome_formador || effectiveCursista?.formador || '',
+    email_formador: effectiveTurmaInfo?.emailFormador || effectiveCursista?.['e-mail_formador'] || effectiveCursista?.email_formador || '',
+    tutor_responsavel: effectiveTurmaInfo?.tutor || effectiveTurmaInfo?.tutor_responsavel || effectiveCursista?.tutor_responsavel || effectiveCursista?.tutor || '',
+    email_tutor: effectiveTurmaInfo?.emailTutor || effectiveCursista?.email_tutor || '',
     ano_formativo: anoCarregado,
     semestre: semestreCarregado,
     modalidade: 'Docentes',
@@ -81,6 +104,25 @@ export default function FormularioInserirObservacao({ cursista, turmaInfo, onSav
     proposicoes_sugestoes: '',
     combinados: ''
   });
+
+  // Sincronizar dados caso o cursista ou turma sejam injetados ou alterados
+  useEffect(() => {
+    if (effectiveCursista && (effectiveCursista.nome || effectiveCursista.nome_cursista || effectiveCursista.email)) {
+      setFormData(prev => ({
+        ...prev,
+        nome_cursista: effectiveCursista.nome_cursista || effectiveCursista.nome || prev.nome_cursista,
+        email_cursista: (effectiveCursista['e-mail'] || effectiveCursista.email || effectiveCursista.email_cursista || prev.email_cursista || '').trim().toLowerCase(),
+        cgm: effectiveCursista.cgm || prev.cgm,
+        turma: effectiveTurmaInfo.turma || effectiveTurmaInfo.turmas || effectiveCursista.turmas || effectiveCursista.turma || prev.turma,
+        componente: effectiveCursista.componente || effectiveCursista.componente_conc || effectiveTurmaInfo.componente || prev.componente,
+        ano_formativo: detectAnoFormativo(),
+        nome_formador: effectiveTurmaInfo.formador || effectiveTurmaInfo.nome_formador || effectiveCursista.nome_formador || effectiveCursista.formador || prev.nome_formador,
+        email_formador: effectiveTurmaInfo.emailFormador || effectiveCursista['e-mail_formador'] || effectiveCursista.email_formador || prev.email_formador,
+        tutor_responsavel: effectiveTurmaInfo.tutor || effectiveTurmaInfo.tutor_responsavel || effectiveCursista.tutor_responsavel || effectiveCursista.tutor || prev.tutor_responsavel,
+        email_tutor: effectiveTurmaInfo.emailTutor || effectiveCursista.email_tutor || prev.email_tutor
+      }));
+    }
+  }, [effectiveCursista, effectiveTurmaInfo]);
 
   const isSegundoOuTerceiro = () => {
     const a = String(formData.ano_formativo || '').toUpperCase();
@@ -235,8 +277,8 @@ export default function FormularioInserirObservacao({ cursista, turmaInfo, onSav
           : 'Nenhuma (Todas as etapas realizadas)'
       };
 
-      if (onSave) {
-        await onSave(payload);
+      if (handleSaveCallback) {
+        await handleSaveCallback(payload);
       }
 
       setSucesso(true);
