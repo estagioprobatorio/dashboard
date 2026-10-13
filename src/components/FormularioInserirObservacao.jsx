@@ -44,8 +44,9 @@ export default function FormularioInserirObservacao({ cursista, turmaInfo, onSav
     modalidade_feedback: 'Diálogo formativo',
     motivo_devolutiva: '',
     
-    // Data unificada conforme solicitação: Data da Implementação/Observação da prática
-    data_implementacao_observacao: new Date().toISOString().split('T')[0],
+    // Datas separadas da prática pedagógica
+    data_implementacao: new Date().toISOString().split('T')[0],
+    data_observacao: new Date().toISOString().split('T')[0],
     data_feedback: new Date().toISOString().split('T')[0],
     
     // Status da Observação
@@ -155,8 +156,12 @@ export default function FormularioInserirObservacao({ cursista, turmaInfo, onSav
           setErro('Para cursistas do 1º Ano, o "Link do Documento de Planejamento de Aula" é obrigatório.');
           return;
         }
-        if (!formData.data_implementacao_observacao) {
-          setErro('Por favor, informe a Data da Implementação/Observação da prática.');
+        if (!formData.data_implementacao) {
+          setErro('Por favor, informe a Data da Implementação da prática.');
+          return;
+        }
+        if (!formData.data_observacao) {
+          setErro('Por favor, informe a Data da Observação da prática.');
           return;
         }
         if (!formData.nivel_planejamento || !formData.nivel_pratica) {
@@ -205,10 +210,11 @@ export default function FormularioInserirObservacao({ cursista, turmaInfo, onSav
         carimbo: carimboFormatado,
         created_at: now.toISOString(),
         
-        // Data unificada alimentando tanto data_pratica quanto data_observacao
-        data_pratica: formData.data_implementacao_observacao,
-        data_implementacao: formData.data_implementacao_observacao,
-        data_observacao: formData.data_implementacao_observacao,
+        // Datas separadas da prática e retrocompatibilidade
+        data_pratica: formData.data_observacao || formData.data_implementacao,
+        data_implementacao: formData.data_implementacao,
+        data_observacao: formData.data_observacao,
+        data_feedback: formData.data_feedback,
         
         // Universal Backwards-compatible
         tema: temaConsolidado,
@@ -588,26 +594,43 @@ export default function FormularioInserirObservacao({ cursista, turmaInfo, onSav
               </div>
             </div>
 
-            {/* SEÇÃO 2: DATAS UNIFICADAS E MODALIDADE DO FEEDBACK (GRID PERFEITAMENTE ALINHADO) */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem', alignItems: 'start' }}>
-              {/* CAMPO 1: DATA DA IMPLEMENTAÇÃO/OBSERVAÇÃO DA PRÁTICA (UNIFICADA) */}
+            {/* SEÇÃO 2: DATAS (IMPLEMENTAÇÃO, OBSERVAÇÃO, FEEDBACK) E MODALIDADE DO FEEDBACK */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem', alignItems: 'start' }}>
+              {/* CAMPO 1: DATA DA IMPLEMENTAÇÃO DA PRÁTICA */}
               <div>
                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 800, color: '#1e293b', marginBottom: '0.4rem' }}>
-                  📅 Data da Implementação/Observação da Prática *
+                  📅 Data da Implementação da Prática *
                 </label>
                 <input
                   type="date"
                   required
-                  value={formData.data_implementacao_observacao}
-                  onChange={e => handleChange('data_implementacao_observacao', e.target.value)}
+                  value={formData.data_implementacao}
+                  onChange={e => handleChange('data_implementacao', e.target.value)}
                   style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.88rem', backgroundColor: '#ffffff' }}
                 />
                 <span style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.25rem', display: 'block' }}>
-                  Data em que a aula/prática docente foi executada e observada.
+                  Data em que a aula/prática foi ministrada pelo cursista em sala.
                 </span>
               </div>
 
-              {/* CAMPO 2: DATA DO FEEDBACK */}
+              {/* CAMPO 2: DATA DA OBSERVAÇÃO DA PRÁTICA */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 800, color: '#1e293b', marginBottom: '0.4rem' }}>
+                  📅 Data da Observação da Prática *
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={formData.data_observacao}
+                  onChange={e => handleChange('data_observacao', e.target.value)}
+                  style={{ width: '100%', padding: '0.65rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.88rem', backgroundColor: '#ffffff' }}
+                />
+                <span style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.25rem', display: 'block' }}>
+                  Data em que o formador assistiu à gravação ou aula ao vivo.
+                </span>
+              </div>
+
+              {/* CAMPO 3: DATA DO FEEDBACK */}
               <div>
                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 800, color: '#1e293b', marginBottom: '0.4rem' }}>
                   📅 Data do Feedback (Diálogo / Devolutiva) *
@@ -624,7 +647,7 @@ export default function FormularioInserirObservacao({ cursista, turmaInfo, onSav
                 </span>
               </div>
 
-              {/* CAMPO 3: MODALIDADE DO FEEDBACK */}
+              {/* CAMPO 4: MODALIDADE DO FEEDBACK */}
               <div>
                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 800, color: '#1e293b', marginBottom: '0.4rem' }}>
                   🗣️ Modalidade do Feedback Formativo *
@@ -636,7 +659,6 @@ export default function FormularioInserirObservacao({ cursista, turmaInfo, onSav
                 >
                   <option value="Diálogo formativo">Diálogo formativo (Online síncrono Meet)</option>
                   <option value="Devolutiva gravada">Devolutiva gravada (Assíncrona Vídeo/Áudio)</option>
-                  <option value="Encontro formativo">Encontro formativo presencial</option>
                 </select>
                 <span style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.25rem', display: 'block' }}>
                   Selecione o formato pelo qual a devolutiva pedagógica foi conduzida.

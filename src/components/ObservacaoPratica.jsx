@@ -420,22 +420,6 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
 
         <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
           <button 
-            className="btn-primary" 
-            onClick={() => setShowFormInserir(true)}
-            style={{ 
-              display: 'inline-flex', 
-              alignItems: 'center', 
-              gap: '0.4rem', 
-              fontSize: '0.82rem', 
-              padding: '0.5rem 1rem',
-              backgroundColor: 'var(--color-accent-green)',
-              borderColor: 'var(--color-accent-green)'
-            }}
-          >
-            ➕ Inserir Observação
-          </button>
-
-          <button 
             className="btn-secondary" 
             onClick={handleExportCSV}
             style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem', padding: '0.5rem 1rem' }}

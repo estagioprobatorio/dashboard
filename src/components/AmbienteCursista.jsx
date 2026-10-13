@@ -1,17 +1,21 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import FormularioRemanejamento from './FormularioRemanejamento';
 import TurmaModal from './TurmaModal';
-import CardVidaFuncional from './CardVidaFuncional';
 import ObservacaoModalDetalhes from './ObservacaoModalDetalhes';
+import DossieCursistaModal from './DossieCursistaModal';
 import { formatDatePtBr } from '../utils/dateUtils';
+import { getObservacoes2024PorCursista } from '../utils/observacoes2024Service';
+import { gerarDiagnosticoCursistaIA, parseScore, scoreLabel } from '../utils/aiPedagogicalService';
 
 export default function AmbienteCursista({ userEmail, records, observacoes = [], movimentacoes = [], onNovaMovimentacao, subTab = 'turma' }) {
   const [activeSubTab, setActiveSubTab] = useState(subTab);
   const [showModalForm, setShowModalForm] = useState(false);
   const [selectedTurma, setSelectedTurma] = useState(null);
   const [selectedObs, setSelectedObs] = useState(null);
+  const [showDossieModal, setShowDossieModal] = useState(false);
   const [classmateSearch, setClassmateSearch] = useState('');
   const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [obs2024, setObs2024] = useState([]);
 
   useEffect(() => {
     setActiveSubTab(subTab);
@@ -49,12 +53,78 @@ export default function AmbienteCursista({ userEmail, records, observacoes = [],
     }) || records[0]; // Fallback para dev/testes se necessário
   }, [userEmail, records]);
 
-  // 1.1 Identificar as Observações da Prática do Cursista Logado
+  // Carregar histórico de 2024 do cursista
+  useEffect(() => {
+    let isMounted = true;
+    if (cursistaRecord) {
+      getObservacoes2024PorCursista(cursistaRecord).then(res => {
+        if (isMounted) setObs2024(res);
+      }).catch(err => {
+        console.warn('Erro ao carregar histórico 2024 do cursista:', err);
+      });
+    }
+    return () => { isMounted = false; };
+  }, [cursistaRecord]);
+
+  // 1.1 Identificar as Observações da Prática do Cursista Logado (2026 + 2024)
   const minhasObservacoes = useMemo(() => {
-    if (!cursistaRecord || !observacoes) return [];
+    if (!cursistaRecord) return [];
     const email = (cursistaRecord['e-mail'] || cursistaRecord.email || cursistaRecord.email_cursista || userEmail || '').trim().toLowerCase();
-    return observacoes.filter(obs => (obs.email_cursista || '').trim().toLowerCase() === email);
-  }, [cursistaRecord, observacoes, userEmail]);
+    const nome = (cursistaRecord.nome_cursista || cursistaRecord.nome || '').trim().toLowerCase();
+
+    const obsAtuais = (observacoes || []).filter(obs => {
+      const oEmail = (obs.email_cursista || '').trim().toLowerCase();
+      if (oEmail && email && oEmail === email) return true;
+      const oNome = (obs.nome_cursista || '').trim().toLowerCase();
+      if (oNome && nome && oNome === nome) return true;
+      return false;
+    });
+
+    const todas = [...obsAtuais, ...obs2024];
+    return todas.sort((a, b) => {
+      const tA = (a.data_feedback || a.data_pratica || a.data_observacao || a.carimbo || a.created_at || '');
+      const tB = (b.data_feedback || b.data_pratica || b.data_observacao || b.carimbo || b.created_at || '');
+      return tB.localeCompare(tA);
+    });
+  }, [cursistaRecord, observacoes, userEmail, obs2024]);
+
+  // Dados cronológicos para o gráfico de evolução pedagógica
+  const dadosGrafico = useMemo(() => {
+    const ordenadas = [...minhasObservacoes].sort((a, b) => {
+      const tA = (a.data_feedback || a.data_pratica || a.data_observacao || a.carimbo || a.created_at || '');
+      const tB = (b.data_feedback || b.data_pratica || b.data_observacao || b.carimbo || b.created_at || '');
+      return tA.localeCompare(tB); // ordem crescente
+    });
+
+    return ordenadas.map((obs, idx) => {
+      const scorePratica = parseScore(obs.nivel_pratica || obs.criterio2_nivel);
+      const scorePlan = parseScore(obs.nivel_planejamento || obs.criterio1_nivel);
+      const dataLabel = formatDatePtBr(obs.data_pratica || obs.data_observacao || obs.data_feedback || obs.created_at);
+      const anoLabel = obs.ano_formativo ? obs.ano_formativo.split(' ')[0] : '1º';
+
+      return {
+        label: `Obs ${idx + 1} (${anoLabel})`,
+        subLabel: dataLabel || `Etapa ${idx + 1}`,
+        scorePratica,
+        scorePlan,
+        raw: obs
+      };
+    });
+  }, [minhasObservacoes]);
+
+  // Diagnóstico pedagógico gerado por IA
+  const diagnosticoIA = useMemo(() => {
+    if (!cursistaRecord) return null;
+    return gerarDiagnosticoCursistaIA({
+      cursista: cursistaRecord,
+      observacoes: minhasObservacoes,
+      turmaInfo: {
+        turma: cursistaRecord.turmas,
+        componente: cursistaRecord.componente || cursistaRecord.componente_conc,
+        formador: cursistaRecord.nome_formador
+      }
+    });
+  }, [cursistaRecord, minhasObservacoes]);
 
 
   // 2. Colegas da mesma turma
@@ -208,26 +278,6 @@ export default function AmbienteCursista({ userEmail, records, observacoes = [],
         </button>
 
         <button
-          onClick={() => setActiveSubTab('card')}
-          style={{
-            flex: 1,
-            minWidth: '160px',
-            padding: '0.6rem 1rem',
-            borderRadius: '8px',
-            border: 'none',
-            fontWeight: 700,
-            fontSize: '0.88rem',
-            cursor: 'pointer',
-            backgroundColor: (activeSubTab === 'card' || activeSubTab === 'vida_funcional') ? '#c59b27' : 'transparent',
-            color: (activeSubTab === 'card' || activeSubTab === 'vida_funcional') ? '#091a2e' : 'var(--color-text-muted)',
-            boxShadow: (activeSubTab === 'card' || activeSubTab === 'vida_funcional') ? '0 2px 8px rgba(197, 155, 39, 0.4)' : 'none',
-            transition: 'all 0.2s ease'
-          }}
-        >
-          🎴 Meu Card Functional
-        </button>
-
-        <button
           onClick={() => setActiveSubTab('observacoes')}
           style={{
             flex: 1,
@@ -243,7 +293,7 @@ export default function AmbienteCursista({ userEmail, records, observacoes = [],
             transition: 'all 0.2s ease'
           }}
         >
-          👁️ Observações & Feedbacks ({minhasObservacoes.length})
+          📈 Minha Evolução & Dossiê ({minhasObservacoes.length})
         </button>
 
         <button
@@ -262,14 +312,9 @@ export default function AmbienteCursista({ userEmail, records, observacoes = [],
             transition: 'all 0.2s ease'
           }}
         >
-          📝 Suas Solicitações
+          📝 Suas Solicitações & Movimentações
         </button>
       </div>
-
-      {/* BLOCO 0: CARD GAMIFICADO DE VIDA FUNCIONAL */}
-      {(activeSubTab === 'card' || activeSubTab === 'vida_funcional') && (
-        <CardVidaFuncional cursista={cursistaRecord} />
-      )}
 
       {/* BLOCO 1: MINHA TURMA */}
       {(activeSubTab === 'turma' || activeSubTab === 'geral') && (
@@ -550,15 +595,190 @@ export default function AmbienteCursista({ userEmail, records, observacoes = [],
       {/* BLOCO 3: MINHAS OBSERVAÇÕES E COMBINADOS */}
       {activeSubTab === 'observacoes' && (
         <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          {/* Banner de Introdução */}
-          <div className="glass-panel" style={{ padding: '1.25rem', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px' }}>
-            <h3 style={{ color: '#15803d', fontSize: '1.1rem', margin: '0 0 0.4rem 0', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              👁️ Seu Percurso Formativo de Observação da Prática
-            </h3>
-            <p style={{ margin: 0, fontSize: '0.85rem', color: '#166534', lineHeight: '1.5' }}>
-              Aqui você acompanha as observações realizadas pelo seu formador, os diálogos formativos, o acesso rápido às gravações e os combinados pedagógicos firmados para o aperfeiçoamento contínuo da sua docência.
-            </p>
+          {/* Banner de Introdução com Botão de Dossiê */}
+          <div className="glass-panel" style={{ 
+            padding: '1.25rem 1.5rem', 
+            backgroundColor: '#f0fdf4', 
+            border: '1px solid #bbf7d0', 
+            borderRadius: '14px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '1rem'
+          }}>
+            <div style={{ flex: '1 1 350px' }}>
+              <h3 style={{ color: '#15803d', fontSize: '1.15rem', margin: '0 0 0.4rem 0', display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 800 }}>
+                👁️ Seu Percurso Formativo de Observação da Prática
+              </h3>
+              <p style={{ margin: 0, fontSize: '0.85rem', color: '#166534', lineHeight: '1.5' }}>
+                Aqui você acompanha as observações realizadas pelo seu formador, os diálogos formativos, o acesso rápido às gravações e os combinados pedagógicos firmados para o aperfeiçoamento contínuo da sua docência.
+              </p>
+            </div>
+            <div>
+              <button
+                type="button"
+                onClick={() => setShowDossieModal(true)}
+                style={{
+                  background: 'linear-gradient(135deg, #00984a 0%, #15803d 100%)',
+                  color: '#ffffff',
+                  border: 'none',
+                  padding: '0.75rem 1.35rem',
+                  borderRadius: '10px',
+                  fontWeight: 800,
+                  fontSize: '0.9rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  boxShadow: '0 4px 12px rgba(0, 152, 74, 0.25)',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
+                onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+              >
+                <span>📈</span> Ver Meu Dossiê Completo & Gráficos IA
+              </button>
+            </div>
           </div>
+
+          {/* PAINEL DE EVOLUÇÃO PEDAGÓGICA & DIAGNÓSTICO IA INLINE */}
+          {dadosGrafico.length > 0 && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.25rem' }}>
+              
+              {/* Card 1: Gráfico Curva de Evolução */}
+              <div className="glass-panel" style={{ background: '#ffffff', padding: '1.25rem', borderRadius: '14px', border: '1px solid var(--color-card-border)', boxShadow: 'var(--shadow-sm)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: 'var(--color-primary-dark)' }}>
+                      📈 Sua Curva de Evolução Pedagógica
+                    </h4>
+                    <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                      Prática Docente (Verde) e Planejamento (Azul)
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.75rem', fontWeight: 700 }}>
+                    <span style={{ color: '#00984a' }}>● Prática</span>
+                    <span style={{ color: '#0072bc' }}>■ Planejamento</span>
+                  </div>
+                </div>
+
+                {/* SVG do Gráfico */}
+                <div style={{ width: '100%', overflowX: 'auto' }}>
+                  {(() => {
+                    const count = dadosGrafico.length;
+                    const stepX = count > 6 ? 70 : (count > 1 ? (480 / (count - 1)) : 240);
+                    const startX = 65;
+                    const svgWidth = count > 6 ? Math.max(550, startX + (count - 1) * stepX + 50) : 550;
+                    const svgHeight = 180;
+
+                    const getCoords = (score, idx) => {
+                      if (!score) return null;
+                      const x = count === 1 ? 275 : startX + idx * stepX;
+                      const y = 25 + (4 - score) * 32;
+                      return { x, y };
+                    };
+
+                    const ptsPratica = dadosGrafico.map((d, i) => {
+                      const c = getCoords(d.scorePratica, i);
+                      return c ? { ...c, score: d.scorePratica } : null;
+                    }).filter(Boolean);
+
+                    const ptsPlan = dadosGrafico.map((d, i) => {
+                      const c = getCoords(d.scorePlan, i);
+                      return c ? { ...c, score: d.scorePlan } : null;
+                    }).filter(Boolean);
+
+                    const pathPratica = ptsPratica.length > 1 ? ptsPratica.reduce((acc, p, i) => i === 0 ? `M ${p.x} ${p.y}` : `${acc} L ${p.x} ${p.y}`, '') : '';
+                    const pathPlan = ptsPlan.length > 1 ? ptsPlan.reduce((acc, p, i) => i === 0 ? `M ${p.x} ${p.y}` : `${acc} L ${p.x} ${p.y}`, '') : '';
+
+                    return (
+                      <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} style={{ width: '100%', height: 'auto', minWidth: '400px' }}>
+                        {[4, 3, 2, 1].map(score => {
+                          const y = 25 + (4 - score) * 32;
+                          return (
+                            <g key={score}>
+                              <line x1="50" y1={y} x2={svgWidth - 20} y2={y} stroke="#f1f5f9" strokeWidth="1" strokeDasharray="3 3" />
+                              <text x="45" y={y + 3} textAnchor="end" fontSize="9.5" fontWeight="700" fill="#94a3b8">N{score}</text>
+                            </g>
+                          );
+                        })}
+                        {pathPratica && <path d={pathPratica} fill="none" stroke="#00984a" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />}
+                        {pathPlan && <path d={pathPlan} fill="none" stroke="#0072bc" strokeWidth="2.5" strokeDasharray="4 3" strokeLinecap="round" strokeLinejoin="round" />}
+                        {ptsPratica.map((p, i) => (
+                          <g key={`pr-${i}`}>
+                            <circle cx={p.x} cy={p.y} r="5" fill="#00984a" stroke="#fff" strokeWidth="2" />
+                            <text x={p.x} y={p.y - 8} textAnchor="middle" fontSize="10" fontWeight="800" fill="#00984a">{p.score}</text>
+                          </g>
+                        ))}
+                        {ptsPlan.map((p, i) => (
+                          <g key={`pl-${i}`}>
+                            <rect x={p.x - 4} y={p.y - 4} width="8" height="8" fill="#0072bc" stroke="#fff" strokeWidth="1.5" rx="1.5" />
+                            <text x={p.x} y={p.y + 15} textAnchor="middle" fontSize="9" fontWeight="700" fill="#0072bc">{p.score}</text>
+                          </g>
+                        ))}
+                        {dadosGrafico.map((d, i) => {
+                          const x = count === 1 ? 275 : startX + i * stepX;
+                          return (
+                            <g key={`l-${i}`}>
+                              <text x={x} y="145" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#1e293b">{d.label}</text>
+                              <text x={x} y="158" textAnchor="middle" fontSize="8.5" fill="#64748b">{d.subLabel}</text>
+                            </g>
+                          );
+                        })}
+                      </svg>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              {/* Card 2: Diagnóstico Pedagógico IA */}
+              {diagnosticoIA && (
+                <div className="glass-panel" style={{ background: '#ffffff', padding: '1.25rem', borderRadius: '14px', border: '1px solid var(--color-card-border)', borderTop: '4px solid #0072bc', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ fontSize: '1.2rem' }}>✨</span>
+                    <div>
+                      <h4 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: 'var(--color-primary-dark)' }}>
+                        Síntese Pedagógica por IA
+                      </h4>
+                      <span style={{ fontSize: '0.72rem', color: '#64748b' }}>Avaliação formativa personalizada</span>
+                    </div>
+                  </div>
+
+                  <p style={{ margin: 0, fontSize: '0.82rem', color: '#334155', lineHeight: '1.5', backgroundColor: '#f8fafc', padding: '0.75rem', borderRadius: '8px', borderLeft: '3px solid #0072bc' }}>
+                    {diagnosticoIA.sintese}
+                  </p>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
+                    {/* Pontos Fortes */}
+                    <div style={{ backgroundColor: '#f0fdf4', padding: '0.75rem', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#15803d', display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.4rem' }}>
+                        <span>🌟</span> Pontos Fortes
+                      </span>
+                      <ul style={{ margin: 0, paddingLeft: '1.1rem', fontSize: '0.76rem', color: '#166534', lineHeight: '1.4' }}>
+                        {diagnosticoIA.pontosFortes.map((pf, idx) => (
+                          <li key={idx} style={{ marginBottom: '0.25rem' }}>{pf}</li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    {/* Pontos de Atenção */}
+                    <div style={{ backgroundColor: '#fffbeb', padding: '0.75rem', borderRadius: '8px', border: '1px solid #fef3c7' }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#b45309', display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.4rem' }}>
+                        <span>🎯</span> Oportunidades de Aperfeiçoamento
+                      </span>
+                      <ul style={{ margin: 0, paddingLeft: '1.1rem', fontSize: '0.76rem', color: '#92400e', lineHeight: '1.4' }}>
+                        {diagnosticoIA.pontosAtencao.map((pa, idx) => (
+                          <li key={idx} style={{ marginBottom: '0.25rem' }}>{pa}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+            </div>
+          )}
 
           {minhasObservacoes.length === 0 ? (
             <div className="glass-panel" style={{ padding: '3rem 2rem', textAlign: 'center', backgroundColor: '#ffffff', borderRadius: '14px', border: '1px solid var(--color-card-border)' }}>
@@ -719,6 +939,23 @@ export default function AmbienteCursista({ userEmail, records, observacoes = [],
         <ObservacaoModalDetalhes 
           observacao={selectedObs} 
           onClose={() => setSelectedObs(null)} 
+        />
+      )}
+
+      {/* Modal Dossiê do Cursista com Gráficos e Diagnóstico IA */}
+      {showDossieModal && (
+        <DossieCursistaModal
+          cursista={cursistaRecord}
+          turmaInfo={{
+            turma: cursistaRecord.turmas,
+            formador: cursistaRecord.formador || cursistaRecord.nome_formador || 'Formador(a)',
+            emailFormador: cursistaRecord.email_formador || '',
+            componente: cursistaRecord.componente || cursistaRecord.componente_conc || '',
+            anoFormativo: cursistaRecord.ano_formativo || '1º Ano'
+          }}
+          observacoes={observacoes}
+          onClose={() => setShowDossieModal(false)}
+          readOnly={true}
         />
       )}
 

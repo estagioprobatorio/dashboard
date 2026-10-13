@@ -4,7 +4,9 @@ import ObservacaoModalDetalhes from './ObservacaoModalDetalhes';
 import DossieCursistaModal from './DossieCursistaModal';
 import observacoesFallback from '../observacoes_fallback.json';
 
-export default function ListaTurmas({ data, observacoes = [], onNovaObservacao }) {
+export default function ListaTurmas({ data, observacoes = [], userRole, onNovaObservacao }) {
+  const isAdmin = userRole === 'admin';
+
   // Filtros de seleção e busca
   const [tutorFilter, setTutorFilter] = useState('');
   const [formadorFilter, setFormadorFilter] = useState('');
@@ -705,17 +707,11 @@ export default function ListaTurmas({ data, observacoes = [], onNovaObservacao }
                     <h3 style={{ fontSize: '1.1rem', color: 'var(--color-primary-dark)', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.4rem', margin: 0 }}>
                       👥 Cursistas da Turma ({selectedTurma.cursistas.length})
                     </h3>
-                    <span style={{
-                      fontSize: '0.78rem',
-                      fontWeight: 700,
-                      color: totalObservadosNaTurma > 0 ? '#166534' : '#64748b',
-                      backgroundColor: totalObservadosNaTurma > 0 ? '#dcfce7' : '#f1f5f9',
-                      padding: '0.2rem 0.6rem',
-                      borderRadius: '9999px',
-                      border: totalObservadosNaTurma > 0 ? '1px solid #bbf7d0' : '1px solid #e2e8f0'
-                    }}>
-                      🎯 {totalObservadosNaTurma} observados ({Math.round((totalObservadosNaTurma / (selectedTurma.cursistas.length || 1)) * 100)}%)
-                    </span>
+                    {!isAdmin && (
+                      <span className="logo-badge" style={{ backgroundColor: 'var(--color-accent-green)', color: 'white', fontSize: '0.78rem' }}>
+                        {selectedTurma.cursistas.filter(c => !!getObsForCursista(c)).length} de {selectedTurma.cursistas.length} com observação registrada
+                      </span>
+                    )}
                   </div>
                   
                   {/* Busca rápida na lista de cursistas do modal */}
@@ -729,61 +725,43 @@ export default function ListaTurmas({ data, observacoes = [], onNovaObservacao }
                 </div>
 
                 <div className="table-responsive" style={{ maxHeight: '420px', overflowY: 'auto', overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
-                  <table className="data-table" style={{ width: '100%', minWidth: '940px', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
+                  <table className="data-table" style={{ width: '100%', minWidth: isAdmin ? '700px' : '950px', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
                     <thead>
                       <tr style={{ backgroundColor: 'var(--color-primary-dark)', color: 'white', textAlign: 'left', position: 'sticky', top: 0, zIndex: 10 }}>
-                        <th style={{ padding: '0.65rem 0.6rem', width: '35px', textAlign: 'center' }}>#</th>
-                        <th style={{ padding: '0.65rem 0.8rem', minWidth: '160px' }}>Nome do Cursista</th>
-                        <th style={{ padding: '0.65rem 0.8rem', minWidth: '170px' }}>E-mail</th>
-                        <th style={{ padding: '0.65rem 0.6rem', width: '90px', textAlign: 'center' }}>CGM</th>
-                        <th style={{ padding: '0.65rem 0.8rem', width: '110px' }}>Município</th>
-                        <th style={{ padding: '0.65rem 0.6rem', textAlign: 'center', width: '105px' }}>Status Obs.</th>
-                        <th style={{ padding: '0.65rem 0.6rem', textAlign: 'center', minWidth: '220px' }}>Gravações & Links</th>
-                        <th style={{ padding: '0.65rem 0.6rem', textAlign: 'center', width: '110px' }}>Dossiê & Obs</th>
+                        <th style={{ padding: '0.65rem 0.6rem', width: '40px', textAlign: 'center' }}>#</th>
+                        <th style={{ padding: '0.65rem 0.8rem', minWidth: '180px' }}>Nome do Cursista</th>
+                        <th style={{ padding: '0.65rem 0.8rem', minWidth: '200px' }}>E-mail Institucional</th>
+                        <th style={{ padding: '0.65rem 0.6rem', width: '100px', textAlign: 'center' }}>CGM</th>
+                        <th style={{ padding: '0.65rem 0.8rem', width: '130px' }}>Município</th>
+                        <th style={{ padding: '0.65rem 0.8rem', width: '120px', textAlign: 'center' }}>Telefone</th>
+                        {!isAdmin && (
+                          <>
+                            <th style={{ padding: '0.65rem 0.6rem', width: '110px', textAlign: 'center' }}>Status Obs.</th>
+                            <th style={{ padding: '0.65rem 0.6rem', minWidth: '170px', textAlign: 'center' }}>Gravações & Links</th>
+                            <th style={{ padding: '0.65rem 0.6rem', width: '90px', textAlign: 'center' }}>Dossiê & Obs</th>
+                          </>
+                        )}
                       </tr>
                     </thead>
                     <tbody>
                       {filteredCursistasInModal.length === 0 ? (
                         <tr>
-                          <td colSpan="8" style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--color-text-muted)' }}>
+                          <td colSpan={isAdmin ? 6 : 9} style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--color-text-muted)' }}>
                             Nenhum cursista encontrado.
                           </td>
                         </tr>
                       ) : (
                         filteredCursistasInModal.map((c, idx) => {
-                          const obs = getObsForCursista(c);
-                          const isRealizada = obs && (obs.is_realizada || String(obs.observacao_realizada || '').toLowerCase().includes('sim'));
+                          const obs = !isAdmin ? getObsForCursista(c) : null;
                           const hasPratica = obs && obs.link_gravacao_pratica;
                           const hasFeedback = obs && obs.link_gravacao_feedback;
-                          const hasPlanejamento = obs && obs.link_planejamento;
+                          const hasPlanejamento = obs && (obs.link_planejamento || obs.link_pdp);
 
                           return (
                             <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#f8fafc', borderBottom: '1px solid #edf2f7' }}>
                               <td style={{ padding: '0.6rem 0.6rem', fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'center' }}>{idx + 1}</td>
-                              <td style={{ padding: '0.6rem 0.8rem', fontWeight: 700 }}>
-                                <button
-                                  type="button"
-                                  onClick={() => setSelectedCursistaDossie(c)}
-                                  style={{
-                                    background: 'none',
-                                    border: 'none',
-                                    padding: 0,
-                                    margin: 0,
-                                    font: 'inherit',
-                                    fontWeight: 700,
-                                    color: 'var(--color-primary-dark)',
-                                    cursor: 'pointer',
-                                    textAlign: 'left',
-                                    textDecoration: 'underline',
-                                    textDecorationColor: 'transparent',
-                                    transition: 'all 0.15s ease'
-                                  }}
-                                  onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--color-accent-blue)'; e.currentTarget.style.textDecorationColor = 'var(--color-accent-blue)'; }}
-                                  onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--color-primary-dark)'; e.currentTarget.style.textDecorationColor = 'transparent'; }}
-                                  title={`Clique para abrir o Dossiê Pedagógico de ${c.nome}`}
-                                >
-                                  {c.nome}
-                                </button>
+                              <td style={{ padding: '0.6rem 0.8rem', fontWeight: 700, color: '#0f172a' }}>
+                                {c.nome}
                               </td>
                               <td style={{ padding: '0.6rem 0.8rem' }}>
                                 {c.email ? (
@@ -796,162 +774,142 @@ export default function ListaTurmas({ data, observacoes = [], onNovaObservacao }
                               </td>
                               <td style={{ padding: '0.6rem 0.6rem', color: 'var(--color-text-muted)', textAlign: 'center', whiteSpace: 'nowrap' }}>{c.cgm || '-'}</td>
                               <td style={{ padding: '0.6rem 0.8rem', color: 'var(--color-text-muted)' }}>{c.municipios || '-'}</td>
-                              <td style={{ padding: '0.6rem 0.6rem', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                                {isRealizada ? (
-                                  <span style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '0.25rem',
-                                    padding: '0.2rem 0.55rem',
-                                    borderRadius: '9999px',
-                                    fontSize: '0.72rem',
-                                    fontWeight: 700,
-                                    backgroundColor: '#dcfce7',
-                                    color: '#15803d',
-                                    border: '1px solid #bbf7d0',
-                                    whiteSpace: 'nowrap'
-                                  }}>
-                                    ✓ Realizada
-                                  </span>
-                                ) : (
-                                  <span style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '0.25rem',
-                                    padding: '0.2rem 0.55rem',
-                                    borderRadius: '9999px',
-                                    fontSize: '0.72rem',
-                                    fontWeight: 600,
-                                    backgroundColor: '#f1f5f9',
-                                    color: '#64748b',
-                                    border: '1px solid #e2e8f0',
-                                    whiteSpace: 'nowrap'
-                                  }}>
-                                    Pendente
-                                  </span>
-                                )}
-                              </td>
-                              <td style={{ padding: '0.6rem 0.6rem', textAlign: 'center' }}>
-                                <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center', justifyContent: 'center', flexWrap: 'nowrap' }}>
-                                  {hasPratica && (
-                                    <a
-                                      href={obs.link_gravacao_pratica}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      title="Gravação da Prática Pedagógica"
-                                      style={{
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: '0.2rem',
-                                        backgroundColor: '#eff6ff',
-                                        color: '#1d4ed8',
-                                        border: '1px solid #bfdbfe',
-                                        padding: '0.25rem 0.45rem',
-                                        borderRadius: '6px',
-                                        fontSize: '0.72rem',
-                                        fontWeight: 700,
-                                        textDecoration: 'none',
-                                        whiteSpace: 'nowrap',
-                                        transition: 'all 0.15s ease'
-                                      }}
-                                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#dbeafe'}
-                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#eff6ff'}
-                                    >
-                                      🎥 Prática
-                                    </a>
-                                  )}
-                                  {hasFeedback && (
-                                    <a
-                                      href={obs.link_gravacao_feedback}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      title="Gravação do Feedback / Diálogo Formativo"
-                                      style={{
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: '0.2rem',
-                                        backgroundColor: '#fdf2f8',
-                                        color: '#be185d',
-                                        border: '1px solid #fbcfe8',
-                                        padding: '0.25rem 0.45rem',
-                                        borderRadius: '6px',
-                                        fontSize: '0.72rem',
-                                        fontWeight: 700,
-                                        textDecoration: 'none',
-                                        whiteSpace: 'nowrap',
-                                        transition: 'all 0.15s ease'
-                                      }}
-                                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fce7f3'}
-                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#fdf2f8'}
-                                    >
-                                      🗣️ Feedback
-                                    </a>
-                                  )}
-                                  {hasPlanejamento && (
-                                    <a
-                                      href={obs.link_planejamento}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      title="Planejamento Pedagógico (PDP)"
-                                      style={{
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: '0.2rem',
-                                        backgroundColor: '#f0fdf4',
+                              <td style={{ padding: '0.6rem 0.8rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>{c.telefone || '-'}</td>
+                              {!isAdmin && (
+                                <>
+                                  <td style={{ padding: '0.6rem 0.6rem', textAlign: 'center' }}>
+                                    {obs ? (
+                                      <span style={{
+                                        display: 'inline-block',
+                                        backgroundColor: '#dcfce7',
                                         color: '#15803d',
                                         border: '1px solid #bbf7d0',
-                                        padding: '0.25rem 0.45rem',
-                                        borderRadius: '6px',
+                                        padding: '0.2rem 0.5rem',
+                                        borderRadius: '999px',
                                         fontSize: '0.72rem',
-                                        fontWeight: 700,
-                                        textDecoration: 'none',
-                                        whiteSpace: 'nowrap',
-                                        transition: 'all 0.15s ease'
+                                        fontWeight: 800,
+                                        whiteSpace: 'nowrap'
+                                      }}>
+                                        ● Observado
+                                      </span>
+                                    ) : (
+                                      <span style={{
+                                        display: 'inline-block',
+                                        backgroundColor: '#f1f5f9',
+                                        color: '#64748b',
+                                        border: '1px solid #e2e8f0',
+                                        padding: '0.2rem 0.5rem',
+                                        borderRadius: '999px',
+                                        fontSize: '0.72rem',
+                                        fontWeight: 600,
+                                        whiteSpace: 'nowrap'
+                                      }}>
+                                        Pendente
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td style={{ padding: '0.6rem 0.6rem', textAlign: 'center' }}>
+                                    <div style={{ display: 'flex', gap: '0.35rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+                                      {hasPratica && (
+                                        <a
+                                          href={obs.link_gravacao_pratica}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          title="Gravação da Prática Pedagógica"
+                                          style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '0.2rem',
+                                            backgroundColor: '#eff6ff',
+                                            color: '#1d4ed8',
+                                            border: '1px solid #bfdbfe',
+                                            padding: '0.25rem 0.45rem',
+                                            borderRadius: '6px',
+                                            fontSize: '0.72rem',
+                                            fontWeight: 700,
+                                            textDecoration: 'none',
+                                            whiteSpace: 'nowrap'
+                                          }}
+                                        >
+                                          🎥 Prática
+                                        </a>
+                                      )}
+                                      {hasFeedback && (
+                                        <a
+                                          href={obs.link_gravacao_feedback}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          title="Gravação do Feedback / Diálogo Formativo"
+                                          style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '0.2rem',
+                                            backgroundColor: '#fdf2f8',
+                                            color: '#be185d',
+                                            border: '1px solid #fbcfe8',
+                                            padding: '0.25rem 0.45rem',
+                                            borderRadius: '6px',
+                                            fontSize: '0.72rem',
+                                            fontWeight: 700,
+                                            textDecoration: 'none',
+                                            whiteSpace: 'nowrap'
+                                          }}
+                                        >
+                                          🗣️ Feedback
+                                        </a>
+                                      )}
+                                      {hasPlanejamento && (
+                                        <a
+                                          href={obs.link_planejamento || obs.link_pdp}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          title="Planejamento Pedagógico (PDP)"
+                                          style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '0.2rem',
+                                            backgroundColor: '#f0fdf4',
+                                            color: '#15803d',
+                                            border: '1px solid #bbf7d0',
+                                            padding: '0.25rem 0.45rem',
+                                            borderRadius: '6px',
+                                            fontSize: '0.72rem',
+                                            fontWeight: 700,
+                                            textDecoration: 'none',
+                                            whiteSpace: 'nowrap'
+                                          }}
+                                        >
+                                          📄 PDP
+                                        </a>
+                                      )}
+                                      {!hasPratica && !hasFeedback && !hasPlanejamento && (
+                                        <span style={{ color: '#94a3b8', fontSize: '0.75rem', fontStyle: 'italic' }}>Sem links</span>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td style={{ padding: '0.6rem 0.6rem', textAlign: 'center' }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenObsDetails(c, obs)}
+                                      title={`Ver detalhes de ${c.nome}`}
+                                      style={{
+                                        background: 'linear-gradient(135deg, rgba(11,60,93,0.1) 0%, rgba(15,107,173,0.15) 100%)',
+                                        border: '1px solid rgba(15,107,173,0.3)',
+                                        borderRadius: '6px',
+                                        cursor: 'pointer',
+                                        padding: '0.25rem 0.5rem',
+                                        fontSize: '0.9rem',
+                                        lineHeight: 1,
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center'
                                       }}
-                                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#dcfce7'}
-                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#f0fdf4'}
                                     >
-                                      📄 PDP
-                                    </a>
-                                  )}
-                                  {!hasPratica && !hasFeedback && !hasPlanejamento && (
-                                    <span style={{ color: '#94a3b8', fontSize: '0.75rem', fontStyle: 'italic' }}>Sem links</span>
-                                  )}
-                                </div>
-                              </td>
-                              <td style={{ padding: '0.6rem 0.6rem', textAlign: 'center' }}>
-                                <button
-                                  type="button"
-                                  onClick={() => setSelectedCursistaDossie(c)}
-                                  title={`Ver Dossiê Pedagógico, Evolução e Observações de ${c.nome}`}
-                                  style={{
-                                    background: 'linear-gradient(135deg, #0b3c5d 0%, #0072bc 100%)',
-                                    color: '#ffffff',
-                                    border: 'none',
-                                    borderRadius: '6px',
-                                    cursor: 'pointer',
-                                    padding: '0.3rem 0.55rem',
-                                    fontSize: '0.76rem',
-                                    fontWeight: 700,
-                                    lineHeight: 1,
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '0.3rem',
-                                    boxShadow: '0 2px 4px rgba(0,0,0,0.12)',
-                                    transition: 'all 0.15s ease'
-                                  }}
-                                  onMouseEnter={(e) => {
-                                    e.currentTarget.style.transform = 'translateY(-1px)';
-                                    e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.18)';
-                                  }}
-                                  onMouseLeave={(e) => {
-                                    e.currentTarget.style.transform = 'translateY(0)';
-                                    e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.12)';
-                                  }}
-                                >
-                                  📊 Dossiê
-                                </button>
-                              </td>
+                                      👁️
+                                    </button>
+                                  </td>
+                                </>
+                              )}
                             </tr>
                           );
                         })

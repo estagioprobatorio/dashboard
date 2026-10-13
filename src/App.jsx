@@ -18,6 +18,7 @@ import ListaTurmas from './components/ListaTurmas';
 import AmbienteCursista from './components/AmbienteCursista';
 import ObservacaoPratica from './components/ObservacaoPratica';
 import ObservacoesOverview from './components/ObservacoesOverview';
+import AcompanhamentoObservacoesCards from './components/AcompanhamentoObservacoesCards';
 
 import { salvarObservacaoIntegrada, getObservacoesLocaisNovas } from './utils/observacoesSyncService';
 
@@ -435,15 +436,36 @@ export default function App() {
 
   const cursistasExemplo = useMemo(() => {
     const map = new Map();
+    const obsMap = new Map();
+    observacoesList.forEach(obs => {
+      const email = (obs.email_cursista || '').trim().toLowerCase();
+      if (email) {
+        obsMap.set(email, (obsMap.get(email) || 0) + 1);
+      }
+    });
+
     enrichedRecords.forEach(r => {
       const email = (r['e-mail'] || r.email || r.email_cursista || '').trim().toLowerCase();
       const nome = r.nome_cursista;
       if (email && email.includes('@') && nome && !map.has(email)) {
-        map.set(email, { email, nome });
+        const totalObs = obsMap.get(email) || 0;
+        map.set(email, { 
+          email, 
+          nome, 
+          totalObs, 
+          ano: r.ano_formativo || '1º Ano',
+          turma: r.turmas || 'Turma Geral',
+          componente: r.componente || r.componente_conc || 'Geral'
+        });
       }
     });
-    return Array.from(map.values()).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' }));
-  }, [enrichedRecords]);
+
+    // Ordenação: primeiro os que possuem mais observações para testar gráficos e diagnóstico, depois alfabético
+    return Array.from(map.values()).sort((a, b) => {
+      if (b.totalObs !== a.totalObs) return b.totalObs - a.totalObs;
+      return a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' });
+    });
+  }, [enrichedRecords, observacoesList]);
 
   // E-mail efetivo (Real ou do Exemplo Simulado)
   const effectiveEmail = useMemo(() => {
@@ -610,7 +632,7 @@ export default function App() {
     }
 
     // Se o perfil ativo for Cursista ou se a aba for de Cursista
-    if (effectiveRole === 'cursista' || activeTab.startsWith('cursista_')) {
+    if (effectiveRole === 'cursista' || activeTab.startsWith('cursista_') || activeTab === 'espaco_cursista') {
       const subTab = activeTab === 'cursista_solicitacoes' ? 'solicitacoes' : activeTab === 'cursista_observacoes' ? 'observacoes' : 'turma';
       return (
         <AmbienteCursista 
@@ -635,6 +657,17 @@ export default function App() {
             tutores={tutoresList}
           />
         );
+      case 'acompanhamento_cards':
+        return userRole === 'admin' ? (
+          <AcompanhamentoObservacoesCards 
+            cursistas={filteredRecordsForView} 
+            observacoes={filteredObservacoesForView} 
+            tutores={tutoresList}
+            userRole={effectiveRole}
+            userEmail={effectiveEmail}
+            onNovaObservacao={handleNovaObservacao}
+          />
+        ) : <Panorama data={filteredRecordsForView} />;
       case 'observacoes':
         return (
           <ObservacaoPratica 
@@ -657,6 +690,7 @@ export default function App() {
           <ListaTurmas 
             data={filteredRecordsForView} 
             observacoes={filteredObservacoesForView} 
+            userRole={userRole}
             onNovaObservacao={handleNovaObservacao}
           />
         );
@@ -727,8 +761,8 @@ export default function App() {
         </div>
       </header>
 
-      {/* Barra de Simulação de Papel para Administradores / Técnicos */}
-      {(userRole === 'admin' || userRole === 'tecnico') && (
+      {/* Barra de Simulação de Papel Exclusiva para Administradores */}
+      {userRole === 'admin' && (
         <div className="simulator-bar">
           <div className="simulator-controls">
             <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
@@ -806,14 +840,16 @@ export default function App() {
 
             {simulatedRole === 'cursista' && cursistasExemplo.length > 0 && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', maxWidth: '100%' }}>
-                <span style={{ fontSize: '0.8rem' }}>Exemplo:</span>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#92400e' }}>Cursista ({cursistasExemplo.length} disponíveis):</span>
                 <select
                   value={effectiveEmail}
                   onChange={e => setSimulatedEmail(e.target.value)}
-                  style={{ padding: '0.3rem 0.5rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.8rem', fontWeight: 600, maxWidth: '100%' }}
+                  style={{ padding: '0.3rem 0.5rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.8rem', fontWeight: 600, maxWidth: '100%', backgroundColor: '#ffffff' }}
                 >
-                  {cursistasExemplo.slice(0, 50).map(c => (
-                    <option key={c.email} value={c.email}>{c.nome} ({c.email})</option>
+                  {cursistasExemplo.slice(0, 25).map((c, idx) => (
+                    <option key={c.email} value={c.email}>
+                      {idx + 1}. {c.nome} {c.totalObs > 0 ? `(${c.totalObs} obs • ${c.ano})` : `(${c.turma})`}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -855,6 +891,12 @@ export default function App() {
                 onClick={() => setActiveTab('cursista_turma')}
               >
                 🏫 Minha Turma
+              </button>
+              <button 
+                className={`tab-btn ${activeTab === 'cursista_observacoes' ? 'active' : ''}`}
+                onClick={() => setActiveTab('cursista_observacoes')}
+              >
+                👁️ Meu Acompanhamento & Dossiê
               </button>
               <button 
                 className={`tab-btn ${activeTab === 'cursista_solicitacoes' ? 'active' : ''}`}
@@ -904,6 +946,15 @@ export default function App() {
                 📈 Observações - Overview
               </button>
 
+              {userRole === 'admin' && (
+                <button 
+                  className={`tab-btn ${activeTab === 'acompanhamento_cards' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('acompanhamento_cards')}
+                >
+                  🗂️ Acompanhamento por Cursista
+                </button>
+              )}
+
               <button 
                 className={`tab-btn ${activeTab === 'observacoes' ? 'active' : ''}`}
                 onClick={() => setActiveTab('observacoes')}
@@ -923,7 +974,7 @@ export default function App() {
                 <button 
                   className={`tab-btn ${activeTab === 'admin' ? 'active' : ''}`}
                   onClick={() => setActiveTab('admin')}
-                  style={{ marginLeft: 'auto', borderLeft: '1px solid var(--color-card-border)', backgroundColor: 'rgba(229, 62, 62, 0.05)' }}
+                  style={{ borderLeft: '1px solid var(--color-card-border)', backgroundColor: 'rgba(229, 62, 62, 0.05)' }}
                 >
                   🛡️ Painel Admin
                 </button>

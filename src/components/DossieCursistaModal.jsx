@@ -1,20 +1,43 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { formatDatePtBr, parseDateToTimestamp } from '../utils/dateUtils';
 import FormularioInserirObservacao from './FormularioInserirObservacao';
+import { getObservacoes2024PorCursista } from '../utils/observacoes2024Service';
+import { parseScore, scoreLabel, gerarDiagnosticoCursistaIA } from '../utils/aiPedagogicalService';
 
 export default function DossieCursistaModal({ 
   cursista, 
   turmaInfo, 
   observacoes = [], 
   onClose, 
-  onSaveObservacao 
+  onSaveObservacao,
+  readOnly = false 
 }) {
   const [showFormInserir, setShowFormInserir] = useState(false);
   const [expandedObsId, setExpandedObsId] = useState(null);
+  const [obs2024, setObs2024] = useState([]);
+  const [loading2024, setLoading2024] = useState(false);
 
   // Normalização e busca de todas as observações pertencentes a este cursista
   const cursistaEmail = (cursista?.email || cursista?.email_cursista || '').trim().toLowerCase();
   const cursistaNome = (cursista?.nome || cursista?.nome_cursista || '').trim().toLowerCase();
+
+  // Carregar histórico de 2024 do cursista sob demanda
+  useEffect(() => {
+    let isMounted = true;
+    if (cursista) {
+      setLoading2024(true);
+      getObservacoes2024PorCursista(cursista).then(res => {
+        if (isMounted) {
+          setObs2024(res);
+          setLoading2024(false);
+        }
+      }).catch(err => {
+        console.warn('Erro ao carregar histórico 2024:', err);
+        if (isMounted) setLoading2024(false);
+      });
+    }
+    return () => { isMounted = false; };
+  }, [cursista]);
 
   const getObsTimestamp = (obs) => {
     return parseDateToTimestamp(
@@ -22,31 +45,26 @@ export default function DossieCursistaModal({
     );
   };
 
-  const observacoesDoCursista = useMemo(() => {
-    const list = observacoes.filter(obs => {
+  const observacoesAtuais2026 = useMemo(() => {
+    return observacoes.filter(obs => {
       const email = (obs.email_cursista || '').trim().toLowerCase();
       if (email && cursistaEmail && email === cursistaEmail) return true;
       const nome = (obs.nome_cursista || '').trim().toLowerCase();
       if (nome && cursistaNome && nome === cursistaNome) return true;
       return false;
     });
-
-    // Ordenação estritamente cronológica decrescente (mais recente primeiro no histórico/timeline)
-    return list.sort((a, b) => getObsTimestamp(b) - getObsTimestamp(a));
   }, [observacoes, cursistaEmail, cursistaNome]);
 
-  // Função para mapear texto para nível numérico (1 a 4)
-  const nivelToScore = (nivel) => {
-    if (!nivel) return null;
-    const n = String(nivel).toUpperCase();
-    if (n.includes('SUPERA') || n.includes('SUPEROU')) return 4;
-    if (n.includes('INTEGRAL') || n.includes('ATENDE') || n.includes('ATINGE')) {
-      if (n.includes('PARCIAL')) return 2;
-      return 3;
-    }
-    if (n.includes('NÃO') || n.includes('NAO')) return 1;
-    return null;
-  };
+  const observacoesDoCursista = useMemo(() => {
+    // Mescla observações atuais com o histórico de 2024
+    const todasMescladas = [...observacoesAtuais2026, ...obs2024];
+
+    // Ordenação estritamente cronológica decrescente (mais recente primeiro no histórico/timeline)
+    return todasMescladas.sort((a, b) => getObsTimestamp(b) - getObsTimestamp(a));
+  }, [observacoesAtuais2026, obs2024]);
+
+  // Função para mapear texto ou número para nível numérico (1 a 4)
+  const nivelToScore = (nivel) => parseScore(nivel);
 
   const scoreToLabel = (score) => {
     switch (score) {
@@ -100,6 +118,15 @@ export default function DossieCursistaModal({
       };
     });
   }, [observacoesDoCursista]);
+
+  // Diagnóstico Pedagógico por Inteligência Artificial
+  const diagnosticoIA = useMemo(() => {
+    return gerarDiagnosticoCursistaIA({
+      cursista,
+      observacoes: observacoesDoCursista,
+      turmaInfo
+    });
+  }, [cursista, observacoesDoCursista, turmaInfo]);
 
   const handleSalvarNovaObservacao = async (novaObs) => {
     if (onSaveObservacao) {
@@ -171,30 +198,32 @@ export default function DossieCursistaModal({
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <button
-              type="button"
-              onClick={() => setShowFormInserir(true)}
-              style={{
-                background: 'linear-gradient(135deg, #00984a 0%, #15803d 100%)',
-                color: '#ffffff',
-                border: 'none',
-                padding: '0.65rem 1.25rem',
-                borderRadius: '8px',
-                fontWeight: 700,
-                fontSize: '0.88rem',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                boxShadow: '0 4px 12px rgba(0, 152, 74, 0.35)',
-                transition: 'all 0.15s ease'
-              }}
-              onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
-              onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
-            >
-              <span style={{ fontSize: '1.1rem' }}>➕</span>
-              Inserir Observação
-            </button>
+            {!readOnly && (
+              <button
+                type="button"
+                onClick={() => setShowFormInserir(true)}
+                style={{
+                  background: 'linear-gradient(135deg, #00984a 0%, #15803d 100%)',
+                  color: '#ffffff',
+                  border: 'none',
+                  padding: '0.65rem 1.25rem',
+                  borderRadius: '8px',
+                  fontWeight: 700,
+                  fontSize: '0.88rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  boxShadow: '0 4px 12px rgba(0, 152, 74, 0.35)',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+                onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+              >
+                <span style={{ fontSize: '1.1rem' }}>➕</span>
+                Inserir Observação
+              </button>
+            )}
 
             <button
               type="button"
@@ -235,8 +264,14 @@ export default function DossieCursistaModal({
               <div style={{ fontSize: '1.65rem', fontWeight: 800, color: '#0f172a', margin: '0.2rem 0' }}>
                 {observacoesDoCursista.length} <span style={{ fontSize: '0.85rem', color: '#00984a', fontWeight: 600 }}>({totalRealizadas} realizadas)</span>
               </div>
-              <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                Ciclo Formativo 2026
+              <div style={{ fontSize: '0.75rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                {loading2024 ? (
+                  <span style={{ color: '#0284c7' }}>⏳ Buscando base de 2024...</span>
+                ) : obs2024.length > 0 ? (
+                  <span>Histórico Consolidado: <b>{obs2024.length} em 2024</b> • <b>{observacoesAtuais2026.length} em 2026</b></span>
+                ) : (
+                  <span>Ciclo Formativo 2026</span>
+                )}
               </div>
             </div>
 
@@ -351,97 +386,293 @@ export default function DossieCursistaModal({
                 <p style={{ fontSize: '0.8rem', margin: '0.25rem 0 0 0' }}>Clique no botão "➕ Inserir Observação" acima para registrar a primeira avaliação.</p>
               </div>
             ) : (
-              <div style={{ width: '100%', overflowX: 'auto' }}>
-                <svg viewBox="0 0 760 180" style={{ width: '100%', minWidth: '550px', height: 'auto', display: 'block' }}>
-                  {/* Linhas de fundo dos 4 níveis */}
-                  {[
-                    { val: 4, label: 'Supera (4)', color: '#dcfce7', line: '#86efac' },
-                    { val: 3, label: 'Atinge Int. (3)', color: '#f0f9ff', line: '#bae6fd' },
-                    { val: 2, label: 'Atinge Parc. (2)', color: '#fefce8', line: '#fde047' },
-                    { val: 1, label: 'Não Atinge (1)', color: '#fef2f2', line: '#fca5a5' }
-                  ].map((row, idx) => {
-                    const y = 30 + idx * 35;
-                    return (
-                      <g key={row.val}>
-                        <rect x="90" y={y - 12} width="650" height="26" fill={row.color} opacity="0.4" rx="4" />
-                        <line x1="90" y1={y} x2="740" y2={y} stroke={row.line} strokeDasharray="3 3" strokeWidth="1" />
-                        <text x="82" y={y + 4} textAnchor="end" fontSize="10" fill="#64748b" fontWeight="600">
-                          {row.label}
-                        </text>
-                      </g>
-                    );
-                  })}
+              <div style={{ width: '100%', overflowX: 'auto', paddingBottom: '0.6rem' }}>
+                {(() => {
+                  const count = dadosGrafico.length;
+                  const stepX = count > 8 ? 85 : (count > 1 ? (600 / (count - 1)) : 300);
+                  const startX = 130;
+                  const svgWidth = count > 8 ? Math.max(760, startX + (count - 1) * stepX + 60) : 760;
+                  const svgHeight = 230;
 
-                  {/* Renderização das Linhas e Pontos */}
-                  {(() => {
-                    const count = dadosGrafico.length;
-                    const stepX = count > 1 ? (600 / (count - 1)) : 300;
+                  const getCoordinates = (score, idx) => {
+                    if (score === null || score === undefined) return null;
+                    const x = count === 1 ? 390 : startX + idx * stepX;
+                    // y: 4 -> 30, 3 -> 65, 2 -> 100, 1 -> 135
+                    const y = 30 + (4 - score) * 35;
+                    return { x, y };
+                  };
 
-                    const getCoordinates = (score, idx) => {
-                      if (!score) return null;
-                      const x = count === 1 ? 390 : 120 + idx * stepX;
-                      // y: 4 -> 30, 3 -> 65, 2 -> 100, 1 -> 135
-                      const y = 30 + (4 - score) * 35;
-                      return { x, y };
-                    };
+                  const ptsPratica = dadosGrafico
+                    .map((d, i) => {
+                      const coords = getCoordinates(d.scorePratica, i);
+                      return coords ? { ...coords, originalIdx: i, score: d.scorePratica } : null;
+                    })
+                    .filter(Boolean);
 
-                    const ptsPratica = dadosGrafico.map((d, i) => getCoordinates(d.scorePratica, i)).filter(Boolean);
-                    const ptsPlan = dadosGrafico.map((d, i) => getCoordinates(d.scorePlan, i)).filter(Boolean);
+                  const ptsPlan = dadosGrafico
+                    .map((d, i) => {
+                      const coords = getCoordinates(d.scorePlan, i);
+                      return coords ? { ...coords, originalIdx: i, score: d.scorePlan } : null;
+                    })
+                    .filter(Boolean);
 
-                    const pathPratica = ptsPratica.length > 1 
-                      ? ptsPratica.reduce((acc, p, i) => i === 0 ? `M ${p.x} ${p.y}` : `${acc} L ${p.x} ${p.y}`, '')
-                      : '';
+                  const pathPratica = ptsPratica.length > 1 
+                    ? ptsPratica.reduce((acc, p, i) => i === 0 ? `M ${p.x} ${p.y}` : `${acc} L ${p.x} ${p.y}`, '')
+                    : '';
 
-                    const pathPlan = ptsPlan.length > 1 
-                      ? ptsPlan.reduce((acc, p, i) => i === 0 ? `M ${p.x} ${p.y}` : `${acc} L ${p.x} ${p.y}`, '')
-                      : '';
+                  const pathPlan = ptsPlan.length > 1 
+                    ? ptsPlan.reduce((acc, p, i) => i === 0 ? `M ${p.x} ${p.y}` : `${acc} L ${p.x} ${p.y}`, '')
+                    : '';
 
-                    return (
-                      <g>
-                        {/* Linhas conectando os pontos */}
-                        {pathPratica && <path d={pathPratica} fill="none" stroke="#00984a" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />}
-                        {pathPlan && <path d={pathPlan} fill="none" stroke="#0072bc" strokeWidth="3" strokeDasharray="5 3" strokeLinecap="round" strokeLinejoin="round" />}
-
-                        {/* Marcadores Prática */}
-                        {ptsPratica.map((p, idx) => (
-                          <g key={`p-${idx}`}>
-                            <circle cx={p.x} cy={p.y} r="6" fill="#00984a" stroke="#ffffff" strokeWidth="2" />
-                            <text x={p.x} y={p.y - 10} textAnchor="middle" fontSize="11" fontWeight="800" fill="#00984a">
-                              {dadosGrafico[idx].scorePratica}
+                  return (
+                    <svg 
+                      viewBox={`0 0 ${svgWidth} ${svgHeight}`} 
+                      style={{ 
+                        width: count > 8 ? `${svgWidth}px` : '100%', 
+                        minWidth: '600px', 
+                        height: 'auto', 
+                        display: 'block' 
+                      }}
+                    >
+                      {/* Linhas de fundo dos 4 níveis */}
+                      {[
+                        { val: 4, label: 'Supera (4)', color: '#dcfce7', line: '#86efac' },
+                        { val: 3, label: 'Atinge Int. (3)', color: '#f0f9ff', line: '#bae6fd' },
+                        { val: 2, label: 'Atinge Parc. (2)', color: '#fefce8', line: '#fde047' },
+                        { val: 1, label: 'Não Atinge (1)', color: '#fef2f2', line: '#fca5a5' }
+                      ].map((row, idx) => {
+                        const y = 30 + idx * 35;
+                        return (
+                          <g key={row.val}>
+                            <rect x="90" y={y - 12} width={svgWidth - 110} height="26" fill={row.color} opacity="0.45" rx="4" />
+                            <line x1="90" y1={y} x2={svgWidth - 25} y2={y} stroke={row.line} strokeDasharray="3 3" strokeWidth="1" />
+                            <text x="82" y={y + 4} textAnchor="end" fontSize="10" fill="#64748b" fontWeight="700">
+                              {row.label}
                             </text>
                           </g>
-                        ))}
+                        );
+                      })}
 
-                        {/* Marcadores Planejamento */}
-                        {ptsPlan.map((p, idx) => (
-                          <g key={`pl-${idx}`}>
-                            <rect x={p.x - 5} y={p.y - 5} width="10" height="10" fill="#0072bc" stroke="#ffffff" strokeWidth="2" rx="2" />
-                            <text x={p.x} y={p.y + 18} textAnchor="middle" fontSize="10" fontWeight="700" fill="#0072bc">
-                              {dadosGrafico[idx].scorePlan}
+                      {/* Linhas conectando os pontos */}
+                      {pathPratica && <path d={pathPratica} fill="none" stroke="#00984a" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />}
+                      {pathPlan && <path d={pathPlan} fill="none" stroke="#0072bc" strokeWidth="3" strokeDasharray="5 3" strokeLinecap="round" strokeLinejoin="round" />}
+
+                      {/* Marcadores Prática */}
+                      {ptsPratica.map((p, idx) => (
+                        <g key={`p-${idx}`}>
+                          <circle cx={p.x} cy={p.y} r="6.5" fill="#00984a" stroke="#ffffff" strokeWidth="2.5" />
+                          <text x={p.x} y={p.y - 10} textAnchor="middle" fontSize="11" fontWeight="800" fill="#00984a">
+                            {p.score}
+                          </text>
+                        </g>
+                      ))}
+
+                      {/* Marcadores Planejamento */}
+                      {ptsPlan.map((p, idx) => (
+                        <g key={`pl-${idx}`}>
+                          <rect x={p.x - 5.5} y={p.y - 5.5} width="11" height="11" fill="#0072bc" stroke="#ffffff" strokeWidth="2" rx="2" />
+                          <text x={p.x} y={p.y + 19} textAnchor="middle" fontSize="10.5" fontWeight="700" fill="#0072bc">
+                            {p.score}
+                          </text>
+                        </g>
+                      ))}
+
+                      {/* Rótulos no Eixo X com inclinação para NUNCA empilhar */}
+                      {dadosGrafico.map((d, idx) => {
+                        const x = count === 1 ? 390 : startX + idx * stepX;
+                        return (
+                          <g key={`lbl-${idx}`}>
+                            {/* Rótulo da Observação */}
+                            <text x={x} y="165" textAnchor="middle" fontSize="10.5" fontWeight="800" fill="#0f172a">
+                              {d.label}
+                            </text>
+                            {/* Data inclinada a -35° sem colisão */}
+                            <text 
+                              x={x} 
+                              y="180" 
+                              textAnchor="end" 
+                              fontSize="9.5" 
+                              fontWeight="600"
+                              fill="#64748b"
+                              transform={`rotate(-35, ${x}, 180)`}
+                            >
+                              {d.subLabel}
                             </text>
                           </g>
-                        ))}
-
-                        {/* Rótulos no Eixo X */}
-                        {dadosGrafico.map((d, idx) => {
-                          const x = count === 1 ? 390 : 120 + idx * stepX;
-                          return (
-                            <g key={`lbl-${idx}`}>
-                              <text x={x} y="165" textAnchor="middle" fontSize="10.5" fontWeight="700" fill="#1e293b">
-                                {d.label}
-                              </text>
-                              <text x={x} y="177" textAnchor="middle" fontSize="9" fill="#64748b">
-                                {d.subLabel}
-                              </text>
-                            </g>
-                          );
-                        })}
-                      </g>
-                    );
-                  })()}
-                </svg>
+                        );
+                      })}
+                    </svg>
+                  );
+                })()}
               </div>
             )}
+          </div>
+
+          {/* CARD DE DIAGNÓSTICO PEDAGÓGICO POR INTELIGÊNCIA ARTIFICIAL */}
+          <div style={{
+            background: '#ffffff',
+            borderRadius: '12px',
+            border: '1px solid #e2e8f0',
+            borderTop: '4px solid #0072bc',
+            padding: '1.25rem',
+            boxShadow: '0 2px 8px rgba(0, 114, 188, 0.06)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <span style={{ fontSize: '1.4rem' }}>✨</span>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#002d5c' }}>
+                    Diagnóstico Pedagógico por Inteligência Artificial
+                  </h3>
+                  <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                    Análise formativa automatizada • Atualizado em {diagnosticoIA.dataGeracao}
+                  </span>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <span style={{
+                  padding: '0.2rem 0.6rem',
+                  borderRadius: '999px',
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  backgroundColor: '#e0f2fe',
+                  color: '#0369a1',
+                  border: '1px solid #bae6fd'
+                }}>
+                  {diagnosticoIA.totalRealizadas} observações analisadas
+                </span>
+              </div>
+            </div>
+
+            {/* Síntese Executiva */}
+            <div style={{
+              backgroundColor: '#f8fafc',
+              borderLeft: '4px solid #0072bc',
+              padding: '0.85rem 1rem',
+              borderRadius: '6px',
+              marginBottom: '1.25rem'
+            }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#0072bc', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                📋 Síntese da Trajetória Docente
+              </span>
+              <p style={{ margin: '0.35rem 0 0 0', fontSize: '0.9rem', color: '#1e293b', lineHeight: 1.5, fontWeight: 500 }}>
+                {diagnosticoIA.sintese}
+              </p>
+            </div>
+
+            {/* Grade: Pontos Fortes e Pontos de Atenção */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>
+              {/* Pontos Fortes */}
+              <div style={{
+                backgroundColor: '#f0fdf4',
+                border: '1px solid #bbf7d0',
+                borderRadius: '8px',
+                padding: '1rem'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.65rem' }}>
+                  <span style={{ fontSize: '1.1rem' }}>🌟</span>
+                  <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#166534', textTransform: 'uppercase' }}>
+                    Pontos Fortes Consolidados
+                  </span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                  {diagnosticoIA.pontosFortes.map((pf, idx) => (
+                    <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.45rem', fontSize: '0.84rem', color: '#14532d', lineHeight: 1.4 }}>
+                      <span style={{ color: '#00984a', fontWeight: 800, flexShrink: 0 }}>✓</span>
+                      <span><b>{pf}</b></span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Pontos de Atenção */}
+              <div style={{
+                backgroundColor: '#fffbeb',
+                border: '1px solid #fde68a',
+                borderRadius: '8px',
+                padding: '1rem'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.65rem' }}>
+                  <span style={{ fontSize: '1.1rem' }}>⚠️</span>
+                  <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#b45309', textTransform: 'uppercase' }}>
+                    Pontos de Atenção / Oportunidades
+                  </span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                  {diagnosticoIA.pontosAtencao.map((pa, idx) => (
+                    <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.45rem', fontSize: '0.84rem', color: '#78350f', lineHeight: 1.4 }}>
+                      <span style={{ color: '#d97706', fontWeight: 800, flexShrink: 0 }}>•</span>
+                      <span>{pa}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Evolução para cada Referência / Temática Pedagógica */}
+            <div style={{ marginBottom: '1.25rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.65rem' }}>
+                <span style={{ fontSize: '1.1rem' }}>🎯</span>
+                <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#002d5c', textTransform: 'uppercase' }}>
+                  Evolução para cada Referência / Foco Temático
+                </span>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.75rem' }}>
+                {diagnosticoIA.evolucaoPorReferencia.map((ref, idx) => (
+                  <div 
+                    key={idx}
+                    style={{
+                      backgroundColor: '#ffffff',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '8px',
+                      padding: '0.85rem',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.4rem', marginBottom: '0.4rem' }}>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0f172a' }}>
+                        {ref.referencia}
+                      </span>
+                      <span style={{
+                        fontSize: '0.7rem',
+                        fontWeight: 800,
+                        padding: '0.15rem 0.5rem',
+                        borderRadius: '4px',
+                        backgroundColor: ref.bg,
+                        color: ref.cor,
+                        whiteSpace: 'nowrap'
+                      }}>
+                        {ref.status}
+                      </span>
+                    </div>
+
+                    <div style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: '0.35rem' }}>
+                      <b>Trajetória:</b> Nível {ref.nivelInicial} ➔ <b>Nível {ref.nivelAtual}</b> ({ref.totalObservacoes} obs.)
+                    </div>
+
+                    <p style={{ margin: 0, fontSize: '0.78rem', color: '#475569', lineHeight: 1.35, fontStyle: 'italic' }}>
+                      "{ref.descricao}"
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Recomendações e Plano de Ação para o Formador */}
+            <div style={{ backgroundColor: '#f8fafc', padding: '0.85rem 1rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+              <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#002d5c', textTransform: 'uppercase' }}>
+                🚀 Recomendações para o Formador / Tutor nos Próximos Diálogos:
+              </span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', marginTop: '0.4rem' }}>
+                {diagnosticoIA.planoAcao.map((acao, idx) => (
+                  <div key={idx} style={{ fontSize: '0.82rem', color: '#334155' }}>
+                    <b>{idx + 1}.</b> {acao}
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
           {/* HISTÓRICO CRONOLÓGICO DE OBSERVAÇÕES */}
@@ -463,6 +694,7 @@ export default function DossieCursistaModal({
                 {observacoesDoCursista.map((obs, idx) => {
                   const isExpanded = expandedObsId === obs.id || (idx === 0 && expandedObsId === null);
                   const isReal = obs.is_realizada ?? obs.observacao_realizada?.toLowerCase().includes('sim');
+                  const is2024 = String(obs.ano_letivo || obs.ano_formativo || '').includes('2024') || String(obs.id_origem || '').includes('2024');
 
                   return (
                     <div 
@@ -489,7 +721,19 @@ export default function DossieCursistaModal({
                           borderBottom: isExpanded ? '1px solid #e2e8f0' : 'none'
                         }}
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
+                          <span style={{
+                            padding: '0.2rem 0.55rem',
+                            borderRadius: '4px',
+                            fontSize: '0.72rem',
+                            fontWeight: 800,
+                            backgroundColor: is2024 ? '#fef3c7' : '#e0e7ff',
+                            color: is2024 ? '#92400e' : '#3730a3',
+                            border: is2024 ? '1px solid #fde68a' : '1px solid #c7d2fe'
+                          }}>
+                            {is2024 ? '🗓️ Histórico 2024' : '🗓️ Ciclo 2026'}
+                          </span>
+
                           <span style={{
                             padding: '0.2rem 0.6rem',
                             borderRadius: '4px',
