@@ -537,10 +537,24 @@ export default function DossieCursistaModal({
                       {/* Conteúdo Expansível do Detalhe */}
                       {isExpanded && (
                         <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem', backgroundColor: '#ffffff' }}>
+                          {obs.proposta_pedagogica && (
+                            <div style={{ backgroundColor: '#eff6ff', padding: '0.65rem 0.85rem', borderRadius: '6px', borderLeft: '4px solid #3b82f6' }}>
+                              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1d4ed8', textTransform: 'uppercase' }}>Proposta Pedagógica Selecionada:</span>
+                              <p style={{ margin: '0.2rem 0 0 0', fontWeight: 700, color: '#1e3a8a', fontSize: '0.88rem' }}>{obs.proposta_pedagogica}</p>
+                            </div>
+                          )}
+
                           {obs.tema && (
                             <div>
                               <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Foco / Tema Formativo:</span>
                               <p style={{ margin: '0.2rem 0 0 0', fontWeight: 600, color: '#0f172a', fontSize: '0.88rem' }}>{obs.tema}</p>
+                            </div>
+                          )}
+
+                          {obs.motivo_devolutiva && (
+                            <div style={{ backgroundColor: '#fffbeb', padding: '0.65rem 0.85rem', borderRadius: '6px', borderLeft: '4px solid #f59e0b' }}>
+                              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#b45309', textTransform: 'uppercase' }}>Motivo da Devolutiva Gravada:</span>
+                              <p style={{ margin: '0.2rem 0 0 0', color: '#78350f', fontSize: '0.84rem' }}>{obs.motivo_devolutiva}</p>
                             </div>
                           )}
 
@@ -553,10 +567,35 @@ export default function DossieCursistaModal({
 
                           {isReal && (
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1rem' }}>
-                              {obs.evidencias_pratica && (
+                              {(obs.criterio1_evidencias || obs.criterio1_nivel) && (
                                 <div style={{ backgroundColor: '#f8fafc', padding: '0.85rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#002d5c', textTransform: 'uppercase' }}>🔍 Evidências Observadas:</span>
+                                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#002d5c', textTransform: 'uppercase' }}>
+                                    🎯 Critério 1 {obs.criterio1_nivel ? `(${obs.criterio1_nivel})` : ''}:
+                                  </span>
+                                  <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.83rem', color: '#334155', lineHeight: 1.4 }}>{obs.criterio1_evidencias || 'Sem texto de evidências'}</p>
+                                </div>
+                              )}
+
+                              {(obs.criterio2_evidencias || obs.criterio2_nivel) && (
+                                <div style={{ backgroundColor: '#f8fafc', padding: '0.85rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#002d5c', textTransform: 'uppercase' }}>
+                                    🎯 Critério 2 {obs.criterio2_nivel ? `(${obs.criterio2_nivel})` : ''}:
+                                  </span>
+                                  <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.83rem', color: '#334155', lineHeight: 1.4 }}>{obs.criterio2_evidencias || 'Sem texto de evidências'}</p>
+                                </div>
+                              )}
+
+                              {obs.evidencias_pratica && !obs.criterio1_evidencias && (
+                                <div style={{ backgroundColor: '#f8fafc', padding: '0.85rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#002d5c', textTransform: 'uppercase' }}>🔍 Evidências da Prática:</span>
                                   <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.83rem', color: '#334155', lineHeight: 1.4 }}>{obs.evidencias_pratica}</p>
+                                </div>
+                              )}
+
+                              {obs.evidencias_planejamento && !obs.criterio2_evidencias && (
+                                <div style={{ backgroundColor: '#f8fafc', padding: '0.85rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#002d5c', textTransform: 'uppercase' }}>📝 Evidências do Planejamento:</span>
+                                  <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.83rem', color: '#334155', lineHeight: 1.4 }}>{obs.evidencias_planejamento}</p>
                                 </div>
                               )}
 
@@ -574,17 +613,27 @@ export default function DossieCursistaModal({
                                 </div>
                               )}
 
-                              {obs.combinados && (
-                                <div style={{ backgroundColor: '#f8fafc', padding: '0.85rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#002d5c', textTransform: 'uppercase' }}>🤝 Combinados & Plano de Ação:</span>
-                                  <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.83rem', color: '#334155', lineHeight: 1.4 }}>{obs.combinados}</p>
+                              {obs.escala_boas_praticas && (
+                                <div style={{ backgroundColor: '#f0fdf4', padding: '0.85rem', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
+                                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#166534', textTransform: 'uppercase' }}>⭐ Escala de Boas Práticas:</span>
+                                  <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.83rem', color: '#14532d', fontWeight: 600 }}>Nível {obs.escala_boas_praticas} de 4 na consolidação formativa</p>
+                                </div>
+                              )}
+
+                              {obs.etapas_nao_realizadas && obs.etapas_nao_realizadas !== 'Nenhuma (Todas as etapas realizadas)' && (
+                                <div style={{ backgroundColor: '#fff1f2', padding: '0.85rem', borderRadius: '8px', borderLeft: '4px solid #f43f5e' }}>
+                                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#9f1239', textTransform: 'uppercase' }}>⚠️ Etapas do PDP Não Realizadas:</span>
+                                  <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.83rem', color: '#881337', fontWeight: 600 }}>Etapas: {obs.etapas_nao_realizadas}</p>
+                                  {obs.justificativa_etapas && (
+                                    <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.8rem', color: '#4c0519', fontStyle: 'italic' }}>Justificativa: {obs.justificativa_etapas}</p>
+                                  )}
                                 </div>
                               )}
                             </div>
                           )}
 
-                          {/* Links de Gravações e Planejamento */}
-                          {(obs.link_gravacao_pratica || obs.link_gravacao_feedback || obs.link_planejamento) && (
+                          {/* Links de Gravações, Planejamento e PDP */}
+                          {(obs.link_gravacao_pratica || obs.link_gravacao_feedback || obs.link_planejamento || obs.link_pdp) && (
                             <div style={{ display: 'flex', gap: '0.65rem', flexWrap: 'wrap', paddingTop: '0.5rem', borderTop: '1px solid #f1f5f9' }}>
                               {obs.link_gravacao_pratica && (
                                 <a 
@@ -647,6 +696,27 @@ export default function DossieCursistaModal({
                                   }}
                                 >
                                   📄 Acessar Plano de Aula
+                                </a>
+                              )}
+                              {obs.link_pdp && (
+                                <a 
+                                  href={obs.link_pdp} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.4rem',
+                                    fontSize: '0.78rem',
+                                    fontWeight: 700,
+                                    padding: '0.4rem 0.8rem',
+                                    borderRadius: '6px',
+                                    backgroundColor: '#ecfdf5',
+                                    color: '#047857',
+                                    textDecoration: 'none'
+                                  }}
+                                >
+                                  📑 Acessar PDP
                                 </a>
                               )}
                             </div>

@@ -58,7 +58,10 @@ export default function ListaTurmas({ data, observacoes = [], onNovaObservacao }
         cgm: item.cgm || '',
         rg: item.rg || '',
         municipios: item.munic_exe || item.municipios || '',
-        telefone: item.telefone_cursista || ''
+        telefone: item.telefone_cursista || '',
+        ano_formativo: item.ano_formativo || record.anoFormativo || '',
+        componente: item.componente || record.componente || '',
+        turma: turmaKey
       });
     });
 

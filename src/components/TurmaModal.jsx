@@ -32,7 +32,10 @@ export default function TurmaModal({ turmaName, data, onClose, observacoes = nul
           cgm: item.cgm || '',
           rg: item.rg || '',
           municipios: item.munic_exe || item.municipios || '',
-          telefone: item.telefone_cursista || ''
+          telefone: item.telefone_cursista || '',
+          ano_formativo: item.ano_formativo || first.ano_formativo || '',
+          componente: item.componente || first.componente || first.componente_conc || '',
+          turma: fullTurmaName
         });
       }
     });
