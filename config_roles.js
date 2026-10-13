@@ -19,9 +19,12 @@ export const DEFAULT_ADMINS = [
   "chrystiankrone@escola.pr.gov.br",
   "jorge.dotti@escola.pr.gov.br",
   "pedfor.epap@escola.pr.gov.br",
-  "ivatiuk@escola.pr.gov.br",
   "toky.coelho@escola.pr.gov.br",
-  "ivatiuk@escola.pr.gov.br"   // Placeholder geral
+  "ivatiuk@escola.pr.gov.br",
+  "patricia.silva23@escola.pr.gov.br",
+  "cristiani.bedin@escola.pr.gov.br",
+  "vania.oliveira28@escola.pr.gov.br",
+  "silviazanette@escola.pr.gov.br"    // Placeholder geral
 ];
 
 export const DEFAULT_TECNICOS = [
