@@ -3,6 +3,7 @@ import FormularioRemanejamento from './FormularioRemanejamento';
 import TurmaModal from './TurmaModal';
 import ObservacaoModalDetalhes from './ObservacaoModalDetalhes';
 import DossieCursistaModal from './DossieCursistaModal';
+import CurvaEvolucaoPedagogica from './CurvaEvolucaoPedagogica';
 import { formatDatePtBr } from '../utils/dateUtils';
 import { getObservacoes2024PorCursista } from '../utils/observacoes2024Service';
 import { gerarDiagnosticoCursistaIA, parseScore, scoreLabel } from '../utils/aiPedagogicalService';
@@ -87,30 +88,6 @@ export default function AmbienteCursista({ userEmail, records, observacoes = [],
       return tB.localeCompare(tA);
     });
   }, [cursistaRecord, observacoes, userEmail, obs2024]);
-
-  // Dados cronológicos para o gráfico de evolução pedagógica
-  const dadosGrafico = useMemo(() => {
-    const ordenadas = [...minhasObservacoes].sort((a, b) => {
-      const tA = (a.data_feedback || a.data_pratica || a.data_observacao || a.carimbo || a.created_at || '');
-      const tB = (b.data_feedback || b.data_pratica || b.data_observacao || b.carimbo || b.created_at || '');
-      return tA.localeCompare(tB); // ordem crescente
-    });
-
-    return ordenadas.map((obs, idx) => {
-      const scorePratica = parseScore(obs.nivel_pratica || obs.criterio2_nivel);
-      const scorePlan = parseScore(obs.nivel_planejamento || obs.criterio1_nivel);
-      const dataLabel = formatDatePtBr(obs.data_pratica || obs.data_observacao || obs.data_feedback || obs.created_at);
-      const anoLabel = obs.ano_formativo ? obs.ano_formativo.split(' ')[0] : '1º';
-
-      return {
-        label: `Obs ${idx + 1} (${anoLabel})`,
-        subLabel: dataLabel || `Etapa ${idx + 1}`,
-        scorePratica,
-        scorePlan,
-        raw: obs
-      };
-    });
-  }, [minhasObservacoes]);
 
   // Diagnóstico pedagógico gerado por IA
   const diagnosticoIA = useMemo(() => {
@@ -642,94 +619,17 @@ export default function AmbienteCursista({ userEmail, records, observacoes = [],
             </div>
           </div>
 
-          {/* PAINEL DE EVOLUÇÃO PEDAGÓGICA & DIAGNÓSTICO IA INLINE */}
-          {dadosGrafico.length > 0 && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.25rem' }}>
+          {/* PAINEL DE EVOLUÇÃO PEDAGÓGICA & DIAGNÓSTICO IA */}
+          {minhasObservacoes.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
               
-              {/* Card 1: Gráfico Curva de Evolução */}
+              {/* Card 1: Gráfico Curva de Evolução (Ampla e com rolagem fluida) */}
               <div className="glass-panel" style={{ background: '#ffffff', padding: '1.25rem', borderRadius: '14px', border: '1px solid var(--color-card-border)', boxShadow: 'var(--shadow-sm)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-                  <div>
-                    <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: 'var(--color-primary-dark)' }}>
-                      📈 Sua Curva de Evolução Pedagógica
-                    </h4>
-                    <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                      Prática Docente (Verde) e Planejamento (Azul)
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.75rem', fontWeight: 700 }}>
-                    <span style={{ color: '#00984a' }}>● Prática</span>
-                    <span style={{ color: '#0072bc' }}>■ Planejamento</span>
-                  </div>
-                </div>
-
-                {/* SVG do Gráfico */}
-                <div style={{ width: '100%', overflowX: 'auto' }}>
-                  {(() => {
-                    const count = dadosGrafico.length;
-                    const stepX = count > 6 ? 70 : (count > 1 ? (480 / (count - 1)) : 240);
-                    const startX = 65;
-                    const svgWidth = count > 6 ? Math.max(550, startX + (count - 1) * stepX + 50) : 550;
-                    const svgHeight = 180;
-
-                    const getCoords = (score, idx) => {
-                      if (!score) return null;
-                      const x = count === 1 ? 275 : startX + idx * stepX;
-                      const y = 25 + (4 - score) * 32;
-                      return { x, y };
-                    };
-
-                    const ptsPratica = dadosGrafico.map((d, i) => {
-                      const c = getCoords(d.scorePratica, i);
-                      return c ? { ...c, score: d.scorePratica } : null;
-                    }).filter(Boolean);
-
-                    const ptsPlan = dadosGrafico.map((d, i) => {
-                      const c = getCoords(d.scorePlan, i);
-                      return c ? { ...c, score: d.scorePlan } : null;
-                    }).filter(Boolean);
-
-                    const pathPratica = ptsPratica.length > 1 ? ptsPratica.reduce((acc, p, i) => i === 0 ? `M ${p.x} ${p.y}` : `${acc} L ${p.x} ${p.y}`, '') : '';
-                    const pathPlan = ptsPlan.length > 1 ? ptsPlan.reduce((acc, p, i) => i === 0 ? `M ${p.x} ${p.y}` : `${acc} L ${p.x} ${p.y}`, '') : '';
-
-                    return (
-                      <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} style={{ width: '100%', height: 'auto', minWidth: '400px' }}>
-                        {[4, 3, 2, 1].map(score => {
-                          const y = 25 + (4 - score) * 32;
-                          return (
-                            <g key={score}>
-                              <line x1="50" y1={y} x2={svgWidth - 20} y2={y} stroke="#f1f5f9" strokeWidth="1" strokeDasharray="3 3" />
-                              <text x="45" y={y + 3} textAnchor="end" fontSize="9.5" fontWeight="700" fill="#94a3b8">N{score}</text>
-                            </g>
-                          );
-                        })}
-                        {pathPratica && <path d={pathPratica} fill="none" stroke="#00984a" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />}
-                        {pathPlan && <path d={pathPlan} fill="none" stroke="#0072bc" strokeWidth="2.5" strokeDasharray="4 3" strokeLinecap="round" strokeLinejoin="round" />}
-                        {ptsPratica.map((p, i) => (
-                          <g key={`pr-${i}`}>
-                            <circle cx={p.x} cy={p.y} r="5" fill="#00984a" stroke="#fff" strokeWidth="2" />
-                            <text x={p.x} y={p.y - 8} textAnchor="middle" fontSize="10" fontWeight="800" fill="#00984a">{p.score}</text>
-                          </g>
-                        ))}
-                        {ptsPlan.map((p, i) => (
-                          <g key={`pl-${i}`}>
-                            <rect x={p.x - 4} y={p.y - 4} width="8" height="8" fill="#0072bc" stroke="#fff" strokeWidth="1.5" rx="1.5" />
-                            <text x={p.x} y={p.y + 15} textAnchor="middle" fontSize="9" fontWeight="700" fill="#0072bc">{p.score}</text>
-                          </g>
-                        ))}
-                        {dadosGrafico.map((d, i) => {
-                          const x = count === 1 ? 275 : startX + i * stepX;
-                          return (
-                            <g key={`l-${i}`}>
-                              <text x={x} y="145" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#1e293b">{d.label}</text>
-                              <text x={x} y="158" textAnchor="middle" fontSize="8.5" fill="#64748b">{d.subLabel}</text>
-                            </g>
-                          );
-                        })}
-                      </svg>
-                    );
-                  })()}
-                </div>
+                <CurvaEvolucaoPedagogica
+                  observacoes={minhasObservacoes}
+                  title="Sua Curva de Evolução Pedagógica"
+                  subtitle="Acompanhamento cronológico dos níveis de Prática Docente (Verde) e Planejamento (Azul)"
+                />
               </div>
 
               {/* Card 2: Diagnóstico Pedagógico IA */}
