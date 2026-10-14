@@ -9,6 +9,17 @@
  * - Síntese Executiva e Recomendações
  */
 
+// Helper para normalizar strings (sem acentos, caixa alta, espaços limpos)
+export const normalizeString = (str) => {
+  if (!str) return '';
+  return String(str)
+    .trim()
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ');
+};
+
 // Helper para converter nível para número 1-4
 export const parseScore = (nivel) => {
   if (nivel === null || nivel === undefined) return null;

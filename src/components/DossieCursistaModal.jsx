@@ -3,7 +3,7 @@ import { formatDatePtBr, parseDateToTimestamp } from '../utils/dateUtils';
 import FormularioInserirObservacao from './FormularioInserirObservacao';
 import CurvaEvolucaoPedagogica from './CurvaEvolucaoPedagogica';
 import { getObservacoes2024PorCursista } from '../utils/observacoes2024Service';
-import { parseScore, scoreLabel, gerarDiagnosticoCursistaIA, getNivelInfo } from '../utils/aiPedagogicalService';
+import { parseScore, scoreLabel, gerarDiagnosticoCursistaIA, getNivelInfo, normalizeString } from '../utils/aiPedagogicalService';
 
 export default function DossieCursistaModal({ 
   cursista, 
@@ -18,9 +18,12 @@ export default function DossieCursistaModal({
   const [obs2024, setObs2024] = useState([]);
   const [loading2024, setLoading2024] = useState(false);
 
+  const [filtroComponente, setFiltroComponente] = useState('todos');
+
   // Normalização e busca de todas as observações pertencentes a este cursista
-  const cursistaEmail = (cursista?.email || cursista?.email_cursista || '').trim().toLowerCase();
-  const cursistaNome = (cursista?.nome || cursista?.nome_cursista || '').trim().toLowerCase();
+  const cursistaEmail = (cursista?.email || cursista?.email_cursista || cursista?.['e-mail'] || '').trim().toLowerCase();
+  const cursistaNomeNorm = normalizeString(cursista?.nome || cursista?.nome_cursista || '');
+  const cursistaCgm = String(cursista?.cgm || '').trim();
 
   // Carregar histórico de 2024 do cursista sob demanda
   useEffect(() => {
@@ -46,65 +49,44 @@ export default function DossieCursistaModal({
     );
   };
 
+  // Observações de 2026 pertencentes a este cursista (por e-mail, nome normalizado ou CGM)
   const observacoesAtuais2026 = useMemo(() => {
     return observacoes.filter(obs => {
       const email = (obs.email_cursista || '').trim().toLowerCase();
       const matchEmail = email && cursistaEmail && email === cursistaEmail;
-      const nome = (obs.nome_cursista || '').trim().toLowerCase();
-      const matchNome = nome && cursistaNome && nome === cursistaNome;
-      if (!matchEmail && !matchNome) return false;
+      const nomeNorm = normalizeString(obs.nome_cursista || '');
+      const matchNome = nomeNorm && cursistaNomeNorm && (nomeNorm === cursistaNomeNorm || nomeNorm.includes(cursistaNomeNorm) || cursistaNomeNorm.includes(nomeNorm));
+      const obsCgm = String(obs.cgm || '').trim();
+      const matchCgm = obsCgm && cursistaCgm && obsCgm === cursistaCgm;
 
-      // Se o dossiê estiver visualizando um vínculo/turma específico, filtra observações pertinentes
-      const cComp = (turmaInfo?.componente || cursista?.componente || cursista?.componente_conc || '').trim().toLowerCase();
-      const oComp = (obs.componente || '').trim().toLowerCase();
-      if (cComp && oComp) {
-        const isPed = (oComp.includes('pedagog') || oComp.includes('gestor')) && (cComp.includes('pedagog') || cComp.includes('gestor'));
-        if (!isPed && !cComp.includes(oComp) && !oComp.includes(cComp)) {
-          return false;
-        }
-      }
-
-      const cTurma = (turmaInfo?.turma || cursista?.turmas || cursista?.turma || '').trim().toLowerCase();
-      const oTurma = (obs.turma || obs.turmas || '').trim().toLowerCase();
-      if (cTurma && oTurma && cTurma !== oTurma) {
-        return false;
-      }
-
-      const cForm = (turmaInfo?.formador || cursista?.nome_formador || cursista?.formador || '').trim().toLowerCase();
-      const oForm = (obs.nome_formador || '').trim().toLowerCase();
-      if (cForm && oForm && !cForm.includes(oForm) && !oForm.includes(cForm)) {
-        return false;
-      }
-
-      return true;
+      return matchEmail || matchNome || matchCgm;
     });
-  }, [observacoes, cursistaEmail, cursistaNome, turmaInfo, cursista]);
+  }, [observacoes, cursistaEmail, cursistaNomeNorm, cursistaCgm]);
 
-  const observacoesDoCursista = useMemo(() => {
-    const cComp = (turmaInfo?.componente || cursista?.componente || cursista?.componente_conc || '').trim().toLowerCase();
-    const cTurma = (turmaInfo?.turma || cursista?.turmas || cursista?.turma || '').trim().toLowerCase();
-
-    const obs2024Filtradas = obs2024.filter(o => {
-      const oComp = (o.componente || '').trim().toLowerCase();
-      if (cComp && oComp) {
-        const isPed = (oComp.includes('pedagog') || oComp.includes('gestor')) && (cComp.includes('pedagog') || cComp.includes('gestor'));
-        if (!isPed && !cComp.includes(oComp) && !oComp.includes(cComp)) {
-          return false;
-        }
-      }
-      const oTurma = (o.turma || o.turmas || '').trim().toLowerCase();
-      if (cTurma && oTurma && cTurma !== oTurma) {
-        return false;
-      }
-      return true;
-    });
-
-    // Mescla observações atuais com o histórico de 2024
-    const todasMescladas = [...observacoesAtuais2026, ...obs2024Filtradas];
-
-    // Ordenação estritamente cronológica decrescente (mais recente primeiro no histórico/timeline)
+  // Todas as observações mescladas (2026 + histórico de 2024)
+  const todasObservacoesDoCursista = useMemo(() => {
+    const todasMescladas = [...observacoesAtuais2026, ...obs2024];
     return todasMescladas.sort((a, b) => getObsTimestamp(b) - getObsTimestamp(a));
-  }, [observacoesAtuais2026, obs2024, turmaInfo, cursista]);
+  }, [observacoesAtuais2026, obs2024]);
+
+  // Componentes presentes nas observações (útil caso o cursista tenha dois padrões)
+  const componentesDisponiveis = useMemo(() => {
+    const set = new Set();
+    todasObservacoesDoCursista.forEach(o => {
+      const comp = o.componente || (o.modalidade?.toLowerCase().includes('gestora') ? 'EQUIPE PEDAGÓGICA' : '');
+      if (comp) set.add(comp.trim().toUpperCase());
+    });
+    return Array.from(set).sort();
+  }, [todasObservacoesDoCursista]);
+
+  // Observações ativas filtradas (por padrão 'todos' para nunca ocultar dados)
+  const observacoesDoCursista = useMemo(() => {
+    if (filtroComponente === 'todos') return todasObservacoesDoCursista;
+    return todasObservacoesDoCursista.filter(o => {
+      const comp = (o.componente || (o.modalidade?.toLowerCase().includes('gestora') ? 'EQUIPE PEDAGÓGICA' : '')).trim().toUpperCase();
+      return comp === filtroComponente || comp.includes(filtroComponente) || filtroComponente.includes(comp);
+    });
+  }, [todasObservacoesDoCursista, filtroComponente]);
 
   // Função para mapear texto ou número para nível numérico (1 a 4)
   const nivelToScore = (nivel) => parseScore(nivel);
@@ -555,10 +537,56 @@ export default function DossieCursistaModal({
 
           {/* HISTÓRICO CRONOLÓGICO DE OBSERVAÇÕES */}
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
               <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#002d5c' }}>
                 🕒 Histórico Cronológico das Observações ({observacoesDoCursista.length})
               </h3>
+              {componentesDisponiveis.length > 1 && (
+                <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => setFiltroComponente('todos')}
+                    style={{
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      padding: '0.25rem 0.6rem',
+                      borderRadius: '6px',
+                      border: filtroComponente === 'todos' ? '2px solid #0284c7' : '1px solid #cbd5e1',
+                      backgroundColor: filtroComponente === 'todos' ? '#e0f2fe' : '#ffffff',
+                      color: filtroComponente === 'todos' ? '#0369a1' : '#475569',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Todos ({todasObservacoesDoCursista.length})
+                  </button>
+                  {componentesDisponiveis.map(comp => {
+                    const isSel = filtroComponente === comp;
+                    const count = todasObservacoesDoCursista.filter(o => {
+                      const c = (o.componente || (o.modalidade?.toLowerCase().includes('gestora') ? 'EQUIPE PEDAGÓGICA' : '')).trim().toUpperCase();
+                      return c === comp || c.includes(comp) || comp.includes(c);
+                    }).length;
+                    return (
+                      <button
+                        key={comp}
+                        type="button"
+                        onClick={() => setFiltroComponente(comp)}
+                        style={{
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          padding: '0.25rem 0.6rem',
+                          borderRadius: '6px',
+                          border: isSel ? '2px solid #0284c7' : '1px solid #cbd5e1',
+                          backgroundColor: isSel ? '#e0f2fe' : '#ffffff',
+                          color: isSel ? '#0369a1' : '#475569',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {comp} ({count})
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {observacoesDoCursista.length === 0 ? (

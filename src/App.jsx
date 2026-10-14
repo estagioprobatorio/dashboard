@@ -22,6 +22,7 @@ import AcompanhamentoObservacoesCards from './components/AcompanhamentoObservaco
 import Concluintes from './components/Concluintes';
 
 import { salvarObservacaoIntegrada, getObservacoesLocaisNovas } from './utils/observacoesSyncService';
+import { normalizeString } from './utils/aiPedagogicalService';
 
 // Importando dados iniciais locais
 import fallbackData from './data_fallback.json';
@@ -606,11 +607,19 @@ export default function App() {
 
     const email = (effectiveEmail || '').trim().toLowerCase();
 
-    // Formador: vê observações realizadas por ele
+    // Formador: vê observações realizadas por ele (por e-mail ou nome)
     if (effectiveRole === 'formador') {
+      const matchingFormadores = enrichedRecords.filter(r => 
+        (r['e-mail_formador'] || r.email_formador || '').trim().toLowerCase() === email
+      );
+      const formadorNames = new Set(matchingFormadores.map(r => normalizeString(r.nome_formador || '')).filter(Boolean));
+
       return observacoesList.filter(obs => {
         const obsFormadorEmail = (obs.email_formador || '').trim().toLowerCase();
-        return obsFormadorEmail === email;
+        if (obsFormadorEmail && obsFormadorEmail === email) return true;
+        const obsFormadorNome = normalizeString(obs.nome_formador || '');
+        if (obsFormadorNome && formadorNames.has(obsFormadorNome)) return true;
+        return false;
       });
     }
 
@@ -635,16 +644,40 @@ export default function App() {
       });
     }
 
-    // Cursista: vê apenas as suas próprias observações
+    // Cursista: vê observações de todos os seus vínculos/padrões (por e-mail, nome normalizado ou CGM)
     if (effectiveRole === 'cursista') {
+      const matchingCursistas = enrichedRecords.filter(r => {
+        const em = (r['e-mail'] || r.email || r.email_cursista || '').trim().toLowerCase();
+        return em === email;
+      });
+
+      // Se encontrou registros por e-mail, verifica se há CGM para resgatar outros vínculos da mesma pessoa
+      const cgmsEncontrados = new Set(matchingCursistas.map(r => String(r.cgm || '').trim()).filter(Boolean));
+      const todosVinculosCursista = cgmsEncontrados.size > 0 
+        ? enrichedRecords.filter(r => {
+            const em = (r['e-mail'] || r.email || r.email_cursista || '').trim().toLowerCase();
+            const c = String(r.cgm || '').trim();
+            return em === email || (c && cgmsEncontrados.has(c));
+          })
+        : matchingCursistas;
+
+      const cursistaEmails = new Set([email, ...todosVinculosCursista.map(r => (r['e-mail'] || r.email || r.email_cursista || '').trim().toLowerCase()).filter(Boolean)]);
+      const cursistaNomesNorm = new Set(todosVinculosCursista.map(r => normalizeString(r.nome_cursista || r.nome || '')).filter(Boolean));
+      const cursistaCgms = new Set(todosVinculosCursista.map(r => String(r.cgm || '').trim()).filter(Boolean));
+
       return observacoesList.filter(obs => {
-        const obsCursistaEmail = (obs.email_cursista || '').trim().toLowerCase();
-        return obsCursistaEmail === email;
+        const obsEmail = (obs.email_cursista || '').trim().toLowerCase();
+        if (obsEmail && cursistaEmails.has(obsEmail)) return true;
+        const obsNomeNorm = normalizeString(obs.nome_cursista || '');
+        if (obsNomeNorm && cursistaNomesNorm.has(obsNomeNorm)) return true;
+        const obsCgm = String(obs.cgm || '').trim();
+        if (obsCgm && cursistaCgms.has(obsCgm)) return true;
+        return false;
       });
     }
 
     return observacoesList;
-  }, [observacoesList, filteredRecordsForView, tutoresList, user, userRole, simulatedRole, effectiveRole, effectiveEmail]);
+  }, [observacoesList, filteredRecordsForView, enrichedRecords, tutoresList, user, userRole, simulatedRole, effectiveRole, effectiveEmail]);
 
 
   // Handler para novas solicitações enviadas pelo Cursista

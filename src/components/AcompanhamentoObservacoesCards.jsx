@@ -120,6 +120,18 @@ export default function AcompanhamentoObservacoesCards({
     // Processar cursistas por vínculo (permite que o mesmo CGM com múltiplos vínculos, ex: turmas ou componentes distintos, apareça normalmente)
     const cursistasProcessados = new Map();
 
+    // Identificar quantas turmas/vínculos cada pessoa possui
+    const vinculosPorPessoa = new Map();
+    cursistas.forEach(c => {
+      const cgm = String(c.cgm || '').trim();
+      const email = (c['e-mail'] || c.email || c.email_cursista || '').trim().toLowerCase();
+      const nomeNorm = normalizeString(c.nome_cursista || c.nome || '');
+      const pKey = cgm || email || nomeNorm;
+      if (pKey) {
+        vinculosPorPessoa.set(pKey, (vinculosPorPessoa.get(pKey) || 0) + 1);
+      }
+    });
+
     cursistas.forEach(c => {
       const email = (c['e-mail'] || c.email || c.email_cursista || '').trim().toLowerCase();
       const cgm = String(c.cgm || '').trim();
@@ -148,39 +160,25 @@ export default function AcompanhamentoObservacoesCards({
 
       const todasObsPessoa = Array.from(obsEncontradas.values());
 
-      // Se a cursista possui múltiplos vínculos ou observações com componentes/turmas/formadores específicos, vincula com inteligência
-      const cTurmaNorm = normalizeString(turma);
+      // Se a cursista possui múltiplos vínculos, separa com inteligência pelo componente
       const cCompNorm = normalizeString(componente);
-      const cFormadorNorm = normalizeString(c.nome_formador || c.formador || '');
+      const pKey = cgm || email || nomeNorm;
+      const temMultiplosVinculos = (vinculosPorPessoa.get(pKey) || 0) > 1;
 
       const listaObs = todasObsPessoa.filter(o => {
-        const oTurma = normalizeString(o.turma || o.turmas || '');
+        // Se a pessoa só tem 1 vínculo no programa, todas as suas observações pertencem a este registro
+        if (!temMultiplosVinculos) return true;
+
         const oComp = normalizeString(o.componente || '');
-        const oFormador = normalizeString(o.nome_formador || o.formador || '');
-
-        // 1. Se a observação tiver turma explícita
-        if (oTurma && cTurmaNorm) {
-          return oTurma === cTurmaNorm;
-        }
-
-        // 2. Se a observação tiver componente explícito
         if (oComp && cCompNorm) {
-          const isPedagogo = (oComp.includes('pedagog') || oComp.includes('gestor')) && (cCompNorm.includes('pedagog') || cCompNorm.includes('gestor'));
+          const isPedagogo = (oComp.includes('PEDAGOG') || oComp.includes('GESTOR')) && (cCompNorm.includes('PEDAGOG') || cCompNorm.includes('GESTOR'));
           if (isPedagogo || cCompNorm.includes(oComp) || oComp.includes(cCompNorm)) {
             return true;
           }
           return false;
         }
 
-        // 3. Se a observação tiver formador explícito
-        if (oFormador && cFormadorNorm) {
-          if (cFormadorNorm.includes(oFormador) || oFormador.includes(cFormadorNorm)) {
-            return true;
-          }
-          return false;
-        }
-
-        // Sem restrições na observação, mantém para o cursista
+        // Sem restrições de componente na observação, mantém no vínculo para não omitir dados
         return true;
       });
 

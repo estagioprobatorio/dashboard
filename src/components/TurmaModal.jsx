@@ -3,6 +3,7 @@ import { exportToCSV, printReportPDF } from '../utils/exportUtils';
 import ObservacaoModalDetalhes from './ObservacaoModalDetalhes';
 import DossieCursistaModal from './DossieCursistaModal';
 import observacoesFallback from '../observacoes_fallback.json';
+import { normalizeString } from '../utils/aiPedagogicalService';
 
 export default function TurmaModal({ turmaName, data, onClose, observacoes = null, onSaveObservacao = null }) {
   const [cursistaSearch, setCursistaSearch] = useState('');
@@ -106,12 +107,14 @@ export default function TurmaModal({ turmaName, data, onClose, observacoes = nul
 
     effectiveObservacoes.forEach(o => {
       const email = (o.email_cursista || '').trim().toLowerCase();
-      if (email && !byEmail.has(email)) {
-        byEmail.set(email, o);
+      if (email) {
+        if (!byEmail.has(email)) byEmail.set(email, []);
+        byEmail.get(email).push(o);
       }
-      const nome = (o.nome_cursista || '').trim().toLowerCase();
-      if (nome && !byNome.has(nome)) {
-        byNome.set(nome, o);
+      const nomeNorm = normalizeString(o.nome_cursista || '');
+      if (nomeNorm) {
+        if (!byNome.has(nomeNorm)) byNome.set(nomeNorm, []);
+        byNome.get(nomeNorm).push(o);
       }
     });
 
@@ -122,11 +125,13 @@ export default function TurmaModal({ turmaName, data, onClose, observacoes = nul
     if (!cursista) return null;
     const emailKey = (cursista.email || '').trim().toLowerCase();
     if (emailKey && obsMap.byEmail.has(emailKey)) {
-      return obsMap.byEmail.get(emailKey);
+      const list = obsMap.byEmail.get(emailKey);
+      return list[list.length - 1] || null;
     }
-    const nomeKey = (cursista.nome || '').trim().toLowerCase();
-    if (nomeKey && obsMap.byNome.has(nomeKey)) {
-      return obsMap.byNome.get(nomeKey);
+    const nomeNorm = normalizeString(cursista.nome || '');
+    if (nomeNorm && obsMap.byNome.has(nomeNorm)) {
+      const list = obsMap.byNome.get(nomeNorm);
+      return list[list.length - 1] || null;
     }
     return null;
   };

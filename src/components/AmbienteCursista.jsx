@@ -6,7 +6,7 @@ import DossieCursistaModal from './DossieCursistaModal';
 import CurvaEvolucaoPedagogica from './CurvaEvolucaoPedagogica';
 import { formatDatePtBr } from '../utils/dateUtils';
 import { getObservacoes2024PorCursista } from '../utils/observacoes2024Service';
-import { gerarDiagnosticoCursistaIA, parseScore, scoreLabel, getNivelInfo } from '../utils/aiPedagogicalService';
+import { gerarDiagnosticoCursistaIA, parseScore, scoreLabel, getNivelInfo, normalizeString } from '../utils/aiPedagogicalService';
 
 export default function AmbienteCursista({ userEmail, records, observacoes = [], movimentacoes = [], onNovaMovimentacao, subTab = 'turma' }) {
   const [activeSubTab, setActiveSubTab] = useState(subTab);
@@ -45,40 +45,92 @@ export default function AmbienteCursista({ userEmail, records, observacoes = [],
     }
   };
 
-  // 1. Identificar o registro do Cursista Logado
-  const cursistaRecord = useMemo(() => {
-    if (!userEmail || !records) return null;
+  // 1. Identificar TODOS os registros/vínculos do Cursista Logado (suporte a dois padrões)
+  const cursistaRecords = useMemo(() => {
+    if (!userEmail || !records || records.length === 0) return [];
     const cleanEmail = userEmail.trim().toLowerCase();
-    return records.find(item => {
+
+    // 1.1 Procura direta por e-mail
+    const porEmail = records.filter(item => {
       const email = (item['e-mail'] || item.email || item.email_cursista || '').trim().toLowerCase();
       return email === cleanEmail;
-    }) || records[0]; // Fallback para dev/testes se necessário
+    });
+
+    if (porEmail.length > 0) {
+      // 1.2 Se encontrou por e-mail, resgata outros vínculos do mesmo CGM se houver (caso de dois padrões)
+      const cgms = new Set(porEmail.map(p => String(p.cgm || '').trim()).filter(Boolean));
+      if (cgms.size > 0) {
+        const todosDoCgm = records.filter(item => {
+          const c = String(item.cgm || '').trim();
+          return c && cgms.has(c);
+        });
+        const map = new Map();
+        [...porEmail, ...todosDoCgm].forEach(r => {
+          const k = r.id || `${r.cgm}_${r.turmas}_${r.componente}`;
+          if (!map.has(k)) map.set(k, r);
+        });
+        return Array.from(map.values());
+      }
+      return porEmail;
+    }
+
+    return records[0] ? [records[0]] : [];
   }, [userEmail, records]);
 
-  // Carregar histórico de 2024 do cursista
+  // Vínculo selecionado (para cursistas com dois padrões)
+  const [selectedRecordIndex, setSelectedRecordIndex] = useState(0);
+
+  const activeRecordIndex = (selectedRecordIndex >= 0 && selectedRecordIndex < cursistaRecords.length) ? selectedRecordIndex : 0;
+  const cursistaRecord = cursistaRecords[activeRecordIndex] || cursistaRecords[0] || null;
+
+  // Carregar histórico de 2024 do cursista (busca em todos os vínculos)
   useEffect(() => {
     let isMounted = true;
-    if (cursistaRecord) {
-      getObservacoes2024PorCursista(cursistaRecord).then(res => {
-        if (isMounted) setObs2024(res);
-      }).catch(err => {
-        console.warn('Erro ao carregar histórico 2024 do cursista:', err);
-      });
+    if (cursistaRecords && cursistaRecords.length > 0) {
+      Promise.all(cursistaRecords.map(rec => getObservacoes2024PorCursista(rec).catch(() => [])))
+        .then(results => {
+          if (!isMounted) return;
+          const flat = results.flat();
+          const map = new Map();
+          flat.forEach(item => {
+            const id = item.id || `${item.carimbo}_${item.data_feedback}`;
+            if (!map.has(id)) map.set(id, item);
+          });
+          setObs2024(Array.from(map.values()));
+        })
+        .catch(err => {
+          console.warn('Erro ao carregar histórico 2024 do cursista:', err);
+        });
     }
     return () => { isMounted = false; };
-  }, [cursistaRecord]);
+  }, [cursistaRecords]);
 
-  // 1.1 Identificar as Observações da Prática do Cursista Logado (2026 + 2024)
+  // 1.1 Identificar as Observações da Prática do Cursista Logado (2026 + 2024) para todos os seus vínculos
   const minhasObservacoes = useMemo(() => {
-    if (!cursistaRecord) return [];
-    const email = (cursistaRecord['e-mail'] || cursistaRecord.email || cursistaRecord.email_cursista || userEmail || '').trim().toLowerCase();
-    const nome = (cursistaRecord.nome_cursista || cursistaRecord.nome || '').trim().toLowerCase();
+    if (!cursistaRecords || cursistaRecords.length === 0) return [];
+    
+    const emailsSet = new Set();
+    const nomesNormSet = new Set();
+    const cgmsSet = new Set();
+
+    if (userEmail) emailsSet.add(userEmail.trim().toLowerCase());
+
+    cursistaRecords.forEach(cr => {
+      const em = (cr['e-mail'] || cr.email || cr.email_cursista || '').trim().toLowerCase();
+      if (em) emailsSet.add(em);
+      const nm = normalizeString(cr.nome_cursista || cr.nome || '');
+      if (nm) nomesNormSet.add(nm);
+      const c = String(cr.cgm || '').trim();
+      if (c) cgmsSet.add(c);
+    });
 
     const obsAtuais = (observacoes || []).filter(obs => {
       const oEmail = (obs.email_cursista || '').trim().toLowerCase();
-      if (oEmail && email && oEmail === email) return true;
-      const oNome = (obs.nome_cursista || '').trim().toLowerCase();
-      if (oNome && nome && oNome === nome) return true;
+      if (oEmail && emailsSet.has(oEmail)) return true;
+      const oNomeNorm = normalizeString(obs.nome_cursista || '');
+      if (oNomeNorm && nomesNormSet.has(oNomeNorm)) return true;
+      const oCgm = String(obs.cgm || '').trim();
+      if (oCgm && cgmsSet.has(oCgm)) return true;
       return false;
     });
 
@@ -88,7 +140,7 @@ export default function AmbienteCursista({ userEmail, records, observacoes = [],
       const tB = (b.data_feedback || b.data_pratica || b.data_observacao || b.carimbo || b.created_at || '');
       return tB.localeCompare(tA);
     });
-  }, [cursistaRecord, observacoes, userEmail, obs2024]);
+  }, [cursistaRecords, observacoes, userEmail, obs2024]);
 
   // Diagnóstico pedagógico gerado por IA
   const diagnosticoIA = useMemo(() => {
@@ -224,6 +276,65 @@ export default function AmbienteCursista({ userEmail, records, observacoes = [],
           <span>📲</span> Instalar App no Celular
         </button>
       </div>
+
+      {/* Seletor de Padrões/Vínculos para Cursistas com Múltiplos Vínculos (Dois Padrões) */}
+      {cursistaRecords.length > 1 && (
+        <div style={{
+          backgroundColor: '#eff6ff',
+          border: '1px solid #bfdbfe',
+          borderRadius: '12px',
+          padding: '0.85rem 1.25rem',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '0.75rem'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            <span style={{ fontSize: '1.25rem' }}>🎓</span>
+            <div>
+              <strong style={{ fontSize: '0.88rem', color: '#1e3a8a', display: 'block' }}>
+                Você possui {cursistaRecords.length} vínculos (dois padrões) ativos no programa:
+              </strong>
+              <span style={{ fontSize: '0.78rem', color: '#3b82f6' }}>
+                Selecione abaixo o padrão desejado para alternar sua turma, formador e dados funcionais:
+              </span>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            {cursistaRecords.map((rec, idx) => {
+              const isSel = idx === activeRecordIndex;
+              const comp = rec.componente || rec.componente_conc || 'Geral';
+              const turno = rec.turmas?.toUpperCase().includes('MANHA') ? 'Manhã' : rec.turmas?.toUpperCase().includes('TARDE') ? 'Tarde' : rec.turmas?.toUpperCase().includes('NOITE') ? 'Noite' : '';
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => setSelectedRecordIndex(idx)}
+                  style={{
+                    padding: '0.45rem 0.9rem',
+                    borderRadius: '8px',
+                    border: isSel ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                    backgroundColor: isSel ? '#2563eb' : '#ffffff',
+                    color: isSel ? '#ffffff' : '#1e293b',
+                    fontWeight: isSel ? 700 : 600,
+                    fontSize: '0.82rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    boxShadow: isSel ? '0 2px 4px rgba(37,99,235,0.2)' : 'none',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <span>{isSel ? '✓' : '📌'}</span>
+                  <span>Padrão {idx + 1}: {comp} {turno ? `(${turno})` : ''}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Navegação de Sub-abas Internas */}
       <div style={{
