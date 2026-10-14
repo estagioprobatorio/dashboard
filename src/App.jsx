@@ -773,7 +773,8 @@ export default function App() {
           <Concluintes 
             concluintes={concluintesList} 
             cursistasAtivos={enrichedRecords} 
-            observacoes={observacoesList} 
+            observacoes={observacoesList}
+            userRole={userRole}
           />
         );
       case 'admin':

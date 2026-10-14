@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { exportToCSV } from '../utils/exportUtils';
 
-export default function Concluintes({ concluintes = [], cursistasAtivos = [], observacoes = [] }) {
+export default function Concluintes({ concluintes = [], cursistasAtivos = [], observacoes = [], userRole = null }) {
+  const isAdmin = userRole === 'admin';
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedNre, setSelectedNre] = useState('');
   const [selectedComponente, setSelectedComponente] = useState('');
@@ -221,142 +222,146 @@ export default function Concluintes({ concluintes = [], cursistasAtivos = [], ob
         </p>
       </div>
 
-      {/* PAINEL DE AUDITORIA E RECONCILIAÇÃO DO GARGALO MATEMÁTICO */}
-      <div 
-        className="glass-panel" 
-        style={{
-          padding: '1.4rem 1.6rem',
-          borderRadius: '12px',
-          borderTop: '4px solid #0072bc',
-          background: '#ffffff',
-          boxShadow: '0 4px 12px rgba(0, 45, 92, 0.05)'
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span style={{ fontSize: '1.3rem' }}>⚖️</span>
-            <div>
-              <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#002d5c' }}>
-                Reconciliação e Auditoria do Gargalo Matemático
-              </h3>
-              <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
-                Cruzamento das 17.906 observações do banco com Cursistas Ativos e Concluintes
-              </span>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#166534', backgroundColor: '#dcfce7', padding: '0.3rem 0.7rem', borderRadius: '6px' }}>
-              Taxa de Resolução: <b>{auditoriaMatematica.taxaResolvida}%</b>
-            </span>
-          </div>
-        </div>
-
-        {/* CARDS COMPARATIVOS */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '1rem', marginBottom: '1.2rem' }}>
-          {/* Card 1: Ativos */}
-          <div style={{ padding: '1rem', borderRadius: '8px', backgroundColor: '#f0f9ff', border: '1px solid #bae6fd' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0284c7', textTransform: 'uppercase' }}>
-              1. Cursistas Ativos (2026)
-            </span>
-            <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#0369a1', margin: '0.2rem 0' }}>
-              {auditoriaMatematica.obsAtivosCount.toLocaleString('pt-BR')}
-            </div>
-            <span style={{ fontSize: '0.74rem', color: '#0284c7' }}>
-              Vinculadas aos {cursistasAtivos.length.toLocaleString('pt-BR')} cursistas ativos
-            </span>
-          </div>
-
-          {/* Card 2: Concluintes */}
-          <div style={{ padding: '1rem', borderRadius: '8px', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#16a34a', textTransform: 'uppercase' }}>
-              2. Concluintes (1º CH)
-            </span>
-            <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#15803d', margin: '0.2rem 0' }}>
-              {auditoriaMatematica.obsConcluintesCount.toLocaleString('pt-BR')}
-            </div>
-            <span style={{ fontSize: '0.74rem', color: '#16a34a' }}>
-              Recuperadas dos {concluintes.length.toLocaleString('pt-BR')} concluintes
-            </span>
-          </div>
-
-          {/* Card 3: Órfãos / Erros de Digitação */}
-          <div style={{ padding: '1rem', borderRadius: '8px', backgroundColor: '#fffbeb', border: '1px solid #fde68a' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#b45309', textTransform: 'uppercase' }}>
-              3. Divergências / Órfãos
-            </span>
-            <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#d97706', margin: '0.2rem 0' }}>
-              {auditoriaMatematica.obsOrfasCount.toLocaleString('pt-BR')}
-            </div>
-            <span style={{ fontSize: '0.74rem', color: '#b45309' }}>
-              E-mails com erro no Forms / Testes
-            </span>
-          </div>
-
-          {/* Card 4: Total Geral */}
-          <div style={{ padding: '1rem', borderRadius: '8px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
-              Total Geral no Banco
-            </span>
-            <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#002d5c', margin: '0.2rem 0' }}>
-              {auditoriaMatematica.totalBanco.toLocaleString('pt-BR')}
-            </div>
-            <span style={{ fontSize: '0.74rem', color: '#64748b' }}>
-              Envios de formulário registrados
-            </span>
-          </div>
-        </div>
-
-        {/* BARRA DE PROGRESSO VISUAL DA COBERTURA */}
-        <div style={{ width: '100%', height: '10px', backgroundColor: '#e2e8f0', borderRadius: '6px', overflow: 'hidden', display: 'flex' }}>
+      {/* PAINEL DE AUDITORIA E RECONCILIAÇÃO DO GARGALO MATEMÁTICO (EXCLUSIVO ADMINS) */}
+      {isAdmin && (
+        <>
           <div 
-            title={`Ativos: ${auditoriaMatematica.obsAtivosCount}`}
-            style={{ 
-              width: `${(auditoriaMatematica.obsAtivosCount / (auditoriaMatematica.totalBanco || 1)) * 100}%`, 
-              backgroundColor: '#0284c7' 
-            }} 
-          />
-          <div 
-            title={`Concluintes: ${auditoriaMatematica.obsConcluintesCount}`}
-            style={{ 
-              width: `${(auditoriaMatematica.obsConcluintesCount / (auditoriaMatematica.totalBanco || 1)) * 100}%`, 
-              backgroundColor: '#16a34a' 
-            }} 
-          />
-          <div 
-            title={`Divergências: ${auditoriaMatematica.obsOrfasCount}`}
-            style={{ 
-              width: `${(auditoriaMatematica.obsOrfasCount / (auditoriaMatematica.totalBanco || 1)) * 100}%`, 
-              backgroundColor: '#f59e0b' 
-            }} 
-          />
-        </div>
-      </div>
+            className="glass-panel" 
+            style={{
+              padding: '1.4rem 1.6rem',
+              borderRadius: '12px',
+              borderTop: '4px solid #0072bc',
+              background: '#ffffff',
+              boxShadow: '0 4px 12px rgba(0, 45, 92, 0.05)'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ fontSize: '1.3rem' }}>⚖️</span>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#002d5c' }}>
+                    Reconciliação e Auditoria do Gargalo Matemático
+                  </h3>
+                  <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                    Cruzamento das 17.906 observações do banco com Cursistas Ativos e Concluintes
+                  </span>
+                </div>
+              </div>
 
-      {/* SE A TABELA DE CONCLUINTES NO BANCO AINDA ESTIVER VAZIA, MOSTRA BANNER ORIENTADOR */}
-      {concluintes.length === 0 && (
-        <div 
-          className="glass-panel animate-fade-in" 
-          style={{
-            padding: '1.5rem',
-            borderRadius: '10px',
-            backgroundColor: '#fffbeb',
-            border: '2px dashed #f59e0b',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '1rem'
-          }}
-        >
-          <span style={{ fontSize: '2rem' }}>💡</span>
-          <div>
-            <h4 style={{ margin: '0 0 0.3rem 0', color: '#92400e', fontSize: '1rem', fontWeight: 800 }}>
-              Tabela de Concluintes pronta no Dashboard!
-            </h4>
-            <p style={{ margin: 0, fontSize: '0.85rem', color: '#78350f', lineHeight: 1.4 }}>
-              A aba já está integrada e escutando o Supabase em tempo real. Para popular os cursistas concluintes, basta rodar a função <b>sincronizarConcluintesParaSupabase()</b> no Google Apps Script da sua planilha ou importar os dados na tabela <code>cursistas_concluintes</code>.
-            </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#166534', backgroundColor: '#dcfce7', padding: '0.3rem 0.7rem', borderRadius: '6px' }}>
+                  Taxa de Resolução: <b>{auditoriaMatematica.taxaResolvida}%</b>
+                </span>
+              </div>
+            </div>
+
+            {/* CARDS COMPARATIVOS */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '1rem', marginBottom: '1.2rem' }}>
+              {/* Card 1: Ativos */}
+              <div style={{ padding: '1rem', borderRadius: '8px', backgroundColor: '#f0f9ff', border: '1px solid #bae6fd' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0284c7', textTransform: 'uppercase' }}>
+                  1. Cursistas Ativos (2026)
+                </span>
+                <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#0369a1', margin: '0.2rem 0' }}>
+                  {auditoriaMatematica.obsAtivosCount.toLocaleString('pt-BR')}
+                </div>
+                <span style={{ fontSize: '0.74rem', color: '#0284c7' }}>
+                  Vinculadas aos {cursistasAtivos.length.toLocaleString('pt-BR')} cursistas ativos
+                </span>
+              </div>
+
+              {/* Card 2: Concluintes */}
+              <div style={{ padding: '1rem', borderRadius: '8px', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#16a34a', textTransform: 'uppercase' }}>
+                  2. Concluintes (1º CH)
+                </span>
+                <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#15803d', margin: '0.2rem 0' }}>
+                  {auditoriaMatematica.obsConcluintesCount.toLocaleString('pt-BR')}
+                </div>
+                <span style={{ fontSize: '0.74rem', color: '#16a34a' }}>
+                  Recuperadas dos {concluintes.length.toLocaleString('pt-BR')} concluintes
+                </span>
+              </div>
+
+              {/* Card 3: Órfãos / Erros de Digitação */}
+              <div style={{ padding: '1rem', borderRadius: '8px', backgroundColor: '#fffbeb', border: '1px solid #fde68a' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#b45309', textTransform: 'uppercase' }}>
+                  3. Divergências / Órfãos
+                </span>
+                <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#d97706', margin: '0.2rem 0' }}>
+                  {auditoriaMatematica.obsOrfasCount.toLocaleString('pt-BR')}
+                </div>
+                <span style={{ fontSize: '0.74rem', color: '#b45309' }}>
+                  E-mails com erro no Forms / Testes
+                </span>
+              </div>
+
+              {/* Card 4: Total Geral */}
+              <div style={{ padding: '1rem', borderRadius: '8px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+                  Total Geral no Banco
+                </span>
+                <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#002d5c', margin: '0.2rem 0' }}>
+                  {auditoriaMatematica.totalBanco.toLocaleString('pt-BR')}
+                </div>
+                <span style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                  Envios de formulário registrados
+                </span>
+              </div>
+            </div>
+
+            {/* BARRA DE PROGRESSO VISUAL DA COBERTURA */}
+            <div style={{ width: '100%', height: '10px', backgroundColor: '#e2e8f0', borderRadius: '6px', overflow: 'hidden', display: 'flex' }}>
+              <div 
+                title={`Ativos: ${auditoriaMatematica.obsAtivosCount}`}
+                style={{ 
+                  width: `${(auditoriaMatematica.obsAtivosCount / (auditoriaMatematica.totalBanco || 1)) * 100}%`, 
+                  backgroundColor: '#0284c7' 
+                }} 
+              />
+              <div 
+                title={`Concluintes: ${auditoriaMatematica.obsConcluintesCount}`}
+                style={{ 
+                  width: `${(auditoriaMatematica.obsConcluintesCount / (auditoriaMatematica.totalBanco || 1)) * 100}%`, 
+                  backgroundColor: '#16a34a' 
+                }} 
+              />
+              <div 
+                title={`Divergências: ${auditoriaMatematica.obsOrfasCount}`}
+                style={{ 
+                  width: `${(auditoriaMatematica.obsOrfasCount / (auditoriaMatematica.totalBanco || 1)) * 100}%`, 
+                  backgroundColor: '#f59e0b' 
+                }} 
+              />
+            </div>
           </div>
-        </div>
+
+          {/* SE A TABELA DE CONCLUINTES NO BANCO AINDA ESTIVER VAZIA, MOSTRA BANNER ORIENTADOR */}
+          {concluintes.length === 0 && (
+            <div 
+              className="glass-panel animate-fade-in" 
+              style={{
+                padding: '1.5rem',
+                borderRadius: '10px',
+                backgroundColor: '#fffbeb',
+                border: '2px dashed #f59e0b',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '1rem'
+              }}
+            >
+              <span style={{ fontSize: '2rem' }}>💡</span>
+              <div>
+                <h4 style={{ margin: '0 0 0.3rem 0', color: '#92400e', fontSize: '1rem', fontWeight: 800 }}>
+                  Tabela de Concluintes pronta no Dashboard!
+                </h4>
+                <p style={{ margin: 0, fontSize: '0.85rem', color: '#78350f', lineHeight: 1.4 }}>
+                  A aba já está integrada e escutando o Supabase em tempo real. Para popular os cursistas concluintes, basta rodar a função <b>sincronizarConcluintesParaSupabase()</b> no Google Apps Script da sua planilha ou importar os dados na tabela <code>cursistas_concluintes</code>.
+                </p>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* FILTROS E PESQUISA */}
