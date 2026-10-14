@@ -19,6 +19,7 @@ import AmbienteCursista from './components/AmbienteCursista';
 import ObservacaoPratica from './components/ObservacaoPratica';
 import ObservacoesOverview from './components/ObservacoesOverview';
 import AcompanhamentoObservacoesCards from './components/AcompanhamentoObservacoesCards';
+import Concluintes from './components/Concluintes';
 
 import { salvarObservacaoIntegrada, getObservacoesLocaisNovas } from './utils/observacoesSyncService';
 
@@ -35,6 +36,7 @@ export default function App() {
     const locais = getObservacoesLocaisNovas();
     return [...locais, ...observacoesFallback];
   });
+  const [concluintesList, setConcluintesList] = useState([]);
   const [movimentacoesList, setMovimentacoesList] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [firebaseActive, setFirebaseActive] = useState(false);
@@ -315,10 +317,31 @@ export default function App() {
         }
       };
 
+      const fetchSupabaseConcluintes = async () => {
+        try {
+          const { data, error } = await supabase
+            .from('cursistas_concluintes')
+            .select('*')
+            .order('nome_cursista', { ascending: true });
+          if (error) {
+            // Se a tabela ainda não tiver sido criada no Supabase, captura sem quebrar
+            console.log("Supabase cursistas_concluintes aviso/info:", error.message);
+            return;
+          }
+          if (data && data.length > 0) {
+            console.log(`Supabase cursistas_concluintes carregados: ${data.length} registros.`);
+            setConcluintesList(data);
+          }
+        } catch (err) {
+          console.warn("Aviso ao buscar cursistas_concluintes:", err);
+        }
+      };
+
       fetchSupabaseRecords();
       fetchSupabaseTutores();
       fetchSupabaseObservacoes();
       fetchSupabaseMovimentacoes();
+      fetchSupabaseConcluintes();
 
       // Assinatura de alterações em Tempo Real (PostgreSQL CDC)
       let debounceCursistasTimeout = null;
@@ -352,6 +375,10 @@ export default function App() {
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'movimentacoes' }, () => {
           fetchSupabaseMovimentacoes();
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'cursistas_concluintes' }, () => {
+          console.log("Supabase Realtime event recebido (cursistas_concluintes)");
+          fetchSupabaseConcluintes();
         })
         .subscribe();
 
@@ -741,6 +768,14 @@ export default function App() {
             onNovaObservacao={handleNovaObservacao}
           />
         );
+      case 'concluintes':
+        return (
+          <Concluintes 
+            concluintes={concluintesList} 
+            cursistasAtivos={enrichedRecords} 
+            observacoes={observacoesList} 
+          />
+        );
       case 'admin':
         return (userRole === 'admin' || userRole === 'tecnico')
           ? <AdminPanel data={enrichedRecords} onLocalUpdate={handleLocalUpdate} userRole={userRole} /> 
@@ -1015,6 +1050,16 @@ export default function App() {
               >
                 🏫 Lista de Turmas
               </button>
+
+              {/* Aba de Concluintes do 1º Chamamento */}
+              {(userRole === 'admin' || userRole === 'tecnico' || !simulatedRole) && (
+                <button 
+                  className={`tab-btn ${activeTab === 'concluintes' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('concluintes')}
+                >
+                  🎓 Concluintes (1º CH)
+                </button>
+              )}
 
               {/* Aba de Admin: Apenas para Admin Real */}
               {userRole === 'admin' && !simulatedRole && (
