@@ -117,7 +117,7 @@ export default function AcompanhamentoObservacoesCards({
 
   // Lista enriquecida de Cursistas com suas trajetórias pedagógicas e deltas de evolução
   const cursistasComEvolucao = useMemo(() => {
-    // Para desduplicar cursistas se vierem duplicados por turma
+    // Processar cursistas por vínculo (permite que o mesmo CGM com múltiplos vínculos, ex: turmas ou componentes distintos, apareça normalmente)
     const cursistasProcessados = new Map();
 
     cursistas.forEach(c => {
@@ -125,21 +125,64 @@ export default function AcompanhamentoObservacoesCards({
       const cgm = String(c.cgm || '').trim();
       const nome = c.nome_cursista || c.nome || '';
       const nomeNorm = normalizeString(nome);
+      const turma = (c.turmas || c.turma || '').trim();
+      const componente = (c.componente || c.componente_conc || '').trim();
 
-      const chaveUnica = cgm ? `cgm_${cgm}` : (email ? `email_${email}` : `nome_${nomeNorm}`);
+      // Chave única por vínculo (pessoa + turma + componente)
+      const cgmOuIdent = cgm ? `cgm_${cgm}` : (email ? `email_${email}` : `nome_${nomeNorm}`);
+      const chaveUnica = c.id 
+        ? `id_${c.id}` 
+        : `${cgmOuIdent}_${normalizeString(turma) || 'sem_turma'}_${normalizeString(componente) || 'sem_comp'}`;
+
       if (!chaveUnica || cursistasProcessados.has(chaveUnica)) return;
 
-      // Busca observações associadas a este cursista
+      // Busca observações associadas a esta pessoa por e-mail e nome normalizado
       const obsEncontradas = new Map();
 
       if (email && obsMapByEmail.has(email)) {
-        obsMapByEmail.get(email).forEach(o => obsEncontradas.set(o.id || `${o.carimbo}_${o.semestre}`, o));
+        obsMapByEmail.get(email).forEach(o => obsEncontradas.set(o.id || `${o.carimbo}_${o.semestre}_${o.data_feedback}`, o));
       }
       if (nomeNorm && obsMapByName.has(nomeNorm)) {
-        obsMapByName.get(nomeNorm).forEach(o => obsEncontradas.set(o.id || `${o.carimbo}_${o.semestre}`, o));
+        obsMapByName.get(nomeNorm).forEach(o => obsEncontradas.set(o.id || `${o.carimbo}_${o.semestre}_${o.data_feedback}`, o));
       }
 
-      const listaObs = Array.from(obsEncontradas.values());
+      const todasObsPessoa = Array.from(obsEncontradas.values());
+
+      // Se a cursista possui múltiplos vínculos ou observações com componentes/turmas/formadores específicos, vincula com inteligência
+      const cTurmaNorm = normalizeString(turma);
+      const cCompNorm = normalizeString(componente);
+      const cFormadorNorm = normalizeString(c.nome_formador || c.formador || '');
+
+      const listaObs = todasObsPessoa.filter(o => {
+        const oTurma = normalizeString(o.turma || o.turmas || '');
+        const oComp = normalizeString(o.componente || '');
+        const oFormador = normalizeString(o.nome_formador || o.formador || '');
+
+        // 1. Se a observação tiver turma explícita
+        if (oTurma && cTurmaNorm) {
+          return oTurma === cTurmaNorm;
+        }
+
+        // 2. Se a observação tiver componente explícito
+        if (oComp && cCompNorm) {
+          const isPedagogo = (oComp.includes('pedagog') || oComp.includes('gestor')) && (cCompNorm.includes('pedagog') || cCompNorm.includes('gestor'));
+          if (isPedagogo || cCompNorm.includes(oComp) || oComp.includes(cCompNorm)) {
+            return true;
+          }
+          return false;
+        }
+
+        // 3. Se a observação tiver formador explícito
+        if (oFormador && cFormadorNorm) {
+          if (cFormadorNorm.includes(oFormador) || oFormador.includes(cFormadorNorm)) {
+            return true;
+          }
+          return false;
+        }
+
+        // Sem restrições na observação, mantém para o cursista
+        return true;
+      });
 
       // Ordenar cronologicamente crescente para calcular evolução (mais antiga -> mais recente)
       const parseTimestamp = (o) => {
@@ -1031,7 +1074,7 @@ export default function AcompanhamentoObservacoesCards({
                       <div style={{ display: 'inline-flex', gap: '0.4rem', alignItems: 'center' }}>
                         <button
                           type="button"
-                          onClick={() => setSelectedCursistaDossie(item.raw)}
+                          onClick={() => setSelectedCursistaDossie({ ...(item.raw || {}), ...item })}
                           style={{
                             backgroundColor: '#0072bc',
                             color: '#ffffff',
@@ -1296,7 +1339,7 @@ export default function AcompanhamentoObservacoesCards({
                 <div style={{ display: 'flex', gap: '0.5rem', borderTop: '1px solid #f1f5f9', paddingTop: '0.85rem' }}>
                   <button
                     type="button"
-                    onClick={() => setSelectedCursistaDossie(item.raw)}
+                    onClick={() => setSelectedCursistaDossie({ ...(item.raw || {}), ...item })}
                     style={{
                       flex: 1,
                       backgroundColor: '#0072bc',

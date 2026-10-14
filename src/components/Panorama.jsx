@@ -306,7 +306,7 @@ export default function Panorama({ data }) {
         </div>
         <div className="filter-grid">
           <div className="filter-group">
-            <span className="filter-label">NRE Cursista</span>
+            <span className="filter-label">NRE do Formador</span>
             <select className="filter-select" value={nreFilter} onChange={e => setNreFilter(e.target.value)}>
               <option value="">Todos</option>
               {filterOptions.nres.map(opt => <option key={opt} value={opt}>{opt}</option>)}

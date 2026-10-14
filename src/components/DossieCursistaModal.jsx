@@ -49,20 +49,62 @@ export default function DossieCursistaModal({
   const observacoesAtuais2026 = useMemo(() => {
     return observacoes.filter(obs => {
       const email = (obs.email_cursista || '').trim().toLowerCase();
-      if (email && cursistaEmail && email === cursistaEmail) return true;
+      const matchEmail = email && cursistaEmail && email === cursistaEmail;
       const nome = (obs.nome_cursista || '').trim().toLowerCase();
-      if (nome && cursistaNome && nome === cursistaNome) return true;
-      return false;
+      const matchNome = nome && cursistaNome && nome === cursistaNome;
+      if (!matchEmail && !matchNome) return false;
+
+      // Se o dossiê estiver visualizando um vínculo/turma específico, filtra observações pertinentes
+      const cComp = (turmaInfo?.componente || cursista?.componente || cursista?.componente_conc || '').trim().toLowerCase();
+      const oComp = (obs.componente || '').trim().toLowerCase();
+      if (cComp && oComp) {
+        const isPed = (oComp.includes('pedagog') || oComp.includes('gestor')) && (cComp.includes('pedagog') || cComp.includes('gestor'));
+        if (!isPed && !cComp.includes(oComp) && !oComp.includes(cComp)) {
+          return false;
+        }
+      }
+
+      const cTurma = (turmaInfo?.turma || cursista?.turmas || cursista?.turma || '').trim().toLowerCase();
+      const oTurma = (obs.turma || obs.turmas || '').trim().toLowerCase();
+      if (cTurma && oTurma && cTurma !== oTurma) {
+        return false;
+      }
+
+      const cForm = (turmaInfo?.formador || cursista?.nome_formador || cursista?.formador || '').trim().toLowerCase();
+      const oForm = (obs.nome_formador || '').trim().toLowerCase();
+      if (cForm && oForm && !cForm.includes(oForm) && !oForm.includes(cForm)) {
+        return false;
+      }
+
+      return true;
     });
-  }, [observacoes, cursistaEmail, cursistaNome]);
+  }, [observacoes, cursistaEmail, cursistaNome, turmaInfo, cursista]);
 
   const observacoesDoCursista = useMemo(() => {
+    const cComp = (turmaInfo?.componente || cursista?.componente || cursista?.componente_conc || '').trim().toLowerCase();
+    const cTurma = (turmaInfo?.turma || cursista?.turmas || cursista?.turma || '').trim().toLowerCase();
+
+    const obs2024Filtradas = obs2024.filter(o => {
+      const oComp = (o.componente || '').trim().toLowerCase();
+      if (cComp && oComp) {
+        const isPed = (oComp.includes('pedagog') || oComp.includes('gestor')) && (cComp.includes('pedagog') || cComp.includes('gestor'));
+        if (!isPed && !cComp.includes(oComp) && !oComp.includes(cComp)) {
+          return false;
+        }
+      }
+      const oTurma = (o.turma || o.turmas || '').trim().toLowerCase();
+      if (cTurma && oTurma && cTurma !== oTurma) {
+        return false;
+      }
+      return true;
+    });
+
     // Mescla observações atuais com o histórico de 2024
-    const todasMescladas = [...observacoesAtuais2026, ...obs2024];
+    const todasMescladas = [...observacoesAtuais2026, ...obs2024Filtradas];
 
     // Ordenação estritamente cronológica decrescente (mais recente primeiro no histórico/timeline)
     return todasMescladas.sort((a, b) => getObsTimestamp(b) - getObsTimestamp(a));
-  }, [observacoesAtuais2026, obs2024]);
+  }, [observacoesAtuais2026, obs2024, turmaInfo, cursista]);
 
   // Função para mapear texto ou número para nível numérico (1 a 4)
   const nivelToScore = (nivel) => parseScore(nivel);
