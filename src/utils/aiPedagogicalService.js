@@ -39,6 +39,79 @@ export const scoreLabel = (score) => {
 };
 
 /**
+ * Informações estruturadas de nível com rótulo curto, descrição completa e estilização
+ */
+export const getNivelInfo = (rawNivel) => {
+  if (!rawNivel || String(rawNivel).trim() === '' || String(rawNivel).trim() === '-' || String(rawNivel).trim() === '—') {
+    return {
+      score: null,
+      shortLabel: 'Não avaliado',
+      fullDesc: '',
+      hasLongDescription: false,
+      badgeClass: 'badge-neutral',
+      color: '#64748b',
+      bg: '#f1f5f9',
+      border: '#cbd5e1'
+    };
+  }
+
+  const rawStr = String(rawNivel).trim();
+  const score = parseScore(rawStr);
+
+  let shortLabel = 'Não avaliado';
+  let badgeClass = 'badge-neutral';
+  let color = '#64748b';
+  let bg = '#f1f5f9';
+  let border = '#cbd5e1';
+
+  switch (score) {
+    case 4:
+      shortLabel = 'Nível 4 • Supera';
+      badgeClass = 'badge-supera';
+      color = '#15803d';
+      bg = '#dcfce7';
+      border = '#86efac';
+      break;
+    case 3:
+      shortLabel = 'Nível 3 • Atinge Integralmente';
+      badgeClass = 'badge-atende';
+      color = '#0369a1';
+      bg = '#e0f2fe';
+      border = '#7dd3fc';
+      break;
+    case 2:
+      shortLabel = 'Nível 2 • Atinge Parcialmente';
+      badgeClass = 'badge-parcial';
+      color = '#b45309';
+      bg = '#fef3c7';
+      border = '#fcd34d';
+      break;
+    case 1:
+      shortLabel = 'Nível 1 • Não Atinge';
+      badgeClass = 'badge-nao-atende';
+      color = '#b91c1c';
+      bg = '#fee2e2';
+      border = '#fca5a5';
+      break;
+    default:
+      shortLabel = rawStr.length > 25 ? `${rawStr.substring(0, 22)}...` : rawStr;
+      break;
+  }
+
+  return {
+    score,
+    shortLabel,
+    fullDesc: rawStr,
+    hasLongDescription: rawStr.length > 30,
+    badgeClass,
+    color,
+    bg,
+    border
+  };
+};
+
+
+/**
  * Gera o diagnóstico individual por cursista
  */
 export function gerarDiagnosticoCursistaIA({ cursista, observacoes = [], turmaInfo = {} }) {

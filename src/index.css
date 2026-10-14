@@ -1107,13 +1107,17 @@ button, input, select, textarea {
 .badge-nivel {
   display: inline-flex;
   align-items: center;
+  gap: 0.35rem;
   padding: 0.2rem 0.55rem;
   border-radius: 6px;
   font-size: 0.72rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.02em;
-  white-space: nowrap;
+  max-width: 100%;
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.3;
 }
 
 .badge-supera {
@@ -1122,7 +1126,8 @@ button, input, select, textarea {
   border: 1px solid #86efac;
 }
 
-.badge-atende {
+.badge-atende,
+.badge-atinge {
   background-color: #e0f2fe;
   color: #0369a1;
   border: 1px solid #7dd3fc;
@@ -1134,15 +1139,40 @@ button, input, select, textarea {
   border: 1px solid #fcd34d;
 }
 
-.badge-nao-atende {
+.badge-nao-atende,
+.badge-nao-atinge {
   background-color: #fee2e2;
   color: #b91c1c;
   border: 1px solid #fca5a5;
 }
 
-.badge-neutral {
+.badge-neutral,
+.badge-sem-dado {
   background-color: #f1f5f9;
   color: #475569;
   border: 1px solid #cbd5e1;
 }
+
+.btn-info-nivel {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 0.2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.82rem;
+  line-height: 1;
+  opacity: 0.8;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  color: inherit;
+  vertical-align: middle;
+}
+
+.btn-info-nivel:hover {
+  opacity: 1;
+  transform: scale(1.2);
+}
+
 

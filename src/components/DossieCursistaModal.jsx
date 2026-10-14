@@ -3,7 +3,7 @@ import { formatDatePtBr, parseDateToTimestamp } from '../utils/dateUtils';
 import FormularioInserirObservacao from './FormularioInserirObservacao';
 import CurvaEvolucaoPedagogica from './CurvaEvolucaoPedagogica';
 import { getObservacoes2024PorCursista } from '../utils/observacoes2024Service';
-import { parseScore, scoreLabel, gerarDiagnosticoCursistaIA } from '../utils/aiPedagogicalService';
+import { parseScore, scoreLabel, gerarDiagnosticoCursistaIA, getNivelInfo } from '../utils/aiPedagogicalService';
 
 export default function DossieCursistaModal({ 
   cursista, 
@@ -640,12 +640,18 @@ export default function DossieCursistaModal({
 
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                           {isReal && (
-                            <div style={{ display: 'flex', gap: '0.4rem' }}>
-                              <span style={{ fontSize: '0.75rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '4px', backgroundColor: '#e0f2fe', color: '#0369a1' }}>
-                                Prática: {obs.nivel_pratica || '-'}
+                            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                              <span 
+                                title={obs.nivel_pratica || ''}
+                                style={{ fontSize: '0.75rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '4px', backgroundColor: '#e0f2fe', color: '#0369a1', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                              >
+                                Prática: {obs.nivel_pratica ? getNivelInfo(obs.nivel_pratica).shortLabel : '-'}
                               </span>
-                              <span style={{ fontSize: '0.75rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '4px', backgroundColor: '#ede9fe', color: '#6d28d9' }}>
-                                Plan: {obs.nivel_planejamento || '-'}
+                              <span 
+                                title={obs.nivel_planejamento || ''}
+                                style={{ fontSize: '0.75rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '4px', backgroundColor: '#ede9fe', color: '#6d28d9', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                              >
+                                Plan: {obs.nivel_planejamento ? getNivelInfo(obs.nivel_planejamento).shortLabel : '-'}
                               </span>
                             </div>
                           )}

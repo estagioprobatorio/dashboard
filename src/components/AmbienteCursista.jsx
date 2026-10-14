@@ -6,7 +6,7 @@ import DossieCursistaModal from './DossieCursistaModal';
 import CurvaEvolucaoPedagogica from './CurvaEvolucaoPedagogica';
 import { formatDatePtBr } from '../utils/dateUtils';
 import { getObservacoes2024PorCursista } from '../utils/observacoes2024Service';
-import { gerarDiagnosticoCursistaIA, parseScore, scoreLabel } from '../utils/aiPedagogicalService';
+import { gerarDiagnosticoCursistaIA, parseScore, scoreLabel, getNivelInfo } from '../utils/aiPedagogicalService';
 
 export default function AmbienteCursista({ userEmail, records, observacoes = [], movimentacoes = [], onNovaMovimentacao, subTab = 'turma' }) {
   const [activeSubTab, setActiveSubTab] = useState(subTab);
@@ -17,6 +17,7 @@ export default function AmbienteCursista({ userEmail, records, observacoes = [],
   const [classmateSearch, setClassmateSearch] = useState('');
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [obs2024, setObs2024] = useState([]);
+  const [rubricaModal, setRubricaModal] = useState(null);
 
   useEffect(() => {
     setActiveSubTab(subTab);
@@ -764,24 +765,72 @@ export default function AmbienteCursista({ userEmail, records, observacoes = [],
                     </div>
                   </div>
 
-                  {/* Níveis Pedagógicos */}
-                  <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
-                    {obs.nivel_planejamento && (
-                      <div style={{ fontSize: '0.82rem' }}>
-                        <span style={{ color: 'var(--color-text-muted)' }}>Planejamento: </span>
-                        <span className="badge-nivel badge-supera" style={{ marginLeft: '0.3rem' }}>
-                          {obs.nivel_planejamento}
-                        </span>
-                      </div>
-                    )}
-                    {obs.nivel_pratica && (
-                      <div style={{ fontSize: '0.82rem' }}>
-                        <span style={{ color: 'var(--color-text-muted)' }}>Prática em Sala: </span>
-                        <span className="badge-nivel badge-atende" style={{ marginLeft: '0.3rem' }}>
-                          {obs.nivel_pratica}
-                        </span>
-                      </div>
-                    )}
+                  {/* Níveis Pedagógicos Avaliados */}
+                  <div style={{ display: 'flex', gap: '0.85rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
+                    {obs.nivel_planejamento && (() => {
+                      const info = getNivelInfo(obs.nivel_planejamento);
+                      return (
+                        <div style={{ fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.35rem' }}>
+                          <span style={{ color: 'var(--color-text-muted)', fontWeight: 600 }}>Planejamento:</span>
+                          <span 
+                            className={`badge-nivel ${info.badgeClass}`}
+                            title={info.fullDesc || info.shortLabel}
+                            style={{ cursor: info.hasLongDescription ? 'help' : 'default' }}
+                          >
+                            <span>{info.shortLabel}</span>
+                            {info.hasLongDescription && (
+                              <button
+                                type="button"
+                                className="btn-info-nivel"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setRubricaModal({
+                                    tipo: 'Planejamento Pedagógico',
+                                    info
+                                  });
+                                }}
+                                title="Clique para ver a descrição completa deste critério"
+                                aria-label="Ver descrição da rubrica"
+                              >
+                                ℹ️
+                              </button>
+                            )}
+                          </span>
+                        </div>
+                      );
+                    })()}
+                    {obs.nivel_pratica && (() => {
+                      const info = getNivelInfo(obs.nivel_pratica);
+                      return (
+                        <div style={{ fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.35rem' }}>
+                          <span style={{ color: 'var(--color-text-muted)', fontWeight: 600 }}>Prática em Sala:</span>
+                          <span 
+                            className={`badge-nivel ${info.badgeClass}`}
+                            title={info.fullDesc || info.shortLabel}
+                            style={{ cursor: info.hasLongDescription ? 'help' : 'default' }}
+                          >
+                            <span>{info.shortLabel}</span>
+                            {info.hasLongDescription && (
+                              <button
+                                type="button"
+                                className="btn-info-nivel"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setRubricaModal({
+                                    tipo: 'Prática em Sala de Aula',
+                                    info
+                                  });
+                                }}
+                                title="Clique para ver a descrição completa deste critério"
+                                aria-label="Ver descrição da rubrica"
+                              >
+                                ℹ️
+                              </button>
+                            )}
+                          </span>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {/* Combinados Formativos (Destaque Principal) */}
@@ -859,6 +908,99 @@ export default function AmbienteCursista({ userEmail, records, observacoes = [],
         />
       )}
 
+      {/* Modal de Detalhe da Rubrica / Descrição Completa do Nível */}
+      {rubricaModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 29, 61, 0.72)',
+            backdropFilter: 'blur(5px)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 10000,
+            padding: '1.25rem'
+          }}
+          onClick={() => setRubricaModal(null)}
+        >
+          <div
+            className="animate-fade-in"
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: '#ffffff',
+              borderRadius: '16px',
+              width: '100%',
+              maxWidth: '560px',
+              maxHeight: '85vh',
+              overflowY: 'auto',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
+              padding: '1.75rem',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '1.25rem'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-primary-dark)', letterSpacing: '0.04em' }}>
+                  Rubrica Avaliativa • {rubricaModal.tipo}
+                </span>
+                <h3 style={{ margin: '0.35rem 0 0 0', fontSize: '1.2rem', color: '#0f172a' }}>
+                  {rubricaModal.info.shortLabel}
+                </h3>
+              </div>
+              <button
+                onClick={() => setRubricaModal(null)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '1.4rem',
+                  cursor: 'pointer',
+                  color: '#64748b',
+                  lineHeight: 1,
+                  padding: '0.2rem'
+                }}
+                aria-label="Fechar modal"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{
+              backgroundColor: rubricaModal.info.bg || '#f8fafc',
+              border: `1px solid ${rubricaModal.info.border || '#e2e8f0'}`,
+              borderRadius: '12px',
+              padding: '1.25rem',
+              color: '#1e293b',
+              fontSize: '0.92rem',
+              lineHeight: 1.6,
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word'
+            }}>
+              <strong style={{ display: 'block', marginBottom: '0.5rem', color: rubricaModal.info.color || '#0f172a', fontSize: '0.82rem', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                📖 Descrição Completa do Critério Avaliado:
+              </strong>
+              {rubricaModal.info.fullDesc}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+              <button
+                className="btn-primary"
+                onClick={() => setRubricaModal(null)}
+                style={{ fontSize: '0.88rem', padding: '0.5rem 1.4rem', cursor: 'pointer' }}
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
+
