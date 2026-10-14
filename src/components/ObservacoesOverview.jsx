@@ -403,7 +403,7 @@ export default function ObservacoesOverview({ observacoes = [], cursistas = [], 
         <div className="glass-panel" style={{ padding: '1.5rem', borderTop: '4px solid var(--color-primary-mid)', background: '#fff' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
             <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
-              Registros Efetuados
+              Total de Respostas de Formulário (2026)
             </span>
             <span style={{ fontSize: '1.3rem' }}>📋</span>
           </div>
@@ -411,9 +411,9 @@ export default function ObservacoesOverview({ observacoes = [], cursistas = [], 
             {stats.total.toLocaleString('pt-BR')}
           </div>
           <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginTop: '0.4rem', borderTop: '1px solid #e2e8f0', paddingTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-            <div>Registros: <b>{stats.total.toLocaleString('pt-BR')}</b></div>
+            <div>Total no Banco: <b>{stats.total.toLocaleString('pt-BR')}</b></div>
             <div>Observações Realizadas: <b style={{ color: '#166534' }}>{stats.realizadas.toLocaleString('pt-BR')}</b></div>
-            <div>Observações Não Realizadas: <b style={{ color: '#b91c1c' }}>{stats.naoRealizadas.toLocaleString('pt-BR')}</b></div>
+            <div>Observações Não Realizadas (Justificadas): <b style={{ color: '#b91c1c' }}>{stats.naoRealizadas.toLocaleString('pt-BR')}</b></div>
           </div>
         </div>
 

@@ -446,7 +446,7 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
             <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              Registros Efetuados
+              Total de Respostas de Formulário (2026)
             </span>
             <span style={{ fontSize: '1.4rem' }}>📋</span>
           </div>
@@ -455,13 +455,13 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
               {kpis.total.toLocaleString('pt-BR')}
             </span>
             <span style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
-              registros observados
+              envios registrados
             </span>
           </div>
           <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', display: 'flex', flexDirection: 'column', gap: '0.2rem', borderTop: '1px solid #e2e8f0', paddingTop: '0.6rem', marginTop: '0.4rem' }}>
-            <div>Registros: <b>{kpis.total.toLocaleString('pt-BR')}</b></div>
+            <div>Total no Banco: <b>{kpis.total.toLocaleString('pt-BR')}</b></div>
             <div>Observações Realizadas: <b style={{ color: 'var(--color-accent-green)' }}>{kpis.realizadas.toLocaleString('pt-BR')}</b></div>
-            <div>Observações Não Realizadas: <b style={{ color: '#b91c1c' }}>{kpis.naoRealizadas.toLocaleString('pt-BR')}</b></div>
+            <div>Observações Não Realizadas (Justificadas): <b style={{ color: '#b91c1c' }}>{kpis.naoRealizadas.toLocaleString('pt-BR')}</b></div>
           </div>
         </div>
 

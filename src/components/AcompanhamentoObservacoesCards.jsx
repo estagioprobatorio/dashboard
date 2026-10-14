@@ -408,13 +408,13 @@ export default function AcompanhamentoObservacoesCards({
         {/* KPI 4 */}
         <div className="glass-panel" style={{ padding: '1.1rem', borderRadius: '12px', borderTop: '4px solid #d97706' }}>
           <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
-            Histórico Consolidado
+            Observações Vinculadas aos Cursistas
           </div>
           <div style={{ fontSize: '1.85rem', fontWeight: 800, color: '#b45309', margin: '0.2rem 0' }}>
-            {metricasGerais.totalObsConsolidadas}
+            {metricasGerais.totalObsConsolidadas.toLocaleString('pt-BR')}
           </div>
           <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
-            Total de observações desde 2024
+            Atribuídas aos professores ativos (2024-2026)
           </div>
         </div>
       </div>
