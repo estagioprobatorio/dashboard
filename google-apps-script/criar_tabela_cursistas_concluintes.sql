@@ -28,7 +28,7 @@ CREATE INDEX IF NOT EXISTS idx_concluintes_email ON public.cursistas_concluintes
 CREATE INDEX IF NOT EXISTS idx_concluintes_nome ON public.cursistas_concluintes (nome_cursista);
 CREATE INDEX IF NOT EXISTS idx_concluintes_cgm ON public.cursistas_concluintes (cgm);
 
--- Habilita segurança RLS e permissão de leitura pública (anon key)
+-- Habilita segurança RLS e permissão de leitura e escrita com anon_key
 ALTER TABLE public.cursistas_concluintes ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Permitir leitura pública de cursistas_concluintes" ON public.cursistas_concluintes;
@@ -37,5 +37,14 @@ ON public.cursistas_concluintes
 FOR SELECT 
 USING (true);
 
+DROP POLICY IF EXISTS "Permitir insercao e atualizacao de cursistas_concluintes" ON public.cursistas_concluintes;
+CREATE POLICY "Permitir insercao e atualizacao de cursistas_concluintes" 
+ON public.cursistas_concluintes 
+FOR ALL 
+USING (true) 
+WITH CHECK (true);
+
 -- Habilita sincronização em Tempo Real (Realtime)
 ALTER PUBLICATION supabase_realtime ADD TABLE public.cursistas_concluintes;
+
+NOTIFY pgrst, 'reload schema';
