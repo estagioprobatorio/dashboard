@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import PanoramaDetalheModal from './PanoramaDetalheModal';
 
 export default function Panorama({ data }) {
   // Estados para Filtros
@@ -7,6 +8,9 @@ export default function Panorama({ data }) {
   const [modalidadeFilter, setModalidadeFilter] = useState('');
   const [componenteFilter, setComponenteFilter] = useState('');
   const [turnoFilter, setTurnoFilter] = useState('');
+
+  // Estado para Modal de Expansão de Gráficos e Relatório PDF
+  const [expandedChart, setExpandedChart] = useState(null);
 
   // Extrair opções únicas para os selects dos filtros (baseado em todos os dados originais)
   const filterOptions = useMemo(() => {
@@ -152,8 +156,8 @@ export default function Panorama({ data }) {
     setTurnoFilter('');
   };
 
-  // Helper para renderizar gráfico de barra SVG horizontal
-  const renderHorizontalBarChart = (chartData, title) => {
+  // Helper para renderizar gráfico de barra SVG horizontal com botão de expansão
+  const renderHorizontalBarChart = (chartData, title, type = null) => {
     const width = 500;
     const height = 300;
     const paddingLeft = 140;
@@ -168,7 +172,27 @@ export default function Panorama({ data }) {
 
     return (
       <div className="chart-card">
-        <h3 className="chart-title">{title}</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', gap: '0.5rem' }}>
+          <h3 className="chart-title" style={{ margin: 0 }}>{title}</h3>
+          {type && (
+            <button
+              type="button"
+              className="btn-expand-chart"
+              onClick={() => setExpandedChart({ type, title })}
+              title={`Expandir listagem completa de ${title} (todos os registros) com planilha e impressão em PDF`}
+              aria-label={`Expandir ${title}`}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 3h7v7" />
+                <path d="M21 3l-9 9" />
+                <rect x="3" y="13" width="8" height="8" rx="1.5" />
+                <path d="M3 9V5a2 2 0 0 1 2-2h4" />
+                <path d="M19 15v4a2 2 0 0 1-2 2h-4" />
+              </svg>
+              <span>Expandir</span>
+            </button>
+          )}
+        </div>
         {chartData.length === 0 ? (
           <div style={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-muted)' }}>
             Nenhum dado encontrado para os filtros selecionados
@@ -344,13 +368,36 @@ export default function Panorama({ data }) {
 
         {/* Seção de Gráficos */}
         <div className="chart-container-grid">
-          {renderHorizontalBarChart(nreChartData, "Cursistas por NRE (Top 8)")}
-          {renderHorizontalBarChart(formadorChartData, "Cursistas por Formador (Top 8)")}
-          {renderHorizontalBarChart(chamamentoChartData, "Cursistas por Chamamento")}
-          {renderHorizontalBarChart(turnoChartData, "Cursistas por Turno")}
-          {renderHorizontalBarChart(modalidadeChartData, "Cursistas por Modalidade")}
+          {renderHorizontalBarChart(nreChartData, "Cursistas por NRE (Top 8)", "nre")}
+          {renderHorizontalBarChart(formadorChartData, "Cursistas por Formador (Top 8)", "formador")}
+          {renderHorizontalBarChart(chamamentoChartData, "Cursistas por Chamamento", "chamamento")}
+          {renderHorizontalBarChart(turnoChartData, "Cursistas por Turno", "turno")}
+          {renderHorizontalBarChart(modalidadeChartData, "Cursistas por Modalidade", "modalidade")}
         </div>
       </div>
+
+      {/* Modal Detalhado de Expansão de Tela com Planilha e Impressão de Relatório PDF */}
+      {expandedChart && (
+        <PanoramaDetalheModal
+          tipo={expandedChart.type}
+          titulo={
+            expandedChart.type === 'formador'
+              ? 'Cursistas por Formador (Listagem Completa de Todos os Formadores)'
+              : expandedChart.type === 'nre'
+              ? 'Cursistas por NRE (Listagem Completa de Todos os Núcleos Regionais)'
+              : expandedChart.title
+          }
+          filteredData={filteredData}
+          activeFilters={{
+            nre: nreFilter,
+            chamamento: chamamentoFilter,
+            modalidade: modalidadeFilter,
+            componente: componenteFilter,
+            turno: turnoFilter
+          }}
+          onClose={() => setExpandedChart(null)}
+        />
+      )}
     </>
   );
 }
