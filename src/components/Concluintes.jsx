@@ -1,10 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import { exportToCSV } from '../utils/exportUtils';
+import DossieCursistaModal from './DossieCursistaModal';
 
 export default function Concluintes({ concluintes = [], cursistasAtivos = [], observacoes = [], userRole = null }) {
   const isAdmin = userRole === 'admin';
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedNre, setSelectedNre] = useState('');
   const [selectedComponente, setSelectedComponente] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(15);
@@ -121,24 +121,16 @@ export default function Concluintes({ concluintes = [], cursistasAtivos = [], ob
     });
   }, [concluintes, obsMapByEmail, obsMapByName]);
 
-  // Lista de NREs e Componentes disponíveis para os filtros
-  const { nresDisponiveis, componentesDisponiveis } = useMemo(() => {
-    const nres = new Set();
+  // Lista de Componentes disponíveis para o filtro
+  const componentesDisponiveis = useMemo(() => {
     const comps = new Set();
-
     concluintes.forEach(c => {
-      const nre = c.nre_exe || c.nre_tutor;
-      if (nre) nres.add(nre.trim());
       if (c.componente) comps.add(c.componente.trim());
     });
-
-    return {
-      nresDisponiveis: Array.from(nres).sort((a, b) => a.localeCompare(b, 'pt-BR')),
-      componentesDisponiveis: Array.from(comps).sort((a, b) => a.localeCompare(b, 'pt-BR'))
-    };
+    return Array.from(comps).sort((a, b) => a.localeCompare(b, 'pt-BR'));
   }, [concluintes]);
 
-  // Aplicação dos Filtros
+  // Aplicação dos Filtros (Busca geral e Componente)
   const concluintesFiltrados = useMemo(() => {
     return concluintesEnriquecidos.filter(c => {
       if (searchTerm) {
@@ -149,18 +141,13 @@ export default function Concluintes({ concluintes = [], cursistasAtivos = [], ob
         if (!matchNome && !matchCgm && !matchEmail) return false;
       }
 
-      if (selectedNre) {
-        const nre = c.nre_exe || c.nre_tutor || '';
-        if (nre.trim() !== selectedNre) return false;
-      }
-
       if (selectedComponente && (c.componente || '').trim() !== selectedComponente) {
         return false;
       }
 
       return true;
     });
-  }, [concluintesEnriquecidos, searchTerm, selectedNre, selectedComponente]);
+  }, [concluintesEnriquecidos, searchTerm, selectedComponente]);
 
   // Paginação
   const totalPages = Math.max(1, Math.ceil(concluintesFiltrados.length / itemsPerPage));
@@ -170,7 +157,7 @@ export default function Concluintes({ concluintes = [], cursistasAtivos = [], ob
     return concluintesFiltrados.slice(start, start + itemsPerPage);
   }, [concluintesFiltrados, currentPageClamped, itemsPerPage]);
 
-  // Exportação CSV
+  // Exportação CSV (Apenas CGM, Professor Cursista, E-mail, Componente, Observações)
   const handleExportCSV = () => {
     if (concluintesFiltrados.length === 0) {
       alert('Nenhum cursista concluinte para exportar.');
@@ -178,16 +165,11 @@ export default function Concluintes({ concluintes = [], cursistasAtivos = [], ob
     }
     const cols = [
       { label: 'CGM', accessor: r => r.cgm || '-' },
-      { label: 'Nome do Cursista', accessor: r => r.nome_cursista || r.nome || '-' },
+      { label: 'Professor Cursista', accessor: r => r.nome_cursista || r.nome || '-' },
       { label: 'E-mail', accessor: r => r.email || r['e-mail'] || '-' },
-      { label: 'NRE', accessor: r => r.nre_exe || r.nre_tutor || '-' },
-      { label: 'Município', accessor: r => r.munic_exe || '-' },
       { label: 'Componente Curricular', accessor: r => r.componente || '-' },
-      { label: 'Turma', accessor: r => r.turmas || r.turma || '-' },
-      { label: 'Chamamento', accessor: r => r.chamamento || '1º Chamamento' },
-      { label: 'Observações Realizadas', accessor: r => r.totalRealizadas || 0 },
       { label: 'Total de Observações', accessor: r => r.totalObservacoes || 0 },
-      { label: 'Situação', accessor: r => r.situacao || 'CONCLUÍDO' }
+      { label: 'Observações Realizadas', accessor: r => r.totalRealizadas || 0 }
     ];
     exportToCSV('Cursistas_Concluintes_1CH', cols, concluintesFiltrados);
   };
@@ -388,25 +370,10 @@ export default function Concluintes({ concluintes = [], cursistasAtivos = [], ob
               borderRadius: '6px',
               border: '1px solid #cbd5e1',
               fontSize: '0.85rem',
-              minWidth: '240px',
+              minWidth: '260px',
               flex: 1
             }}
           />
-
-          <select 
-            value={selectedNre}
-            onChange={e => { setSelectedNre(e.target.value); setCurrentPage(1); }}
-            style={{
-              padding: '0.55rem 0.9rem',
-              borderRadius: '6px',
-              border: '1px solid #cbd5e1',
-              fontSize: '0.85rem',
-              backgroundColor: '#fff'
-            }}
-          >
-            <option value="">Todos os NREs ({nresDisponiveis.length})</option>
-            {nresDisponiveis.map(n => <option key={n} value={n}>{n}</option>)}
-          </select>
 
           <select 
             value={selectedComponente}
@@ -460,17 +427,16 @@ export default function Concluintes({ concluintes = [], cursistasAtivos = [], ob
               <tr style={{ backgroundColor: '#002d5c', color: '#ffffff', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                 <th style={{ padding: '0.85rem 1rem' }}>CGM</th>
                 <th style={{ padding: '0.85rem 1rem' }}>Professor Cursista</th>
-                <th style={{ padding: '0.85rem 1rem' }}>E-mail Institucional</th>
-                <th style={{ padding: '0.85rem 1rem' }}>NRE / Município</th>
+                <th style={{ padding: '0.85rem 1rem' }}>E-mail</th>
                 <th style={{ padding: '0.85rem 1rem' }}>Componente</th>
                 <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Observações</th>
-                <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Situação</th>
+                <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>Dossiê</th>
               </tr>
             </thead>
             <tbody>
               {concluintesPaginados.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ padding: '2.5rem', textAlign: 'center', color: '#64748b' }}>
+                  <td colSpan={6} style={{ padding: '2.5rem', textAlign: 'center', color: '#64748b' }}>
                     {concluintes.length === 0 
                       ? 'Nenhum cursista concluinte cadastrado no banco. Execute a sincronização para carregar a aba CONCLUINTES-1CH.'
                       : 'Nenhum cursista concluinte corresponde aos filtros selecionados.'}
@@ -490,23 +456,21 @@ export default function Concluintes({ concluintes = [], cursistasAtivos = [], ob
                       {c.cgm || '-'}
                     </td>
                     <td style={{ padding: '0.75rem 1rem' }}>
-                      <div style={{ fontWeight: 800, color: '#002d5c' }}>
+                      <div style={{ fontWeight: 800, color: '#002d5c', fontSize: '0.9rem' }}>
                         {c.nome_cursista || c.nome}
                       </div>
-                      <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
-                        Turma: {c.turmas || c.turma || 'Sem turma'} • {c.chamamento || '1º Chamamento'}
-                      </span>
                     </td>
                     <td style={{ padding: '0.75rem 1rem', color: '#475569' }}>
-                      {c.email || c['e-mail'] || '-'}
-                    </td>
-                    <td style={{ padding: '0.75rem 1rem' }}>
-                      <div style={{ fontWeight: 600, color: '#1e293b' }}>
-                        {c.nre_exe || c.nre_tutor || '-'}
-                      </div>
-                      <span style={{ fontSize: '0.74rem', color: '#64748b' }}>
-                        {c.munic_exe || ''}
-                      </span>
+                      {c.email || c['e-mail'] ? (
+                        <a 
+                          href={`mailto:${c.email || c['e-mail']}`} 
+                          style={{ color: '#0072bc', textDecoration: 'none', fontWeight: 500 }}
+                        >
+                          {c.email || c['e-mail']}
+                        </a>
+                      ) : (
+                        '-'
+                      )}
                     </td>
                     <td style={{ padding: '0.75rem 1rem' }}>
                       <span style={{ backgroundColor: '#e2e8f0', color: '#1e293b', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600 }}>
@@ -529,9 +493,30 @@ export default function Concluintes({ concluintes = [], cursistasAtivos = [], ob
                       </span>
                     </td>
                     <td style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>
-                      <span style={{ backgroundColor: '#bbf7d0', color: '#14532d', padding: '0.25rem 0.65rem', borderRadius: '12px', fontWeight: 800, fontSize: '0.75rem' }}>
-                        ✓ {c.situacao || 'CONCLUÍDO'}
-                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedCursista(c)}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.35rem',
+                          backgroundColor: '#002d5c',
+                          color: '#ffffff',
+                          border: 'none',
+                          borderRadius: '6px',
+                          padding: '0.35rem 0.75rem',
+                          fontSize: '0.78rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.backgroundColor = '#0072bc'}
+                        onMouseLeave={e => e.currentTarget.style.backgroundColor = '#002d5c'}
+                      >
+                        <span>📁</span>
+                        <span>Ver Dossiê</span>
+                      </button>
                     </td>
                   </tr>
                 ))
@@ -582,6 +567,22 @@ export default function Concluintes({ concluintes = [], cursistasAtivos = [], ob
           </div>
         )}
       </div>
+
+      {/* MODAL DE DOSSIÊ PEDAGÓGICO COMPLETO DO CONCLUINTE */}
+      {selectedCursista && (
+        <DossieCursistaModal
+          cursista={selectedCursista}
+          turmaInfo={{
+            turma: 'Concluinte (1º CH)',
+            componente: selectedCursista.componente || 'Geral',
+            formador: selectedCursista.nome_formador || 'Formador(a) Responsável',
+            anoFormativo: 'Concluinte'
+          }}
+          observacoes={observacoes}
+          onClose={() => setSelectedCursista(null)}
+          readOnly={true}
+        />
+      )}
 
     </div>
   );
