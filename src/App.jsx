@@ -70,6 +70,16 @@ export default function App() {
       
       return {
         ...r,
+        turma: r.turmas || r.turma,
+        turmas: r.turmas || r.turma,
+        cpf_cursista: r.cpf || r.cpf_cursista,
+        cpf: r.cpf || r.cpf_cursista,
+        link_classroom: r.link || r.link_classroom || r['Link Classroom'],
+        link: r.link || r.link_classroom || r['Link Classroom'],
+        email: r.email || r['e-mail'] || r.email_cursista,
+        'e-mail': r.email || r['e-mail'] || r.email_cursista,
+        email_formador: r.email_formador || r['e-mail_formador'] || r.e_mail_formador,
+        'e-mail_formador': r.email_formador || r['e-mail_formador'] || r.e_mail_formador,
         horario_inicial: formatTimeOnly(r.horario_inicial),
         horario_fim: formatTimeOnly(r.horario_fim),
         email_tutor: r.email_tutor || (tutorInfo ? tutorInfo.email_educ : null),
@@ -186,51 +196,40 @@ export default function App() {
           const pageSize = 1000;
           let hasMore = true;
 
-          // Criamos a Promise de busca paginada
-          const fetchPromise = (async () => {
-            while (hasMore) {
-              const from = page * pageSize;
-              const to = from + pageSize - 1;
+          while (hasMore) {
+            const from = page * pageSize;
+            const to = from + pageSize - 1;
 
-              const { data, error } = await supabase
-                .from('cursistas')
-                .select('*')
-                .range(from, to);
+            const { data, error } = await supabase
+              .from('cursistas')
+              .select('*')
+              .range(from, to);
 
-              if (error) throw error;
+            if (error) throw error;
 
-              if (data && data.length > 0) {
-                allData = allData.concat(data);
-                if (data.length < pageSize) {
-                  hasMore = false;
-                } else {
-                  page++;
-                }
-              } else {
+            if (data && data.length > 0) {
+              allData = allData.concat(data);
+              if (data.length < pageSize) {
                 hasMore = false;
+              } else {
+                page++;
               }
+            } else {
+              hasMore = false;
             }
-            return allData;
-          })();
+          }
 
-          // Promise de Timeout (5 segundos)
-          const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error("Timeout de conexão com o banco de dados (5s)")), 5000)
-          );
-
-          // Corrida entre a requisição e o timeout
-          const resultData = await Promise.race([fetchPromise, timeoutPromise]);
-
-          if (resultData && resultData.length > 0) {
-            setRecords(resultData);
+          if (allData && allData.length > 0) {
+            console.log(`Supabase cursistas carregados: ${allData.length} registros.`);
+            setRecords(allData);
             setFirebaseActive(true); // Indica banco online ativo
           } else {
-            console.log("Supabase vazio, mantendo dados locais/fallback.");
+            console.log("Supabase cursistas vazio, mantendo dados locais/fallback.");
             setRecords(fallbackData);
           }
         } catch (err) {
           console.error("Erro ao carregar dados do Supabase:", err);
-          console.warn("Usando banco de dados local/fallback devido ao erro/timeout.");
+          console.warn("Usando banco de dados local/fallback devido ao erro na conexão.");
           setRecords(fallbackData);
         } finally {
           setIsLoading(false);
@@ -253,57 +252,84 @@ export default function App() {
 
       const fetchSupabaseObservacoes = async () => {
         try {
-          // Paginação em lotes de 1000 para superar o limite padrão do PostgREST/Supabase
-          let allObs = [];
-          let page = 0;
+          // Busca a contagem exata e orquestra busca em blocos simultâneos
+          const { count, error: countErr } = await supabase
+            .from('observacoes_pratica')
+            .select('*', { count: 'exact', head: true });
+
+          if (countErr) throw countErr;
+
           const pageSize = 1000;
-          let hasMore = true;
+          const totalPages = Math.max(1, Math.ceil((count || 0) / pageSize));
+          let allObs = [];
+          const chunkSize = 5;
 
-          while (hasMore) {
-            const from = page * pageSize;
-            const to = from + pageSize - 1;
-
-            const { data, error } = await supabase
-              .from('observacoes_pratica')
-              .select('*')
-              .order('id', { ascending: true })
-              .range(from, to);
-
-            if (error) throw error;
-
-            if (data && data.length > 0) {
-              allObs = allObs.concat(data);
-              if (data.length < pageSize) {
-                hasMore = false;
-              } else {
-                page++;
-              }
-            } else {
-              hasMore = false;
+          for (let i = 0; i < totalPages; i += chunkSize) {
+            const promises = [];
+            for (let j = i; j < Math.min(i + chunkSize, totalPages); j++) {
+              const from = j * pageSize;
+              const to = from + pageSize - 1;
+              promises.push(
+                supabase
+                  .from('observacoes_pratica')
+                  .select('*')
+                  .order('id', { ascending: true })
+                  .range(from, to)
+                  .then(res => {
+                    if (res.error) throw res.error;
+                    return res.data || [];
+                  })
+              );
             }
+            const chunkResults = await Promise.all(promises);
+            chunkResults.forEach(batch => {
+              allObs = allObs.concat(batch);
+            });
           }
 
-          console.log(`Supabase observacoes_pratica carregadas: ${allObs.length} registros no total.`);
-          setObservacoesList(allObs);
+          console.log(`Supabase observacoes_pratica carregadas com sucesso: ${allObs.length} registros no total.`);
+          
+          // Preserva observações recém-adicionadas localmente que possam estar pendentes de sincronização
+          const locais = getObservacoesLocaisNovas();
+          const dbIds = new Set(allObs.map(o => o.id_origem || o.id));
+          const pendentesLocais = locais.filter(l => !dbIds.has(l.id_origem || l.id));
+
+          setObservacoesList([...pendentesLocais, ...allObs]);
         } catch (err) {
-          console.warn("Supabase: erro ao carregar observacoes_pratica com paginação. Usando dados locais de fallback:", err);
+          console.warn("Supabase: aviso ao carregar observacoes_pratica. Usando dados locais:", err);
+        }
+      };
+
+      const fetchSupabaseMovimentacoes = async () => {
+        try {
+          const { data, error } = await supabase
+            .from('movimentacoes')
+            .select('*')
+            .order('timestamp', { ascending: false });
+          if (error) throw error;
+          if (data && data.length > 0) {
+            setMovimentacoesList(data);
+          }
+        } catch (err) {
+          console.error("Erro ao carregar movimentações do Supabase:", err);
         }
       };
 
       fetchSupabaseRecords();
       fetchSupabaseTutores();
       fetchSupabaseObservacoes();
+      fetchSupabaseMovimentacoes();
 
-      // Assinatura de alterações em Tempo Real (PostgreSQL CDC) com Debounce de 2 segundos
-      let debounceTimeout = null;
+      // Assinatura de alterações em Tempo Real (PostgreSQL CDC)
+      let debounceCursistasTimeout = null;
       const channel = supabase
-        .channel('cursistas-realtime-changes')
+        .channel('dashboard-realtime-changes')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'cursistas' }, (payload) => {
           console.log("Supabase Realtime event recebido (cursistas):", payload);
-          if (debounceTimeout) clearTimeout(debounceTimeout);
-          debounceTimeout = setTimeout(() => {
+          if (debounceCursistasTimeout) clearTimeout(debounceCursistasTimeout);
+          debounceCursistasTimeout = setTimeout(() => {
             fetchSupabaseRecords();
-          }, 2000);
+          }, 1500);
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'tutores' }, (payload) => {
           console.log("Supabase Realtime event recebido (tutores):", payload);
@@ -311,12 +337,26 @@ export default function App() {
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'observacoes_pratica' }, (payload) => {
           console.log("Supabase Realtime event recebido (observacoes_pratica):", payload);
-          fetchSupabaseObservacoes();
+          if (payload.eventType === 'INSERT' && payload.new) {
+            setObservacoesList(prev => [
+              payload.new,
+              ...prev.filter(item => item.id !== payload.new.id && item.id_origem !== payload.new.id_origem)
+            ]);
+          } else if (payload.eventType === 'UPDATE' && payload.new) {
+            setObservacoesList(prev => prev.map(item => item.id === payload.new.id ? { ...item, ...payload.new } : item));
+          } else if (payload.eventType === 'DELETE' && payload.old) {
+            setObservacoesList(prev => prev.filter(item => item.id !== payload.old.id));
+          } else {
+            fetchSupabaseObservacoes();
+          }
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'movimentacoes' }, () => {
+          fetchSupabaseMovimentacoes();
         })
         .subscribe();
 
       return () => {
-        if (debounceTimeout) clearTimeout(debounceTimeout);
+        if (debounceCursistasTimeout) clearTimeout(debounceCursistasTimeout);
         supabase.removeChannel(channel);
       };
     } else if (isFirebaseConfigured && database) {
@@ -581,8 +621,15 @@ export default function App() {
 
 
   // Handler para novas solicitações enviadas pelo Cursista
-  const handleNovaMovimentacao = (novaSolicitacao) => {
+  const handleNovaMovimentacao = async (novaSolicitacao) => {
     setMovimentacoesList(prev => [novaSolicitacao, ...prev]);
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('movimentacoes').insert([novaSolicitacao]);
+      } catch (err) {
+        console.error('Erro ao salvar movimentação no Supabase:', err);
+      }
+    }
   };
 
   // Carregamento da autenticação
