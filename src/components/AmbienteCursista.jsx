@@ -7,6 +7,7 @@ import CurvaEvolucaoPedagogica from './CurvaEvolucaoPedagogica';
 import { formatDatePtBr } from '../utils/dateUtils';
 import { getObservacoes2024PorCursista } from '../utils/observacoes2024Service';
 import { gerarDiagnosticoCursistaIA, parseScore, scoreLabel, getNivelInfo, normalizeString } from '../utils/aiPedagogicalService';
+import { calcularMedalhaCursista } from '../utils/gamificacaoService';
 
 export default function AmbienteCursista({ userEmail, records, observacoes = [], movimentacoes = [], onNovaMovimentacao, subTab = 'turma' }) {
   const [activeSubTab, setActiveSubTab] = useState(subTab);
@@ -155,6 +156,11 @@ export default function AmbienteCursista({ userEmail, records, observacoes = [],
       }
     });
   }, [cursistaRecord, minhasObservacoes]);
+
+  // Gamificação Formativa com Medalhas (Bronze, Prata, Ouro, Diamante)
+  const gamificacao = useMemo(() => {
+    return calcularMedalhaCursista(minhasObservacoes);
+  }, [minhasObservacoes]);
 
 
   // 2. Colegas da mesma turma
@@ -735,6 +741,112 @@ export default function AmbienteCursista({ userEmail, records, observacoes = [],
           {minhasObservacoes.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
               
+              {/* Card 0: Gamificação Formativa & Medalha de Reconhecimento Pedagógico */}
+              {gamificacao && gamificacao.medalha && (
+                <div className="glass-panel" style={{
+                  background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+                  padding: '1.35rem',
+                  borderRadius: '14px',
+                  border: `2px solid ${gamificacao.medalha.borda}`,
+                  boxShadow: '0 4px 15px rgba(0,0,0,0.06)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.85rem'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+                      <div style={{
+                        fontSize: '2.5rem',
+                        backgroundColor: gamificacao.medalha.bgCor,
+                        width: '60px',
+                        height: '60px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderRadius: '50%',
+                        border: `2px solid ${gamificacao.medalha.borda}`,
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                      }}>
+                        {gamificacao.medalha.icone}
+                      </div>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          <span style={{
+                            backgroundColor: gamificacao.medalha.cor,
+                            color: gamificacao.medalha.id === 'ouro' ? '#1e293b' : '#ffffff',
+                            fontWeight: 800,
+                            fontSize: '0.75rem',
+                            padding: '0.15rem 0.55rem',
+                            borderRadius: '4px',
+                            textTransform: 'uppercase'
+                          }}>
+                            Nível {gamificacao.nivel} Formativo
+                          </span>
+                          <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                            Média formativa: <b>{gamificacao.mediaGeral} / 3.0</b> • {gamificacao.totalObservacoes} observação(ões)
+                          </span>
+                        </div>
+                        <h3 style={{ margin: '0.2rem 0 0 0', color: '#0f172a', fontSize: '1.25rem', fontWeight: 800 }}>
+                          {gamificacao.medalha.nome} — {gamificacao.medalha.subtitulo}
+                        </h3>
+                        <p style={{ margin: '0.25rem 0 0 0', color: '#475569', fontSize: '0.85rem' }}>
+                          {gamificacao.medalha.descricao}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div style={{ textAlign: 'right' }}>
+                      <span style={{
+                        fontSize: '0.75rem',
+                        backgroundColor: '#f1f5f9',
+                        color: '#64748b',
+                        padding: '0.25rem 0.6rem',
+                        borderRadius: '6px',
+                        fontWeight: 600,
+                        display: 'inline-block'
+                      }}>
+                        ℹ️ Reconhecimento Exclusivamente Formativo
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Barra de Progresso para a Próxima Medalha */}
+                  {gamificacao.proximaMedalha && (
+                    <div style={{ backgroundColor: '#f1f5f9', borderRadius: '8px', padding: '0.75rem 1rem', marginTop: '0.25rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#475569', fontWeight: 700, marginBottom: '0.35rem' }}>
+                        <span>Rumo à {gamificacao.proximaMedalha.nome} {gamificacao.proximaMedalha.icone}</span>
+                        <span>{gamificacao.progressoProximoNivel}%</span>
+                      </div>
+                      <div style={{ width: '100%', height: '8px', backgroundColor: '#e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
+                        <div style={{
+                          width: `${gamificacao.progressoProximoNivel}%`,
+                          height: '100%',
+                          backgroundColor: gamificacao.proximaMedalha.cor,
+                          borderRadius: '4px',
+                          transition: 'width 0.4s ease'
+                        }} />
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.35rem' }}>
+                        <b>Requisito:</b> {gamificacao.proximaMedalha.criterios}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Aviso de Não Impacto Somativo */}
+                  <div style={{
+                    fontSize: '0.72rem',
+                    color: '#64748b',
+                    backgroundColor: '#fffbeb',
+                    border: '1px solid #fef3c7',
+                    padding: '0.4rem 0.75rem',
+                    borderRadius: '6px',
+                    lineHeight: '1.4'
+                  }}>
+                    ⚠️ <b>Nota Legal:</b> As medalhas do programa são instrumentos de incentivo e autoavaliação formativa. Não interferem nem substituem as pontuações e pareceres somativos formais exigidos na avaliação do Estágio Probatório da SEED-PR.
+                  </div>
+                </div>
+              )}
+
               {/* Card 1: Gráfico Curva de Evolução (Ampla e com rolagem fluida) */}
               <div className="glass-panel" style={{ background: '#ffffff', padding: '1.25rem', borderRadius: '14px', border: '1px solid var(--color-card-border)', boxShadow: 'var(--shadow-sm)' }}>
                 <CurvaEvolucaoPedagogica

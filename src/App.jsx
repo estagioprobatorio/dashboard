@@ -20,6 +20,12 @@ import ObservacaoPratica from './components/ObservacaoPratica';
 import ObservacoesOverview from './components/ObservacoesOverview';
 import AcompanhamentoObservacoesCards from './components/AcompanhamentoObservacoesCards';
 import Concluintes from './components/Concluintes';
+import Movimentacoes from './components/Movimentacoes';
+import TutorInsightsDashboard from './components/TutorInsightsDashboard';
+import DiarioFormativo from './components/DiarioFormativo';
+import CentralDocumentos from './components/CentralDocumentos';
+import BuscaGlobalPessoasModal from './components/BuscaGlobalPessoasModal';
+import DossieCursistaModal from './components/DossieCursistaModal';
 
 import { salvarObservacaoIntegrada, getObservacoesLocaisNovas } from './utils/observacoesSyncService';
 import { normalizeString } from './utils/aiPedagogicalService';
@@ -30,7 +36,10 @@ import tutoresFallback from './tutores_fallback.json';
 import observacoesFallback from './observacoes_fallback.json';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('panorama');
+  const [macroPilar, setMacroPilar] = useState('pedagogica'); // 'pedagogica' | 'administrativa'
+  const [activeTab, setActiveTab] = useState('observacoes');
+  const [showBuscaGlobal, setShowBuscaGlobal] = useState(false);
+  const [cursistaDossieModal, setCursistaDossieModal] = useState(null);
   const [records, setRecords] = useState(fallbackData);
   const [tutoresList, setTutoresList] = useState(tutoresFallback);
   const [observacoesList, setObservacoesList] = useState(() => {
@@ -740,6 +749,19 @@ export default function App() {
 
     // Se o perfil ativo for Cursista ou se a aba for de Cursista
     if (effectiveRole === 'cursista' || activeTab.startsWith('cursista_') || activeTab === 'espaco_cursista') {
+      if (activeTab === 'cursista_diario') {
+        return (
+          <DiarioFormativo 
+            userRole="cursista"
+            userEmail={effectiveEmail}
+            cursistas={enrichedRecords}
+            tutores={tutoresList}
+          />
+        );
+      }
+      if (activeTab === 'cursista_documentos') {
+        return <CentralDocumentos userRole="cursista" />;
+      }
       const subTab = activeTab === 'cursista_solicitacoes' ? 'solicitacoes' : activeTab === 'cursista_observacoes' ? 'observacoes' : 'turma';
       return (
         <AmbienteCursista 
@@ -754,27 +776,7 @@ export default function App() {
     }
 
     switch (activeTab) {
-      case 'panorama':
-        return <Panorama data={filteredRecordsForView} />;
-      case 'observacoes_overview':
-        return (
-          <ObservacoesOverview 
-            observacoes={filteredObservacoesForView} 
-            cursistas={enrichedRecords} 
-            tutores={tutoresList}
-          />
-        );
-      case 'acompanhamento_cards':
-        return userRole === 'admin' ? (
-          <AcompanhamentoObservacoesCards 
-            cursistas={filteredRecordsForView} 
-            observacoes={filteredObservacoesForView} 
-            tutores={tutoresList}
-            userRole={effectiveRole}
-            userEmail={effectiveEmail}
-            onNovaObservacao={handleNovaObservacao}
-          />
-        ) : <Panorama data={filteredRecordsForView} />;
+      // 📘 GESTÃO PEDAGÓGICA
       case 'observacoes':
         return (
           <ObservacaoPratica 
@@ -786,12 +788,48 @@ export default function App() {
             onNovaObservacao={handleNovaObservacao}
           />
         );
-      case 'formadores':
-        return <ContatoFormadores data={filteredRecordsForView} />;
-      case 'cursistas':
-        return <ContatoCursistas data={filteredRecordsForView} />;
-      case 'tutoria':
-        return <DadosTutoria data={filteredRecordsForView} />;
+      case 'tutor_insights':
+        return (
+          <TutorInsightsDashboard 
+            userRole={effectiveRole}
+            userEmail={effectiveEmail}
+            tutores={tutoresList}
+          />
+        );
+      case 'diario_formativo':
+        return (
+          <DiarioFormativo 
+            userRole={effectiveRole}
+            userEmail={effectiveEmail}
+            cursistas={enrichedRecords}
+            tutores={tutoresList}
+          />
+        );
+      case 'documentos_pedagogicos':
+        return <CentralDocumentos userRole={effectiveRole} />;
+      case 'observacoes_overview':
+        return (
+          <ObservacoesOverview 
+            observacoes={filteredObservacoesForView} 
+            cursistas={enrichedRecords} 
+            tutores={tutoresList}
+          />
+        );
+      case 'acompanhamento_cards':
+        return (
+          <AcompanhamentoObservacoesCards 
+            cursistas={filteredRecordsForView} 
+            observacoes={filteredObservacoesForView} 
+            tutores={tutoresList}
+            userRole={effectiveRole}
+            userEmail={effectiveEmail}
+            onNovaObservacao={handleNovaObservacao}
+          />
+        );
+
+      // 🏛️ GESTÃO ADMINISTRATIVA
+      case 'panorama':
+        return <Panorama data={filteredRecordsForView} />;
       case 'turmas':
         return (
           <ListaTurmas 
@@ -801,6 +839,20 @@ export default function App() {
             onNovaObservacao={handleNovaObservacao}
           />
         );
+      case 'remanejamentos':
+        return (
+          <Movimentacoes 
+            userEmail={effectiveEmail} 
+            userRole={effectiveRole} 
+            tutorData={tutoresList} 
+          />
+        );
+      case 'formadores':
+        return <ContatoFormadores data={filteredRecordsForView} />;
+      case 'cursistas':
+        return <ContatoCursistas data={filteredRecordsForView} />;
+      case 'tutoria':
+        return <DadosTutoria data={filteredRecordsForView} />;
       case 'concluintes':
         return (
           <Concluintes 
@@ -815,7 +867,16 @@ export default function App() {
           ? <AdminPanel data={enrichedRecords} onLocalUpdate={handleLocalUpdate} userRole={userRole} /> 
           : <Panorama data={filteredRecordsForView} />;
       default:
-        return <Panorama data={filteredRecordsForView} />;
+        return macroPilar === 'pedagogica' ? (
+          <ObservacaoPratica 
+            observacoes={filteredObservacoesForView} 
+            cursistas={enrichedRecords} 
+            tutores={tutoresList}
+            userRole={effectiveRole}
+            userEmail={effectiveEmail}
+            onNovaObservacao={handleNovaObservacao}
+          />
+        ) : <Panorama data={filteredRecordsForView} />;
     }
   };
 
@@ -839,43 +900,148 @@ export default function App() {
             </div>
           </div>
           
-          {/* Perfil do Usuário Logado */}
-          <div className="banner-user-card">
-            {user.photoURL && (
-              <img 
-                src={user.photoURL} 
-                alt="Foto de perfil" 
-                style={{ width: '38px', height: '38px', borderRadius: '50%', border: '2px solid var(--color-accent-green)' }} 
-              />
-            )}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
-              <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#fff' }}>{user.displayName}</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
-                <span className="logo-badge" style={{ fontSize: '0.65rem', padding: '0.1rem 0.4rem', backgroundColor: userRole === 'admin' ? '#e53e3e' : userRole === 'tecnico' ? 'var(--color-primary-mid)' : userRole === 'cursista' ? '#fbbf24' : 'var(--color-accent-green)', color: userRole === 'cursista' ? '#1e293b' : '#fff' }}>
-                  {userRole.toUpperCase()}
-                </span>
-                <span style={{ fontSize: '0.75rem', opacity: 0.8, wordBreak: 'break-all' }}>{user.email}</span>
-              </div>
-            </div>
-            <button 
-              onClick={handleLogout} 
+          {/* Área de Ações e Perfil do Usuário Logado */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={() => setShowBuscaGlobal(true)}
               style={{
-                background: 'none',
-                border: 'none',
-                color: '#feb2b2',
+                backgroundColor: 'rgba(255, 255, 255, 0.18)',
+                color: '#ffffff',
+                border: '1px solid rgba(255, 255, 255, 0.35)',
+                borderRadius: '8px',
+                padding: '0.5rem 1rem',
+                fontSize: '0.82rem',
+                fontWeight: 700,
                 cursor: 'pointer',
-                padding: '0.25rem',
-                fontSize: '0.8rem',
-                fontWeight: 600,
-                marginLeft: 'auto',
-                textDecoration: 'underline'
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.45rem',
+                backdropFilter: 'blur(4px)',
+                transition: 'all 0.2s ease',
+                whiteSpace: 'nowrap'
               }}
+              onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.28)'}
+              onMouseLeave={e => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.18)'}
             >
-              Sair
+              <span style={{ fontSize: '1rem' }}>🔍</span> Buscar Cursista / Formador / Tutor
             </button>
+
+            <div className="banner-user-card">
+              {user.photoURL && (
+                <img 
+                  src={user.photoURL} 
+                  alt="Foto de perfil" 
+                  style={{ width: '38px', height: '38px', borderRadius: '50%', border: '2px solid var(--color-accent-green)' }} 
+                />
+              )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#fff' }}>{user.displayName}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                  <span className="logo-badge" style={{ fontSize: '0.65rem', padding: '0.1rem 0.4rem', backgroundColor: userRole === 'admin' ? '#e53e3e' : userRole === 'tecnico' ? 'var(--color-primary-mid)' : userRole === 'cursista' ? '#fbbf24' : 'var(--color-accent-green)', color: userRole === 'cursista' ? '#1e293b' : '#fff' }}>
+                    {userRole.toUpperCase()}
+                  </span>
+                  <span style={{ fontSize: '0.75rem', opacity: 0.8, wordBreak: 'break-all' }}>{user.email}</span>
+                </div>
+              </div>
+              <button 
+                onClick={handleLogout} 
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#feb2b2',
+                  cursor: 'pointer',
+                  padding: '0.25rem',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  marginLeft: 'auto',
+                  textDecoration: 'underline'
+                }}
+              >
+                Sair
+              </button>
+            </div>
           </div>
         </div>
       </header>
+
+      {/* SELETOR DE MACRO-PILAR: GESTÃO PEDAGÓGICA vs GESTÃO ADMINISTRATIVA */}
+      {effectiveRole !== 'cursista' && (
+        <div style={{
+          backgroundColor: '#ffffff',
+          borderBottom: '2px solid #e2e8f0',
+          padding: '0.6rem 1.5rem',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '1rem',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.03)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Divisão da Plataforma:
+            </span>
+            <div style={{ display: 'flex', backgroundColor: '#f1f5f9', borderRadius: '10px', padding: '0.25rem', gap: '0.25rem' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setMacroPilar('pedagogica');
+                  setActiveTab('observacoes');
+                }}
+                style={{
+                  padding: '0.5rem 1.25rem',
+                  borderRadius: '8px',
+                  border: 'none',
+                  fontSize: '0.88rem',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  backgroundColor: macroPilar === 'pedagogica' ? '#002b7f' : 'transparent',
+                  color: macroPilar === 'pedagogica' ? '#ffffff' : '#475569',
+                  boxShadow: macroPilar === 'pedagogica' ? '0 2px 6px rgba(0, 43, 127, 0.25)' : 'none',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                <span>📘</span> Gestão Pedagógica
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setMacroPilar('administrativa');
+                  setActiveTab('panorama');
+                }}
+                style={{
+                  padding: '0.5rem 1.25rem',
+                  borderRadius: '8px',
+                  border: 'none',
+                  fontSize: '0.88rem',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  backgroundColor: macroPilar === 'administrativa' ? '#007a33' : 'transparent',
+                  color: macroPilar === 'administrativa' ? '#ffffff' : '#475569',
+                  boxShadow: macroPilar === 'administrativa' ? '0 2px 6px rgba(0, 122, 51, 0.25)' : 'none',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                <span>🏛️</span> Gestão Administrativa
+              </button>
+            </div>
+          </div>
+
+          <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
+            {macroPilar === 'pedagogica'
+              ? '👁️ Acompanhamento formativo em 3 níveis • Rubricas • Diário Formativo • PDP'
+              : '📊 Matriz de turmas • Remanejamentos • Ensalamento • Concluintes • Auditoria'}
+          </div>
+        </div>
+      )}
 
       {/* Barra de Simulação de Papel Exclusiva para Administradores */}
       {userRole === 'admin' && (
@@ -997,7 +1163,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Menu de Abas adaptado ao Perfil Ativo */}
+      {/* Menu de Abas adaptado ao Perfil Ativo e Macro-Pilar */}
       <nav className="tab-navigation">
         <div className="tabs-container">
           {effectiveRole === 'cursista' ? (
@@ -1012,7 +1178,13 @@ export default function App() {
                 className={`tab-btn ${activeTab === 'cursista_observacoes' ? 'active' : ''}`}
                 onClick={() => setActiveTab('cursista_observacoes')}
               >
-                👁️ Meu Acompanhamento & Dossiê
+                👁️ Meu Acompanhamento & Medalhas
+              </button>
+              <button 
+                className={`tab-btn ${activeTab === 'cursista_diario' ? 'active' : ''}`}
+                onClick={() => setActiveTab('cursista_diario')}
+              >
+                📖 Meu Diário Formativo
               </button>
               <button 
                 className={`tab-btn ${activeTab === 'cursista_solicitacoes' ? 'active' : ''}`}
@@ -1020,14 +1192,87 @@ export default function App() {
               >
                 🔄 Minhas Solicitações
               </button>
+              <button 
+                className={`tab-btn ${activeTab === 'cursista_documentos' ? 'active' : ''}`}
+                onClick={() => setActiveTab('cursista_documentos')}
+              >
+                📚 Documentos Formativos
+              </button>
+            </>
+          ) : macroPilar === 'pedagogica' ? (
+            <>
+              {/* ABAS DA GESTÃO PEDAGÓGICA */}
+              <button 
+                className={`tab-btn ${activeTab === 'observacoes' ? 'active' : ''}`}
+                onClick={() => setActiveTab('observacoes')}
+              >
+                👁️ Observação Cursista (Nível 1)
+              </button>
+
+              <button 
+                className={`tab-btn ${activeTab === 'tutor_insights' ? 'active' : ''}`}
+                onClick={() => setActiveTab('tutor_insights')}
+              >
+                🤝 Observações Tutoria (Nível 2 & 3)
+              </button>
+
+              <button 
+                className={`tab-btn ${activeTab === 'diario_formativo' ? 'active' : ''}`}
+                onClick={() => setActiveTab('diario_formativo')}
+              >
+                📖 Diário Formativo
+              </button>
+
+              <button 
+                className={`tab-btn ${activeTab === 'documentos_pedagogicos' ? 'active' : ''}`}
+                onClick={() => setActiveTab('documentos_pedagogicos')}
+              >
+                📚 Central de Documentos (PDP & Rubricas)
+              </button>
+
+              <button 
+                className={`tab-btn ${activeTab === 'observacoes_overview' ? 'active' : ''}`}
+                onClick={() => setActiveTab('observacoes_overview')}
+              >
+                📈 Overview das Observações
+              </button>
+
+              <button 
+                className={`tab-btn ${activeTab === 'acompanhamento_cards' ? 'active' : ''}`}
+                onClick={() => setActiveTab('acompanhamento_cards')}
+              >
+                🗂️ Acompanhamento por Cursista
+              </button>
             </>
           ) : (
             <>
+              {/* ABAS DA GESTÃO ADMINISTRATIVA */}
               <button 
                 className={`tab-btn ${activeTab === 'panorama' ? 'active' : ''}`}
                 onClick={() => setActiveTab('panorama')}
               >
                 📊 Panorama Geral
+              </button>
+
+              <button 
+                className={`tab-btn ${activeTab === 'turmas' ? 'active' : ''}`}
+                onClick={() => setActiveTab('turmas')}
+              >
+                🏫 Lista de Turmas
+              </button>
+
+              <button 
+                className={`tab-btn ${activeTab === 'remanejamentos' ? 'active' : ''}`}
+                onClick={() => setActiveTab('remanejamentos')}
+              >
+                🔄 Remanejamentos & Modalidades
+              </button>
+
+              <button 
+                className={`tab-btn ${activeTab === 'cursistas' ? 'active' : ''}`}
+                onClick={() => setActiveTab('cursistas')}
+              >
+                👥 Contato Cursistas
               </button>
               
               {effectiveRole !== 'formador' && (
@@ -1039,13 +1284,6 @@ export default function App() {
                 </button>
               )}
               
-              <button 
-                className={`tab-btn ${activeTab === 'cursistas' ? 'active' : ''}`}
-                onClick={() => setActiveTab('cursistas')}
-              >
-                👥 Contato Cursistas
-              </button>
-              
               {effectiveRole !== 'formador' && (
                 <button 
                   className={`tab-btn ${activeTab === 'tutoria' ? 'active' : ''}`}
@@ -1054,36 +1292,6 @@ export default function App() {
                   🤝 Dados Tutoria
                 </button>
               )}
-
-              <button 
-                className={`tab-btn ${activeTab === 'observacoes_overview' ? 'active' : ''}`}
-                onClick={() => setActiveTab('observacoes_overview')}
-              >
-                📈 Observações - Overview
-              </button>
-
-              {userRole === 'admin' && (
-                <button 
-                  className={`tab-btn ${activeTab === 'acompanhamento_cards' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('acompanhamento_cards')}
-                >
-                  🗂️ Acompanhamento por Cursista
-                </button>
-              )}
-
-              <button 
-                className={`tab-btn ${activeTab === 'observacoes' ? 'active' : ''}`}
-                onClick={() => setActiveTab('observacoes')}
-              >
-                👁️ Observação da Prática
-              </button>
-
-              <button 
-                className={`tab-btn ${activeTab === 'turmas' ? 'active' : ''}`}
-                onClick={() => setActiveTab('turmas')}
-              >
-                🏫 Lista de Turmas
-              </button>
 
               {/* Aba de Concluintes do 1º Chamamento */}
               {(userRole === 'admin' || userRole === 'tecnico' || !simulatedRole) && (
@@ -1102,7 +1310,7 @@ export default function App() {
                   onClick={() => setActiveTab('admin')}
                   style={{ borderLeft: '1px solid var(--color-card-border)', backgroundColor: 'rgba(229, 62, 62, 0.05)' }}
                 >
-                  🛡️ Painel Admin
+                  🛡️ Painel Admin ("Modo Deus")
                 </button>
               )}
             </>
@@ -1114,6 +1322,24 @@ export default function App() {
       <main className="main-content">
         {renderTabContent()}
       </main>
+
+      {/* Modal de Busca Global de Pessoas (Cursista, Formador, Tutor) */}
+      <BuscaGlobalPessoasModal
+        isOpen={showBuscaGlobal}
+        onClose={() => setShowBuscaGlobal(false)}
+        cursistas={enrichedRecords}
+        tutores={tutoresList}
+        onAbrirDossie={(cursista) => setCursistaDossieModal(cursista)}
+      />
+
+      {/* Modal de Dossiê caso acionado pela busca */}
+      {cursistaDossieModal && (
+        <DossieCursistaModal
+          cursista={cursistaDossieModal}
+          observacoes={observacoesList}
+          onClose={() => setCursistaDossieModal(null)}
+        />
+      )}
 
       {/* Rodapé com o Brasão do Paraná */}
       <footer style={{ backgroundColor: 'var(--color-primary-dark)', color: 'rgba(255,255,255,0.7)', padding: '1.5rem', textAlign: 'center', fontSize: '0.8rem', marginTop: 'auto', borderTop: '4px solid var(--color-accent-green)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
