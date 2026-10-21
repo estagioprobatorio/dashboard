@@ -6,6 +6,16 @@
  * nos caminhos '/config/admins' e '/config/tecnicos'.
  */
 
+// Superadmins com acesso restrito e exclusivo ao painel Tutor Insight
+export const SUPERADMINS_TUTOR_INSIGHTS = [
+  "jorge.dotti@escola.pr.gov.br",
+  "ana.paulados.santos@escola.pr.gov.br",
+  "alexandrebomfim@escola.pr.gov.br",
+  "fernanda.ambonatti@escola.pr.gov.br",
+  "mariangela.iurk@escola.pr.gov.br",
+  "eliane.bruning@escola.pr.gov.br"
+];
+
 export const DEFAULT_ADMINS = [
   "alexandrebomfim@escola.pr.gov.br",
   "fernanda.ambonatti@escola.pr.gov.br",

@@ -5,8 +5,98 @@ import { ref, onValue, remove, update } from 'firebase/database';
 import { calculateSLA } from '../utils/slaUtils';
 import { fetchAllGoogleSheetsData } from '../utils/sheetUtils';
 import FormularioChamadoTutor from './FormularioChamadoTutor';
+import fallbackData from '../data_fallback.json';
+import tutoresFallback from '../tutores_fallback.json';
 
-export default function Movimentacoes({ userEmail, userRole, tutorData }) {
+// Helper para resolver e enriquecer dados completos de Formador e Tutor de uma Turma
+function resolverDadosTurma(turmaNome, movContext = {}, records = [], tutoresList = [], tipo = 'anterior') {
+  const cleanTurma = String(turmaNome || '').trim().toUpperCase();
+
+  // 1. Buscar registro da turma na base de cursistas/turmas
+  let rec = cleanTurma ? (records || []).find(r => {
+    const t = String(r.turmas || r.turma || '').trim().toUpperCase();
+    return t === cleanTurma;
+  }) : null;
+
+  // Se não achou por nome da turma e for turma atual, tentar achar pelo CGM do cursista
+  if (!rec && tipo === 'atual' && movContext.cgm) {
+    rec = (records || []).find(r => String(r.cgm || '').trim() === String(movContext.cgm).trim());
+  }
+
+  // Obter Formador
+  const formadorNome = (tipo === 'anterior' ? movContext.formador_anterior : movContext.formador_novo) ||
+                       (tipo === 'anterior' ? null : movContext.formador || movContext.nome_formador) ||
+                       rec?.nome_formador || rec?.formador || '';
+
+  const formadorEmail = (tipo === 'anterior' ? movContext.email_formador_anterior : movContext.email_formador_novo) ||
+                        (tipo === 'anterior' ? null : movContext.email_formador) ||
+                        rec?.email_formador || rec?.['e-mail_formador'] || '';
+
+  const formadorTelefone = (tipo === 'anterior' ? movContext.telefone_formador_anterior : movContext.telefone_formador_novo) ||
+                          (tipo === 'anterior' ? null : movContext.telefone_formador) ||
+                          rec?.telefone_formador || rec?.fone_formador || '';
+
+  // Obter Tutor
+  let tutorNome = (tipo === 'anterior' ? movContext.tutor_anterior : movContext.tutor_novo) ||
+                  (tipo === 'anterior' ? movContext.tutor || movContext.tutor_responsavel : null) ||
+                  rec?.tutor_responsavel || rec?.tutor || '';
+
+  let tutorEmail = (tipo === 'anterior' ? movContext.email_tutor_anterior : movContext.email_tutor_novo) ||
+                   (tipo === 'anterior' ? movContext.email_tutor_responsavel || movContext.email_tutor : null) ||
+                   rec?.email_tutor || rec?.email_educ || '';
+
+  let tutorTelefone = (tipo === 'anterior' ? movContext.telefone_tutor_anterior : movContext.telefone_tutor_novo) ||
+                     (tipo === 'anterior' ? movContext.telefone_tutor : null) ||
+                     rec?.telefone_tutor || rec?.telefone || '';
+
+  let tutorNre = (tipo === 'anterior' ? movContext.nre_tutor_anterior : movContext.nre_tutor_novo) ||
+                 rec?.nre_tutor || rec?.nre || movContext.nre || '';
+
+  let emailNre = (tipo === 'anterior' ? movContext.email_nre_tutor_anterior : movContext.email_nre_tutor_novo) ||
+                 (tipo === 'anterior' ? movContext.email_nre : null) ||
+                 rec?.email_nre || rec?.['e-mail_nre'] || '';
+
+  // 2. Enriquecimento via tutoresList caso falte telefone ou email_nre
+  if (tutorNome || tutorEmail) {
+    const cleanTutorNome = String(tutorNome || '').trim().toUpperCase();
+    const cleanTutorEmail = String(tutorEmail || '').trim().toLowerCase();
+
+    const tutMatch = (tutoresList || []).find(t => {
+      const tNome = String(t.tutor_responsavel || t.nome || '').trim().toUpperCase();
+      const tEmailEduc = String(t.email_educ || '').trim().toLowerCase();
+      const tEmailAdm = String(t.email_adm || '').trim().toLowerCase();
+
+      return (cleanTutorNome && tNome === cleanTutorNome) ||
+             (cleanTutorEmail && (tEmailEduc === cleanTutorEmail || tEmailAdm === cleanTutorEmail));
+    });
+
+    if (tutMatch) {
+      if (!tutorNome) tutorNome = tutMatch.tutor_responsavel || tutMatch.nome || '';
+      if (!tutorTelefone) tutorTelefone = tutMatch.telefone || '';
+      if (!tutorEmail) tutorEmail = tutMatch.email_educ || tutMatch.email_adm || '';
+      if (!tutorNre) tutorNre = tutMatch.nre_tutor || tutMatch.nre || '';
+      if (!emailNre) emailNre = tutMatch.email_nre || '';
+    }
+  }
+
+  return {
+    turma: turmaNome || (rec ? (rec.turmas || rec.turma) : 'Turma não informada'),
+    formador: {
+      nome: formadorNome || 'Não informado',
+      email: formadorEmail,
+      telefone: formadorTelefone
+    },
+    tutor: {
+      nome: tutorNome || 'Não atribuído',
+      email: tutorEmail,
+      telefone: tutorTelefone,
+      nre: tutorNre,
+      emailNre: emailNre
+    }
+  };
+}
+
+export default function Movimentacoes({ userEmail, userRole, tutorData, records = fallbackData, tutoresList = tutoresFallback }) {
   const [movements, setMovements] = useState([]);
   const [loading, setLoading] = useState(false);
   const [isSyncingSheet, setIsSyncingSheet] = useState(false);
@@ -758,44 +848,275 @@ export default function Movimentacoes({ userEmail, userRole, tutorData }) {
                     </div>
                   )}
 
-                  {(mov.turma_anterior || mov.turmaOrigem || mov.turma_nova || mov.turmaDestino || mov.turma_detalhes) && (
-                    <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', backgroundColor: '#f8fafc', padding: '0.5rem 0.75rem', borderRadius: '6px', margin: '0.4rem 0' }}>
-                      {mov.turma_anterior || mov.turmaOrigem ? <span><b>Turma Atual:</b> {mov.turma_anterior || mov.turmaOrigem} | </span> : null}
-                      {mov.turma_nova || mov.turmaDestino ? <span><b>Turma Desejada:</b> {mov.turma_nova || mov.turmaDestino} | </span> : null}
-                      {mov.turma_detalhes ? <span><b>Detalhes da Turma:</b> {mov.turma_detalhes} | </span> : null}
-                      {mov.modalidade_detalhes ? <span><b>Modalidade:</b> {mov.modalidade_detalhes}</span> : null}
-                    </div>
-                  )}
+                  {/* RESOLVER DADOS COMPLETOS DAS TURMAS ANTERIOR E ATUAL */}
+                  {(() => {
+                    const turmaAnteriorNome = mov.turma_anterior || mov.turmaOrigem || '';
+                    const turmaAtualNome = mov.turma_nova || mov.turmaDestino || '';
 
-                  {(mov.justificativa || mov.descricao) && (
-                    <div style={{ fontSize: '0.85rem', color: '#334155', fontStyle: 'italic', marginTop: '0.3rem' }}>
-                      "{(mov.justificativa || mov.descricao)}"
-                    </div>
-                  )}
+                    const dadosAnterior = (turmaAnteriorNome || (!turmaAtualNome && mov.cgm))
+                      ? resolverDadosTurma(turmaAnteriorNome, mov, records, tutoresList, 'anterior')
+                      : null;
 
-                  {/* Nota de Resolução do Admin (Se já atendido) */}
-                  {mov.nota_resolucao && (
-                    <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '6px', padding: '0.5rem 0.75rem', marginTop: '0.5rem', fontSize: '0.83rem', color: '#166534' }}>
-                      <b>💬 Resposta do Atendimento Admin:</b> {mov.nota_resolucao}
-                    </div>
-                  )}
+                    const dadosAtual = (turmaAtualNome)
+                      ? resolverDadosTurma(turmaAtualNome, mov, records, tutoresList, 'atual')
+                      : null;
+
+                    return (
+                      <div style={{ margin: '0.85rem 0', display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                        
+                        {/* PAINEL COMPARATIVO DE DISTRIBUIÇÃO DAS TURMAS */}
+                        <div style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+                          gap: '1rem',
+                          alignItems: 'stretch'
+                        }}>
+                          
+                          {/* ⬅️ TURMA ANTERIOR */}
+                          <div style={{
+                            backgroundColor: '#f8fafc',
+                            border: '1px solid #cbd5e1',
+                            borderLeft: '4px solid #475569',
+                            borderRadius: '10px',
+                            padding: '0.9rem 1.1rem',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '0.65rem',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.45rem' }}>
+                              <span style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', color: '#475569', letterSpacing: '0.04em' }}>
+                                ⬅️ Turma Anterior (Origem)
+                              </span>
+                              {dadosAnterior?.tutor?.nre && (
+                                <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600 }}>
+                                  📍 NRE: {dadosAnterior.tutor.nre}
+                                </span>
+                              )}
+                            </div>
+
+                            <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#001d3d', wordBreak: 'break-word', lineHeight: 1.35 }}>
+                              {dadosAnterior?.turma || turmaAnteriorNome || 'Não informada'}
+                            </div>
+
+                            {/* Formador da Turma Anterior */}
+                            <div style={{ backgroundColor: 'white', borderRadius: '7px', padding: '0.6rem 0.75rem', border: '1px solid #e2e8f0' }}>
+                              <div style={{ fontSize: '0.7rem', fontWeight: 800, color: '#0072bc', textTransform: 'uppercase', marginBottom: '0.2rem' }}>
+                                🎓 Formador(a)
+                              </div>
+                              <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#0f172a' }}>
+                                {dadosAnterior?.formador?.nome || 'Não informado'}
+                              </div>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', marginTop: '0.35rem', fontSize: '0.77rem', color: '#475569' }}>
+                                {dadosAnterior?.formador?.email && (
+                                  <div>
+                                    <span style={{ fontWeight: 600, color: '#64748b' }}>✉️ E-mail: </span>
+                                    <a href={`mailto:${dadosAnterior.formador.email}`} style={{ color: '#0072bc', textDecoration: 'none', fontWeight: 600 }}>
+                                      {dadosAnterior.formador.email}
+                                    </a>
+                                  </div>
+                                )}
+                                {dadosAnterior?.formador?.telefone && (
+                                  <div>
+                                    <span style={{ fontWeight: 600, color: '#64748b' }}>📞 Telefone: </span>
+                                    <a href={`tel:${dadosAnterior.formador.telefone}`} style={{ color: '#0072bc', textDecoration: 'none', fontWeight: 600 }}>
+                                      {dadosAnterior.formador.telefone}
+                                    </a>
+                                  </div>
+                                )}
+                                {!dadosAnterior?.formador?.email && !dadosAnterior?.formador?.telefone && (
+                                  <div style={{ fontStyle: 'italic', color: '#94a3b8' }}>Contatos não cadastrados na base</div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Tutor da Turma Anterior */}
+                            <div style={{ backgroundColor: 'white', borderRadius: '7px', padding: '0.6rem 0.75rem', border: '1px solid #e2e8f0' }}>
+                              <div style={{ fontSize: '0.7rem', fontWeight: 800, color: '#00984a', textTransform: 'uppercase', marginBottom: '0.2rem' }}>
+                                👤 Tutor(a) Responsável
+                              </div>
+                              <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#0f172a' }}>
+                                {dadosAnterior?.tutor?.nome || 'Não atribuído'}
+                              </div>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.28rem', marginTop: '0.35rem', fontSize: '0.77rem', color: '#475569' }}>
+                                {dadosAnterior?.tutor?.telefone && (
+                                  <div>
+                                    <span style={{ fontWeight: 600, color: '#64748b' }}>📞 Telefone: </span>
+                                    <a href={`tel:${dadosAnterior.tutor.telefone}`} style={{ color: '#0072bc', textDecoration: 'none', fontWeight: 600 }}>
+                                      {dadosAnterior.tutor.telefone}
+                                    </a>
+                                  </div>
+                                )}
+                                {dadosAnterior?.tutor?.email && (
+                                  <div>
+                                    <span style={{ fontWeight: 600, color: '#64748b' }}>✉️ E-mail Tutor: </span>
+                                    <a href={`mailto:${dadosAnterior.tutor.email}`} style={{ color: '#0072bc', textDecoration: 'none', fontWeight: 600 }}>
+                                      {dadosAnterior.tutor.email}
+                                    </a>
+                                  </div>
+                                )}
+                                {dadosAnterior?.tutor?.emailNre && (
+                                  <div>
+                                    <span style={{ fontWeight: 600, color: '#64748b' }}>🏢 E-mail NRE (Tutor): </span>
+                                    <a href={`mailto:${dadosAnterior.tutor.emailNre}`} style={{ color: '#0072bc', textDecoration: 'none', fontWeight: 600 }}>
+                                      {dadosAnterior.tutor.emailNre}
+                                    </a>
+                                  </div>
+                                )}
+                                {!dadosAnterior?.tutor?.telefone && !dadosAnterior?.tutor?.email && !dadosAnterior?.tutor?.emailNre && (
+                                  <div style={{ fontStyle: 'italic', color: '#94a3b8' }}>Contatos não cadastrados na base</div>
+                                )}
+                              </div>
+                            </div>
+
+                          </div>
+
+                          {/* ➡️ TURMA ATUAL / NOVA */}
+                          <div style={{
+                            backgroundColor: '#f0fdf4',
+                            border: '1px solid #86efac',
+                            borderLeft: '4px solid #00984a',
+                            borderRadius: '10px',
+                            padding: '0.9rem 1.1rem',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '0.65rem',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #bbf7d0', paddingBottom: '0.45rem' }}>
+                              <span style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', color: '#15803d', letterSpacing: '0.04em' }}>
+                                ➡️ Turma Atual (Nova / Destino)
+                              </span>
+                              {dadosAtual?.tutor?.nre && (
+                                <span style={{ fontSize: '0.7rem', color: '#166534', fontWeight: 600 }}>
+                                  📍 NRE: {dadosAtual.tutor.nre}
+                                </span>
+                              )}
+                            </div>
+
+                            <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#001d3d', wordBreak: 'break-word', lineHeight: 1.35 }}>
+                              {dadosAtual?.turma || turmaAtualNome || 'Não informada'}
+                            </div>
+
+                            {/* Formador da Turma Atual */}
+                            <div style={{ backgroundColor: 'white', borderRadius: '7px', padding: '0.6rem 0.75rem', border: '1px solid #bbf7d0' }}>
+                              <div style={{ fontSize: '0.7rem', fontWeight: 800, color: '#0072bc', textTransform: 'uppercase', marginBottom: '0.2rem' }}>
+                                🎓 Formador(a)
+                              </div>
+                              <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#0f172a' }}>
+                                {dadosAtual?.formador?.nome || 'Não informado'}
+                              </div>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', marginTop: '0.35rem', fontSize: '0.77rem', color: '#475569' }}>
+                                {dadosAtual?.formador?.email && (
+                                  <div>
+                                    <span style={{ fontWeight: 600, color: '#64748b' }}>✉️ E-mail: </span>
+                                    <a href={`mailto:${dadosAtual.formador.email}`} style={{ color: '#0072bc', textDecoration: 'none', fontWeight: 600 }}>
+                                      {dadosAtual.formador.email}
+                                    </a>
+                                  </div>
+                                )}
+                                {dadosAtual?.formador?.telefone && (
+                                  <div>
+                                    <span style={{ fontWeight: 600, color: '#64748b' }}>📞 Telefone: </span>
+                                    <a href={`tel:${dadosAtual.formador.telefone}`} style={{ color: '#0072bc', textDecoration: 'none', fontWeight: 600 }}>
+                                      {dadosAtual.formador.telefone}
+                                    </a>
+                                  </div>
+                                )}
+                                {!dadosAtual?.formador?.email && !dadosAtual?.formador?.telefone && (
+                                  <div style={{ fontStyle: 'italic', color: '#94a3b8' }}>Contatos não cadastrados na base</div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Tutor da Turma Atual */}
+                            <div style={{ backgroundColor: 'white', borderRadius: '7px', padding: '0.6rem 0.75rem', border: '1px solid #bbf7d0' }}>
+                              <div style={{ fontSize: '0.7rem', fontWeight: 800, color: '#00984a', textTransform: 'uppercase', marginBottom: '0.2rem' }}>
+                                👤 Tutor(a) Responsável
+                              </div>
+                              <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#0f172a' }}>
+                                {dadosAtual?.tutor?.nome || 'Não atribuído'}
+                              </div>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.28rem', marginTop: '0.35rem', fontSize: '0.77rem', color: '#475569' }}>
+                                {dadosAtual?.tutor?.telefone && (
+                                  <div>
+                                    <span style={{ fontWeight: 600, color: '#64748b' }}>📞 Telefone: </span>
+                                    <a href={`tel:${dadosAtual.tutor.telefone}`} style={{ color: '#0072bc', textDecoration: 'none', fontWeight: 600 }}>
+                                      {dadosAtual.tutor.telefone}
+                                    </a>
+                                  </div>
+                                )}
+                                {dadosAtual?.tutor?.email && (
+                                  <div>
+                                    <span style={{ fontWeight: 600, color: '#64748b' }}>✉️ E-mail Tutor: </span>
+                                    <a href={`mailto:${dadosAtual.tutor.email}`} style={{ color: '#0072bc', textDecoration: 'none', fontWeight: 600 }}>
+                                      {dadosAtual.tutor.email}
+                                    </a>
+                                  </div>
+                                )}
+                                {dadosAtual?.tutor?.emailNre && (
+                                  <div>
+                                    <span style={{ fontWeight: 600, color: '#64748b' }}>🏢 E-mail NRE (Tutor): </span>
+                                    <a href={`mailto:${dadosAtual.tutor.emailNre}`} style={{ color: '#0072bc', textDecoration: 'none', fontWeight: 600 }}>
+                                      {dadosAtual.tutor.emailNre}
+                                    </a>
+                                  </div>
+                                )}
+                                {!dadosAtual?.tutor?.telefone && !dadosAtual?.tutor?.email && !dadosAtual?.tutor?.emailNre && (
+                                  <div style={{ fontStyle: 'italic', color: '#94a3b8' }}>Contatos não cadastrados na base</div>
+                                )}
+                              </div>
+                            </div>
+
+                          </div>
+
+                        </div>
+
+                        {/* Detalhes extras se houver */}
+                        {(mov.turma_detalhes || mov.modalidade_detalhes) && (
+                          <div style={{ fontSize: '0.82rem', color: '#475569', backgroundColor: '#f1f5f9', padding: '0.45rem 0.75rem', borderRadius: '6px' }}>
+                            {mov.turma_detalhes && <span><b>Detalhes da Turma:</b> {mov.turma_detalhes} | </span>}
+                            {mov.modalidade_detalhes && <span><b>Modalidade:</b> {mov.modalidade_detalhes}</span>}
+                          </div>
+                        )}
+
+                        {/* Justificativa / Descrição do Chamado */}
+                        {(mov.justificativa || mov.descricao) && (
+                          <div style={{ fontSize: '0.86rem', color: '#334155', fontStyle: 'italic', backgroundColor: '#fafaf9', padding: '0.6rem 0.85rem', borderRadius: '6px', borderLeft: '3px solid #d6d3d1' }}>
+                            "{(mov.justificativa || mov.descricao)}"
+                          </div>
+                        )}
+
+                        {/* Nota de Resolução do Admin (Se já atendido) */}
+                        {mov.nota_resolucao && (
+                          <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '0.65rem 0.85rem', fontSize: '0.85rem', color: '#166534', display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
+                            <span style={{ fontSize: '1.1rem' }}>💬</span>
+                            <div>
+                              <b style={{ display: 'block', marginBottom: '0.15rem' }}>Resposta do Atendimento Admin:</b>
+                              <span>{mov.nota_resolucao}</span>
+                            </div>
+                          </div>
+                        )}
+
+                      </div>
+                    );
+                  })()}
                 </div>
 
-                {/* Footer dos Metadados (Tutor, Formador, NRE) */}
+                {/* Footer dos Metadados */}
                 <div style={{ 
                   display: 'flex', 
                   gap: '1.2rem', 
-                  fontSize: '0.78rem', 
+                  fontSize: '0.76rem', 
                   color: 'var(--color-text-muted)',
                   borderTop: '1px solid #f1f5f9',
                   paddingTop: '0.5rem',
                   marginTop: '0.2rem',
                   flexWrap: 'wrap'
                 }}>
-                  <span><b>👤 Tutor Responsável:</b> {mov.tutor || mov.tutor_responsavel || 'Não Atribuído'} {mov.email_tutor_responsavel ? `(${mov.email_tutor_responsavel})` : ''}</span>
-                  <span><b>🎓 Formador:</b> {mov.formador || mov.nome_formador || 'Não Informado'}</span>
-                  <span><b>📍 NRE:</b> {mov.nre || 'Não Informado'}</span>
+                  <span><b>📍 NRE Cursista:</b> {mov.nre || 'Não Informado'}</span>
                   <span><b>Enviado Por:</b> {mov.solicitadoPor || 'Plataforma / Forms'}</span>
+                  {mov.tipo_acao && <span><b>Tipo:</b> {mov.tipo_acao}</span>}
                 </div>
 
               </div>

@@ -3,7 +3,7 @@ import { database, isConfigured as isFirebaseConfigured } from '../firebase';
 import { supabase, isConfigured as isSupabaseConfigured } from '../supabase';
 import { ref, set, push } from 'firebase/database';
 
-export default function AdminPanel({ data, onLocalUpdate, userRole }) {
+export default function AdminPanel({ data, onLocalUpdate, onMovimentacao, userRole }) {
   const isConfigured = isFirebaseConfigured || isSupabaseConfigured;
   // Estados de busca e do formulário
   const [searchQuery, setSearchQuery] = useState('');
@@ -362,7 +362,11 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
           tipo_acao: tipoAcao,
           email_tutor_responsavel: selectedRecord.email_tutor || '',
           tutor: selectedRecord.tutor_responsavel || '',
-          nre: selectedRecord.nre_tutor || ''
+          nre: selectedRecord.nre_tutor || '',
+          // Ação já executada pelo Admin: entra direto no Histórico de Atendimentos (não na Fila)
+          status: 'Resolvido',
+          nota_resolucao: `${tipoAcao}: ${turmaAnterior} ➔ ${turmaNova}`,
+          data_atendimento: new Date().toISOString()
         };
       }
 
@@ -421,7 +425,16 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
         }
 
         if (movementLog) {
-          await supabase.from('movimentacoes').insert(movementLog);
+          let { error: movErr } = await supabase.from('movimentacoes').insert(movementLog);
+          if (movErr) {
+            // Fallback: tenta sem as colunas de atendimento caso não existam na tabela
+            const { status, nota_resolucao, data_atendimento, ...logBasico } = movementLog;
+            ({ error: movErr } = await supabase.from('movimentacoes').insert(logBasico));
+          }
+          if (movErr) {
+            console.error("Erro ao registrar movimentação no Supabase:", movErr);
+            throw new Error(`Turma alterada, mas falhou o registro em Movimentações: ${movErr.message}`);
+          }
           console.log("Movimentação registrada no Supabase!");
         }
       }
@@ -460,6 +473,9 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
       }
 
       // 4. Notificar a aplicação principal para atualizar o estado local instantaneamente
+      if (movementLog && onMovimentacao) {
+        onMovimentacao({ id: `MOV-${Date.now()}`, ...movementLog });
+      }
       if (onLocalUpdate) {
         const oldKey = originalRecord ? `${originalRecord.cgm}_${originalRecord.turmas}` : null;
         const newKey = `${selectedRecord.cgm}_${selectedRecord.turmas}`;
@@ -501,7 +517,10 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
         tipo_acao: 'Saída',
         email_tutor_responsavel: record.email_tutor || '',
         tutor: record.tutor_responsavel || '',
-        nre: record.nre_tutor || ''
+        nre: record.nre_tutor || '',
+        status: 'Resolvido',
+        nota_resolucao: `Saída da turma ${record.turmas || ''}`,
+        data_atendimento: new Date().toISOString()
       };
 
       if (isSupabaseConfigured && supabase) {
@@ -510,7 +529,11 @@ export default function AdminPanel({ data, onLocalUpdate, userRole }) {
         } else if (record.cod_cursista) {
           await supabase.from('cursistas').delete().eq('cod_cursista', record.cod_cursista);
         }
-        await supabase.from('movimentacoes').insert(movementLog);
+        const { error: movErr } = await supabase.from('movimentacoes').insert(movementLog);
+        if (movErr) {
+          const { status, nota_resolucao, data_atendimento, ...logBasico } = movementLog;
+          await supabase.from('movimentacoes').insert(logBasico);
+        }
       }
 
       if (isFirebaseConfigured && database) {

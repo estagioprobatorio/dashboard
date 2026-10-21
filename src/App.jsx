@@ -5,7 +5,7 @@ import { ref, onValue } from 'firebase/database';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 
 // Importando Listas de Permissões Estáticas
-import { DEFAULT_ADMINS, DEFAULT_TECNICOS, DEFAULT_TUTORES } from './config_roles';
+import { DEFAULT_ADMINS, DEFAULT_TECNICOS, DEFAULT_TUTORES, SUPERADMINS_TUTOR_INSIGHTS } from './config_roles';
 
 // Importando componentes
 import Login from './components/Login';
@@ -20,6 +20,13 @@ import ObservacaoPratica from './components/ObservacaoPratica';
 import ObservacoesOverview from './components/ObservacoesOverview';
 import AcompanhamentoObservacoesCards from './components/AcompanhamentoObservacoesCards';
 import Concluintes from './components/Concluintes';
+import Movimentacoes from './components/Movimentacoes';
+import TutorInsightsDashboard from './components/TutorInsightsDashboard';
+import DiarioFormativo from './components/DiarioFormativo';
+import CentralDocumentos from './components/CentralDocumentos';
+import BuscaGlobalPessoasModal from './components/BuscaGlobalPessoasModal';
+import DossieCursistaModal from './components/DossieCursistaModal';
+import { HistoricoTurmasContext } from './utils/HistoricoTurmasContext';
 
 import { salvarObservacaoIntegrada, getObservacoesLocaisNovas } from './utils/observacoesSyncService';
 import { normalizeString } from './utils/aiPedagogicalService';
@@ -30,7 +37,10 @@ import tutoresFallback from './tutores_fallback.json';
 import observacoesFallback from './observacoes_fallback.json';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('panorama');
+  const [macroPilar, setMacroPilar] = useState('pedagogica'); // 'pedagogica' | 'administrativa'
+  const [activeTab, setActiveTab] = useState('observacoes');
+  const [showBuscaGlobal, setShowBuscaGlobal] = useState(false);
+  const [cursistaDossieModal, setCursistaDossieModal] = useState(null);
   const [records, setRecords] = useState(fallbackData);
   const [tutoresList, setTutoresList] = useState(tutoresFallback);
   const [observacoesList, setObservacoesList] = useState(() => {
@@ -470,6 +480,12 @@ export default function App() {
 
   const [simulatedEmail, setSimulatedEmail] = useState('');
 
+  // Histórico de turmas do cursista: visível apenas para Admin e Técnico (respeita simulação de perfil)
+  const historicoTurmasCtx = useMemo(() => ({
+    movimentacoes: movimentacoesList,
+    canView: effectiveRole === 'admin' || effectiveRole === 'tecnico'
+  }), [movimentacoesList, effectiveRole]);
+
   const formadoresExemplo = useMemo(() => {
     const map = new Map();
     enrichedRecords.forEach(r => {
@@ -547,6 +563,14 @@ export default function App() {
     
     return user.email;
   }, [user, simulatedRole, simulatedEmail, formadoresExemplo, tutoresExemplo, cursistasExemplo]);
+
+  // Checagem estrita de Superadmin para o painel Tutor Insight
+  const isSuperAdminTutor = useMemo(() => {
+    const list = (SUPERADMINS_TUTOR_INSIGHTS || []).map(e => e.trim().toLowerCase());
+    const realEmail = (user?.email || '').trim().toLowerCase();
+    const effEmail = (effectiveEmail || '').trim().toLowerCase();
+    return list.includes(realEmail) || list.includes(effEmail);
+  }, [user, effectiveEmail]);
 
   // 4. Filtrar Registros Dinamicamente para as abas baseado no Perfil Ativo (Real ou Simulado)
   const filteredRecordsForView = useMemo(() => {
@@ -740,7 +764,22 @@ export default function App() {
 
     // Se o perfil ativo for Cursista ou se a aba for de Cursista
     if (effectiveRole === 'cursista' || activeTab.startsWith('cursista_') || activeTab === 'espaco_cursista') {
-      const subTab = activeTab === 'cursista_solicitacoes' ? 'solicitacoes' : activeTab === 'cursista_observacoes' ? 'observacoes' : 'turma';
+      if (activeTab === 'cursista_diario') {
+        return (
+          <DiarioFormativo 
+            userRole="cursista"
+            userEmail={effectiveEmail}
+            cursistas={enrichedRecords}
+            tutores={tutoresList}
+          />
+        );
+      }
+      if (activeTab === 'cursista_documentos') {
+        return <CentralDocumentos userRole="cursista" />;
+      }
+      const subTab = activeTab === 'cursista_matricula_2027' ? 'matricula2027' :
+                     activeTab === 'cursista_solicitacoes' ? 'solicitacoes' : 
+                     activeTab === 'cursista_observacoes' ? 'observacoes' : 'turma';
       return (
         <AmbienteCursista 
           userEmail={effectiveEmail} 
@@ -754,27 +793,7 @@ export default function App() {
     }
 
     switch (activeTab) {
-      case 'panorama':
-        return <Panorama data={filteredRecordsForView} />;
-      case 'observacoes_overview':
-        return (
-          <ObservacoesOverview 
-            observacoes={filteredObservacoesForView} 
-            cursistas={enrichedRecords} 
-            tutores={tutoresList}
-          />
-        );
-      case 'acompanhamento_cards':
-        return userRole === 'admin' ? (
-          <AcompanhamentoObservacoesCards 
-            cursistas={filteredRecordsForView} 
-            observacoes={filteredObservacoesForView} 
-            tutores={tutoresList}
-            userRole={effectiveRole}
-            userEmail={effectiveEmail}
-            onNovaObservacao={handleNovaObservacao}
-          />
-        ) : <Panorama data={filteredRecordsForView} />;
+      // 📘 GESTÃO PEDAGÓGICA
       case 'observacoes':
         return (
           <ObservacaoPratica 
@@ -786,12 +805,59 @@ export default function App() {
             onNovaObservacao={handleNovaObservacao}
           />
         );
-      case 'formadores':
-        return <ContatoFormadores data={filteredRecordsForView} />;
-      case 'cursistas':
-        return <ContatoCursistas data={filteredRecordsForView} />;
-      case 'tutoria':
-        return <DadosTutoria data={filteredRecordsForView} />;
+      case 'tutor_insights':
+        if (!isSuperAdminTutor) {
+          return (
+            <div className="glass-panel" style={{ padding: '3rem 2rem', textAlign: 'center', maxWidth: '600px', margin: '2rem auto' }}>
+              <div style={{ fontSize: '3rem', marginBottom: '0.75rem' }}>🔒</div>
+              <h3 style={{ color: 'var(--color-primary-dark)', marginBottom: '0.5rem' }}>Acesso Restrito aos Superadministradores</h3>
+              <p style={{ color: 'var(--color-text-muted)', fontSize: '0.92rem', lineHeight: '1.5' }}>
+                O módulo <strong>Observação do Tutor</strong> (Acompanhamento de Tutores e Formadores) é de acesso exclusivo da coordenação geral do programa.
+              </p>
+            </div>
+          );
+        }
+        return (
+          <TutorInsightsDashboard 
+            userRole={effectiveRole}
+            userEmail={effectiveEmail}
+            tutores={tutoresList}
+          />
+        );
+      case 'diario_formativo':
+        return (
+          <DiarioFormativo 
+            userRole={effectiveRole}
+            userEmail={effectiveEmail}
+            cursistas={enrichedRecords}
+            tutores={tutoresList}
+          />
+        );
+      case 'documentos_pedagogicos':
+        return <CentralDocumentos userRole={effectiveRole} />;
+      case 'observacoes_overview':
+        return (
+          <ObservacoesOverview 
+            observacoes={filteredObservacoesForView} 
+            cursistas={enrichedRecords} 
+            tutores={tutoresList}
+          />
+        );
+      case 'acompanhamento_cards':
+        return (
+          <AcompanhamentoObservacoesCards 
+            cursistas={filteredRecordsForView} 
+            observacoes={filteredObservacoesForView} 
+            tutores={tutoresList}
+            userRole={effectiveRole}
+            userEmail={effectiveEmail}
+            onNovaObservacao={handleNovaObservacao}
+          />
+        );
+
+      // 🏛️ GESTÃO ADMINISTRATIVA
+      case 'panorama':
+        return <Panorama data={filteredRecordsForView} />;
       case 'turmas':
         return (
           <ListaTurmas 
@@ -801,6 +867,22 @@ export default function App() {
             onNovaObservacao={handleNovaObservacao}
           />
         );
+      case 'remanejamentos':
+        return (
+          <Movimentacoes 
+            userEmail={effectiveEmail} 
+            userRole={effectiveRole} 
+            tutorData={tutoresList} 
+            records={enrichedRecords}
+            tutoresList={tutoresList}
+          />
+        );
+      case 'formadores':
+        return <ContatoFormadores data={filteredRecordsForView} />;
+      case 'cursistas':
+        return <ContatoCursistas data={filteredRecordsForView} />;
+      case 'tutoria':
+        return <DadosTutoria data={filteredRecordsForView} />;
       case 'concluintes':
         return (
           <Concluintes 
@@ -812,297 +894,411 @@ export default function App() {
         );
       case 'admin':
         return (userRole === 'admin' || userRole === 'tecnico')
-          ? <AdminPanel data={enrichedRecords} onLocalUpdate={handleLocalUpdate} userRole={userRole} /> 
+          ? <AdminPanel data={enrichedRecords} onLocalUpdate={handleLocalUpdate} onMovimentacao={(mov) => setMovimentacoesList(prev => [mov, ...prev])} userRole={userRole} /> 
           : <Panorama data={filteredRecordsForView} />;
       default:
-        return <Panorama data={filteredRecordsForView} />;
+        return macroPilar === 'pedagogica' ? (
+          <ObservacaoPratica 
+            observacoes={filteredObservacoesForView} 
+            cursistas={enrichedRecords} 
+            tutores={tutoresList}
+            userRole={effectiveRole}
+            userEmail={effectiveEmail}
+            onNovaObservacao={handleNovaObservacao}
+          />
+        ) : <Panorama data={filteredRecordsForView} />;
     }
   };
 
   return (
     <div className="app-container">
-      {/* Banner Superior com Logo do Brasão do Paraná alinhado ao texto */}
-      <header className="header-banner">
-        <div className="banner-content">
-          <div className="banner-brand-area">
-            <img 
-              src="/brasao_parana.svg" 
-              alt="Brasão do Estado do Paraná" 
-              style={{ height: '58px', width: 'auto', flexShrink: 0, filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))' }} 
-            />
-            <div className="banner-title-area">
-              <span className="logo-badge">Secretaria da Educação do Paraná • SEED/PR</span>
-              <h1 className="banner-title">Estágio Probatório - Gestão de Turmas</h1>
-              <span className="banner-subtitle">
-                Ambiente de Acompanhamento, Formadores, Tutores & Cursistas
-              </span>
-            </div>
-          </div>
-          
-          {/* Perfil do Usuário Logado */}
-          <div className="banner-user-card">
-            {user.photoURL && (
+      {/* CABEÇALHO INSTITUCIONAL */}
+      <header className="cabecalho">
+        <div className="cabecalho-conteudo">
+
+          <div className="identidade">
+            <div className="logo" aria-hidden="true">
               <img 
-                src={user.photoURL} 
-                alt="Foto de perfil" 
-                style={{ width: '38px', height: '38px', borderRadius: '50%', border: '2px solid var(--color-accent-green)' }} 
+                src="/brasao_parana.svg" 
+                alt="Brasão do Paraná" 
+                style={{ width: '42px', height: 'auto', objectFit: 'contain' }} 
               />
-            )}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
-              <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#fff' }}>{user.displayName}</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
-                <span className="logo-badge" style={{ fontSize: '0.65rem', padding: '0.1rem 0.4rem', backgroundColor: userRole === 'admin' ? '#e53e3e' : userRole === 'tecnico' ? 'var(--color-primary-mid)' : userRole === 'cursista' ? '#fbbf24' : 'var(--color-accent-green)', color: userRole === 'cursista' ? '#1e293b' : '#fff' }}>
-                  {userRole.toUpperCase()}
-                </span>
-                <span style={{ fontSize: '0.75rem', opacity: 0.8, wordBreak: 'break-all' }}>{user.email}</span>
-              </div>
             </div>
-            <button 
-              onClick={handleLogout} 
-              style={{
-                background: 'none',
-                border: 'none',
-                color: '#feb2b2',
-                cursor: 'pointer',
-                padding: '0.25rem',
-                fontSize: '0.8rem',
-                fontWeight: 600,
-                marginLeft: 'auto',
-                textDecoration: 'underline'
-              }}
-            >
-              Sair
-            </button>
+
+            <div className="identidade-texto">
+              <div className="secretaria">
+                SECRETARIA DA EDUCAÇÃO DO PARANÁ · SEED/PR
+              </div>
+
+              <h1>ESTÁGIO PROBATÓRIO</h1>
+
+              <p>Gestão de turmas e acompanhamento da formação docente</p>
+            </div>
           </div>
+
+          <div className="acoes-usuario">
+            <button 
+              className="botao-busca" 
+              type="button"
+              onClick={() => setShowBuscaGlobal(true)}
+            >
+              <span aria-hidden="true">⌕</span>
+              Buscar pessoas
+            </button>
+
+            <div className="perfil">
+              <div className="avatar" aria-hidden="true">
+                {user.photoURL ? (
+                  <img src={user.photoURL} alt="Avatar" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                ) : (
+                  (user.displayName ? user.displayName.charAt(0).toUpperCase() : 'U')
+                )}
+              </div>
+
+              <div className="perfil-dados">
+                <strong>{user.displayName || 'Usuário'}</strong>
+                <small>{userRole ? userRole.toUpperCase() : 'ACESSO'}</small>
+              </div>
+
+              <button className="sair" type="button" onClick={handleLogout}>
+                ↪ Sair
+              </button>
+            </div>
+          </div>
+
         </div>
       </header>
 
-      {/* Barra de Simulação de Papel Exclusiva para Administradores */}
-      {userRole === 'admin' && (
-        <div className="simulator-bar">
-          <div className="simulator-controls">
-            <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-              🎭 <b>Simular Visualização:</b>
-            </span>
-            <select
-              value={simulatedRole || ''}
-              onChange={e => {
-                const role = e.target.value;
-                setSimulatedRole(role || null);
-                
-                // Define um e-mail de exemplo padrão para evitar dropdown vazio/desalinhado
-                if (role === 'formador' && formadoresExemplo.length > 0) {
-                  setSimulatedEmail(formadoresExemplo[0].email);
-                  setActiveTab('panorama');
-                } else if (role === 'tutor' && tutoresExemplo.length > 0) {
-                  setSimulatedEmail(tutoresExemplo[0].email);
-                  setActiveTab('panorama');
-                } else if (role === 'cursista' && cursistasExemplo.length > 0) {
-                  setSimulatedEmail(cursistasExemplo[0].email);
-                  setActiveTab('cursista_turma');
-                } else {
-                  setSimulatedEmail('');
-                  setActiveTab('panorama');
-                }
-              }}
-              style={{
-                padding: '0.35rem 0.7rem',
-                borderRadius: '6px',
-                border: '1px solid #f59e0b',
-                backgroundColor: 'white',
-                fontSize: '0.82rem',
-                fontWeight: 700,
-                color: '#92400e',
-                cursor: 'pointer',
-                maxWidth: '100%'
-              }}
-            >
-              <option value="">-- Visão Admin Real (Painel Completo) --</option>
-              <option value="formador">🎓 Simular Ambiente do Formador</option>
-              <option value="tutor">👤 Simular Ambiente do Tutor</option>
-              <option value="cursista">🧑‍🎓 Simular Ambiente do Cursista</option>
-            </select>
+      {/* MENU DE DIVISÕES (ÁREA DE GESTÃO) */}
+      {effectiveRole !== 'cursista' && (
+        <nav className="menu-principal" aria-label="Divisão de gestão">
+          <div className="menu-conteudo">
 
-            {/* Seleção do Exemplo Específico de Formador, Tutor ou Cursista */}
-            {simulatedRole === 'formador' && formadoresExemplo.length > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', maxWidth: '100%' }}>
-                <span style={{ fontSize: '0.8rem' }}>Exemplo:</span>
-                <select
-                  value={effectiveEmail}
-                  onChange={e => setSimulatedEmail(e.target.value)}
-                  style={{ padding: '0.3rem 0.5rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.8rem', fontWeight: 600, maxWidth: '100%' }}
-                >
-                  {formadoresExemplo.map(f => (
-                    <option key={f.email} value={f.email}>{f.nome} ({f.email})</option>
-                  ))}
-                </select>
-              </div>
-            )}
+            <div className="menu-divisao">
+              <span className="menu-legenda">Área de gestão</span>
 
-            {simulatedRole === 'tutor' && tutoresExemplo.length > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', maxWidth: '100%' }}>
-                <span style={{ fontSize: '0.8rem' }}>Exemplo:</span>
-                <select
-                  value={effectiveEmail}
-                  onChange={e => setSimulatedEmail(e.target.value)}
-                  style={{ padding: '0.3rem 0.5rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.8rem', fontWeight: 600, maxWidth: '100%' }}
-                >
-                  {tutoresExemplo.map(t => (
-                    <option key={t.email} value={t.email}>{t.nome} ({t.email})</option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {simulatedRole === 'cursista' && cursistasExemplo.length > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', maxWidth: '100%' }}>
-                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#92400e' }}>Cursista ({cursistasExemplo.length} disponíveis):</span>
-                <select
-                  value={effectiveEmail}
-                  onChange={e => setSimulatedEmail(e.target.value)}
-                  style={{ padding: '0.3rem 0.5rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.8rem', fontWeight: 600, maxWidth: '100%', backgroundColor: '#ffffff' }}
-                >
-                  {cursistasExemplo.slice(0, 25).map((c, idx) => (
-                    <option key={c.email} value={c.email}>
-                      {idx + 1}. {c.nome} {c.totalObs > 0 ? `(${c.totalObs} obs • ${c.ano})` : `(${c.turma})`}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </div>
-
-          {simulatedRole && (
-            <div className="simulator-info" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '0.8rem', color: '#b45309', wordBreak: 'break-all' }}>
-                Simulando: <b>{simulatedRole.toUpperCase()}</b> ({effectiveEmail})
-              </span>
               <button
-                onClick={() => { setSimulatedRole(null); setSimulatedEmail(''); setActiveTab('panorama'); }}
-                style={{
-                  backgroundColor: '#92400e',
-                  color: 'white',
-                  border: 'none',
-                  padding: '0.3rem 0.75rem',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  fontSize: '0.78rem',
-                  fontWeight: 700
+                type="button"
+                className={`item-divisao ${macroPilar === 'pedagogica' ? 'ativo' : ''}`}
+                data-divisao="pedagogica"
+                aria-current={macroPilar === 'pedagogica' ? 'page' : undefined}
+                onClick={() => {
+                  setMacroPilar('pedagogica');
+                  setActiveTab('observacoes');
                 }}
               >
-                Voltar à Visão Admin Real
+                <span aria-hidden="true">▤</span>
+                Gestão Pedagógica
+              </button>
+
+              <button
+                type="button"
+                className={`item-divisao ${macroPilar === 'administrativa' ? 'ativo' : ''}`}
+                data-divisao="administrativa"
+                aria-current={macroPilar === 'administrativa' ? 'page' : undefined}
+                onClick={() => {
+                  setMacroPilar('administrativa');
+                  setActiveTab('panorama');
+                }}
+              >
+                <span aria-hidden="true">▥</span>
+                Gestão Administrativa
               </button>
             </div>
-          )}
-        </div>
+
+            <div className="contexto">
+              {macroPilar === 'pedagogica'
+                ? 'Acompanhamento formativo em 3 níveis · Rubricas · Diário Formativo · PDP'
+                : 'Matriz de turmas · Remanejamentos · Ensalamento · Concluintes · Auditoria'}
+            </div>
+
+          </div>
+        </nav>
       )}
 
-      {/* Menu de Abas adaptado ao Perfil Ativo */}
-      <nav className="tab-navigation">
-        <div className="tabs-container">
+      {/* BARRA DE SIMULAÇÃO DE PERFIL EXCLUSIVA PARA ADMIN */}
+      {userRole === 'admin' && (
+        <section className="barra-admin" id="barraAdmin">
+          <label htmlFor="perfilVisualizacao">
+            🎭 Simular visualização:
+          </label>
+
+          <select
+            id="perfilVisualizacao"
+            value={simulatedRole || ''}
+            onChange={e => {
+              const role = e.target.value;
+              setSimulatedRole(role || null);
+              if (role === 'formador' && formadoresExemplo.length > 0) {
+                setSimulatedEmail(formadoresExemplo[0].email);
+                setActiveTab('panorama');
+              } else if (role === 'tutor' && tutoresExemplo.length > 0) {
+                setSimulatedEmail(tutoresExemplo[0].email);
+                setActiveTab('panorama');
+              } else if (role === 'cursista' && cursistasExemplo.length > 0) {
+                setSimulatedEmail(cursistasExemplo[0].email);
+                setActiveTab('cursista_turma');
+              } else {
+                setSimulatedEmail('');
+                setActiveTab('panorama');
+              }
+            }}
+          >
+            <option value="">Visão Admin Real (Painel Completo)</option>
+            <option value="cursista">Visão Cursista</option>
+            <option value="tutor">Visão Tutoria</option>
+            <option value="formador">Visão Formador</option>
+          </select>
+
+          {/* Seletores de exemplo específico */}
+          {simulatedRole === 'formador' && formadoresExemplo.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.8rem', color: '#855019', fontWeight: 700 }}>Exemplo:</span>
+              <select
+                value={effectiveEmail}
+                onChange={e => setSimulatedEmail(e.target.value)}
+                style={{ padding: '0.4rem 0.6rem', borderRadius: '7px', border: '1px solid #d49a47', fontSize: '0.8rem', color: '#654019' }}
+              >
+                {formadoresExemplo.map(f => (
+                  <option key={f.email} value={f.email}>{f.nome} ({f.email})</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {simulatedRole === 'tutor' && tutoresExemplo.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.8rem', color: '#855019', fontWeight: 700 }}>Exemplo:</span>
+              <select
+                value={effectiveEmail}
+                onChange={e => setSimulatedEmail(e.target.value)}
+                style={{ padding: '0.4rem 0.6rem', borderRadius: '7px', border: '1px solid #d49a47', fontSize: '0.8rem', color: '#654019' }}
+              >
+                {tutoresExemplo.map(t => (
+                  <option key={t.email} value={t.email}>{t.nome} ({t.email})</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {simulatedRole === 'cursista' && cursistasExemplo.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.8rem', color: '#855019', fontWeight: 700 }}>Exemplo ({cursistasExemplo.length} disp.):</span>
+              <select
+                value={effectiveEmail}
+                onChange={e => setSimulatedEmail(e.target.value)}
+                style={{ padding: '0.4rem 0.6rem', borderRadius: '7px', border: '1px solid #d49a47', fontSize: '0.8rem', color: '#654019', maxWidth: '300px' }}
+              >
+                {cursistasExemplo.slice(0, 30).map((c, idx) => (
+                  <option key={c.email} value={c.email}>
+                    {idx + 1}. {c.nome} {c.totalObs > 0 ? `(${c.totalObs} obs • ${c.ano})` : `(${c.turma})`}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {simulatedRole && (
+            <button
+              type="button"
+              onClick={() => { setSimulatedRole(null); setSimulatedEmail(''); setActiveTab('panorama'); }}
+              style={{
+                backgroundColor: '#92400e',
+                color: 'white',
+                border: 'none',
+                padding: '0.4rem 0.85rem',
+                borderRadius: '7px',
+                cursor: 'pointer',
+                fontSize: '0.78rem',
+                fontWeight: 700
+              }}
+            >
+              Voltar à Visão Admin Real
+            </button>
+          )}
+        </section>
+      )}
+
+      {/* SUBMENU DE FERRAMENTAS */}
+      <nav className="submenu" aria-label="Ferramentas de gestão">
+        <div className="submenu-conteudo">
           {effectiveRole === 'cursista' ? (
             <>
               <button 
-                className={`tab-btn ${activeTab === 'cursista_turma' ? 'active' : ''}`}
+                type="button"
+                className={`item-submenu ${activeTab === 'cursista_turma' ? 'ativo' : ''}`}
                 onClick={() => setActiveTab('cursista_turma')}
               >
-                🏫 Minha Turma
+                🏫 &nbsp; Minha Turma
               </button>
               <button 
-                className={`tab-btn ${activeTab === 'cursista_observacoes' ? 'active' : ''}`}
+                type="button"
+                className={`item-submenu ${activeTab === 'cursista_observacoes' ? 'ativo' : ''}`}
                 onClick={() => setActiveTab('cursista_observacoes')}
               >
-                👁️ Meu Acompanhamento & Dossiê
+                👁️ &nbsp; Meu Acompanhamento & Medalhas
               </button>
               <button 
-                className={`tab-btn ${activeTab === 'cursista_solicitacoes' ? 'active' : ''}`}
+                type="button"
+                className={`item-submenu ${activeTab === 'cursista_diario' ? 'ativo' : ''}`}
+                onClick={() => setActiveTab('cursista_diario')}
+              >
+                📖 &nbsp; Meu Diário Formativo
+              </button>
+              <button 
+                type="button"
+                className={`item-submenu ${activeTab === 'cursista_solicitacoes' ? 'ativo' : ''}`}
                 onClick={() => setActiveTab('cursista_solicitacoes')}
               >
-                🔄 Minhas Solicitações
+                🔄 &nbsp; Minhas Solicitações
+              </button>
+              <button 
+                type="button"
+                className={`item-submenu ${activeTab === 'cursista_documentos' ? 'ativo' : ''}`}
+                onClick={() => setActiveTab('cursista_documentos')}
+              >
+                📚 &nbsp; Documentos Formativos
+              </button>
+              <button 
+                type="button"
+                className={`item-submenu ${activeTab === 'cursista_matricula_2027' ? 'ativo' : ''}`}
+                onClick={() => setActiveTab('cursista_matricula_2027')}
+              >
+                📅 &nbsp; Intenção Matrícula 2027
+              </button>
+            </>
+          ) : macroPilar === 'pedagogica' ? (
+            <>
+              {/* FERRAMENTAS DA GESTÃO PEDAGÓGICA */}
+              <button 
+                type="button"
+                className={`item-submenu ${activeTab === 'observacoes' ? 'ativo' : ''}`}
+                onClick={() => setActiveTab('observacoes')}
+              >
+                ◉ &nbsp; Observação do Cursista
+              </button>
+
+              {/* Observações de Tutoria: EXCLUSIVO SUPERADMIN */}
+              {isSuperAdminTutor && (
+                <button 
+                  type="button"
+                  className={`item-submenu ${activeTab === 'tutor_insights' ? 'ativo' : ''}`}
+                  onClick={() => setActiveTab('tutor_insights')}
+                >
+                  ◈ &nbsp; Observação do Tutor
+                </button>
+              )}
+
+              {/* Diário Formativo e Central de Documentos (Ocultados temporariamente para publicação futura) */}
+              {/*
+              <button 
+                type="button"
+                className={`item-submenu ${activeTab === 'diario_formativo' ? 'ativo' : ''}`}
+                onClick={() => setActiveTab('diario_formativo')}
+              >
+                ▤ &nbsp; Diário Formativo
+              </button>
+
+              <button 
+                type="button"
+                className={`item-submenu ${activeTab === 'documentos_pedagogicos' ? 'ativo' : ''}`}
+                onClick={() => setActiveTab('documentos_pedagogicos')}
+              >
+                ▧ &nbsp; Central de Documentos (PDP e Rubricas)
+              </button>
+              */}
+
+              <button 
+                type="button"
+                className={`item-submenu ${activeTab === 'observacoes_overview' ? 'ativo' : ''}`}
+                onClick={() => setActiveTab('observacoes_overview')}
+              >
+                ▥ &nbsp; Overview das Observações
+              </button>
+
+              <button 
+                type="button"
+                className={`item-submenu ${activeTab === 'acompanhamento_cards' ? 'ativo' : ''}`}
+                onClick={() => setActiveTab('acompanhamento_cards')}
+              >
+                ▣ &nbsp; Acompanhamento por Cursista
               </button>
             </>
           ) : (
             <>
+              {/* FERRAMENTAS DA GESTÃO ADMINISTRATIVA */}
               <button 
-                className={`tab-btn ${activeTab === 'panorama' ? 'active' : ''}`}
+                type="button"
+                className={`item-submenu ${activeTab === 'panorama' ? 'ativo' : ''}`}
                 onClick={() => setActiveTab('panorama')}
               >
-                📊 Panorama Geral
-              </button>
-              
-              {effectiveRole !== 'formador' && (
-                <button 
-                  className={`tab-btn ${activeTab === 'formadores' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('formadores')}
-                >
-                  🎓 Contato Formadores
-                </button>
-              )}
-              
-              <button 
-                className={`tab-btn ${activeTab === 'cursistas' ? 'active' : ''}`}
-                onClick={() => setActiveTab('cursistas')}
-              >
-                👥 Contato Cursistas
-              </button>
-              
-              {effectiveRole !== 'formador' && (
-                <button 
-                  className={`tab-btn ${activeTab === 'tutoria' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('tutoria')}
-                >
-                  🤝 Dados Tutoria
-                </button>
-              )}
-
-              <button 
-                className={`tab-btn ${activeTab === 'observacoes_overview' ? 'active' : ''}`}
-                onClick={() => setActiveTab('observacoes_overview')}
-              >
-                📈 Observações - Overview
-              </button>
-
-              {userRole === 'admin' && (
-                <button 
-                  className={`tab-btn ${activeTab === 'acompanhamento_cards' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('acompanhamento_cards')}
-                >
-                  🗂️ Acompanhamento por Cursista
-                </button>
-              )}
-
-              <button 
-                className={`tab-btn ${activeTab === 'observacoes' ? 'active' : ''}`}
-                onClick={() => setActiveTab('observacoes')}
-              >
-                👁️ Observação da Prática
+                📊 &nbsp; Panorama Geral
               </button>
 
               <button 
-                className={`tab-btn ${activeTab === 'turmas' ? 'active' : ''}`}
+                type="button"
+                className={`item-submenu ${activeTab === 'turmas' ? 'ativo' : ''}`}
                 onClick={() => setActiveTab('turmas')}
               >
-                🏫 Lista de Turmas
+                ▦ &nbsp; Gestão de Turmas
               </button>
+
+              <button 
+                type="button"
+                className={`item-submenu ${activeTab === 'remanejamentos' ? 'ativo' : ''}`}
+                onClick={() => setActiveTab('remanejamentos')}
+              >
+                🔄 &nbsp; Remanejamentos & Modalidades
+              </button>
+
+              <button 
+                type="button"
+                className={`item-submenu ${activeTab === 'cursistas' ? 'ativo' : ''}`}
+                onClick={() => setActiveTab('cursistas')}
+              >
+                👥 &nbsp; Contato Cursistas
+              </button>
+              
+              {effectiveRole !== 'formador' && (
+                <button 
+                  type="button"
+                  className={`item-submenu ${activeTab === 'formadores' ? 'ativo' : ''}`}
+                  onClick={() => setActiveTab('formadores')}
+                >
+                  🎓 &nbsp; Contato Formadores
+                </button>
+              )}
+              
+              {effectiveRole !== 'formador' && (
+                <button 
+                  type="button"
+                  className={`item-submenu ${activeTab === 'tutoria' ? 'ativo' : ''}`}
+                  onClick={() => setActiveTab('tutoria')}
+                >
+                  🤝 &nbsp; Dados Tutoria
+                </button>
+              )}
 
               {/* Aba de Concluintes do 1º Chamamento */}
               {(userRole === 'admin' || userRole === 'tecnico' || !simulatedRole) && (
                 <button 
-                  className={`tab-btn ${activeTab === 'concluintes' ? 'active' : ''}`}
+                  type="button"
+                  className={`item-submenu ${activeTab === 'concluintes' ? 'ativo' : ''}`}
                   onClick={() => setActiveTab('concluintes')}
                 >
-                  🎓 Concluintes (1º CH)
+                  🎓 &nbsp; Concluintes (1º CH)
                 </button>
               )}
 
               {/* Aba de Admin: Apenas para Admin Real */}
               {userRole === 'admin' && !simulatedRole && (
                 <button 
-                  className={`tab-btn ${activeTab === 'admin' ? 'active' : ''}`}
+                  type="button"
+                  className={`item-submenu ${activeTab === 'admin' ? 'ativo' : ''}`}
                   onClick={() => setActiveTab('admin')}
-                  style={{ borderLeft: '1px solid var(--color-card-border)', backgroundColor: 'rgba(229, 62, 62, 0.05)' }}
+                  style={{ borderLeft: '1px solid var(--borda)', backgroundColor: 'rgba(229, 62, 62, 0.05)' }}
                 >
-                  🛡️ Painel Admin
+                  🛡️ &nbsp; Painel Admin ("Modo Deus")
                 </button>
               )}
             </>
@@ -1110,12 +1306,32 @@ export default function App() {
         </div>
       </nav>
 
-      {/* Área Principal de Conteúdo */}
-      <main className="main-content">
+      {/* Área Principal de Conteúdo com transição fluida */}
+      <HistoricoTurmasContext.Provider value={historicoTurmasCtx}>
+      <main className="main-content page-transition-enter" key={activeTab}>
         {renderTabContent()}
       </main>
 
+      {/* Modal de Busca Global de Pessoas (Cursista, Formador, Tutor) */}
+      <BuscaGlobalPessoasModal
+        isOpen={showBuscaGlobal}
+        onClose={() => setShowBuscaGlobal(false)}
+        cursistas={enrichedRecords}
+        tutores={tutoresList}
+        onAbrirDossie={(cursista) => setCursistaDossieModal(cursista)}
+      />
+
+      {/* Modal de Dossiê caso acionado pela busca */}
+      {cursistaDossieModal && (
+        <DossieCursistaModal
+          cursista={cursistaDossieModal}
+          observacoes={observacoesList}
+          onClose={() => setCursistaDossieModal(null)}
+        />
+      )}
+
       {/* Rodapé com o Brasão do Paraná */}
+      </HistoricoTurmasContext.Provider>
       <footer style={{ backgroundColor: 'var(--color-primary-dark)', color: 'rgba(255,255,255,0.7)', padding: '1.5rem', textAlign: 'center', fontSize: '0.8rem', marginTop: 'auto', borderTop: '4px solid var(--color-accent-green)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
         <img src="/brasao_parana.svg" alt="Brasão do Paraná" style={{ height: '36px', width: 'auto', opacity: 0.9 }} />
         <p>© 2026 Estágio Probatório - Secretaria da Educação do Estado do Paraná (SEED-PR)</p>
