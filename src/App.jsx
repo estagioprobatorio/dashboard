@@ -1016,8 +1016,8 @@ export default function App() {
         </nav>
       )}
 
-      {/* BARRA DE SIMULAÇÃO DE PERFIL EXCLUSIVA PARA ADMIN */}
-      {userRole === 'admin' && (
+      {/* BARRA DE SIMULAÇÃO DE PERFIL (Desativada na versão oficial do Git) */}
+      {false && userRole === 'admin' && (
         <section className="barra-admin" id="barraAdmin">
           <label htmlFor="perfilVisualizacao">
             🎭 Simular visualização:
