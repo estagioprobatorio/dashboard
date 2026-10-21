@@ -407,7 +407,7 @@ export default function Login({ onLoginSuccess }) {
           {/* Informações Institucionais no Rodapé */}
           <div style={{ marginTop: '2.5rem', paddingTop: '1.25rem', borderTop: '1px solid #f1f5f9', textAlign: 'center' }}>
             <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-              Secretaria de Estado da Educação do Paraná · DDI/EPAP
+              Secretaria de Estado da Educação do Paraná · DAP/CFDEG
             </span>
           </div>
 
