@@ -6,12 +6,6 @@ import { signInWithPopup } from 'firebase/auth';
 export default function Login({ onLoginSuccess }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  
-  // Para modo simulado (local offline / dev)
-  const [simulatedEmail, setSimulatedEmail] = useState('jorge.dotti@escola.pr.gov.br');
-  const [customEmail, setCustomEmail] = useState('');
-  const [useCustom, setUseCustom] = useState(false);
-  const [showSimulador, setShowSimulador] = useState(false);
 
   // Executar Login Real com a Conta Institucional Google
   const handleGoogleLogin = async () => {
@@ -47,9 +41,7 @@ export default function Login({ onLoginSuccess }) {
           throw new Error("Não foi possível obter o e-mail institucional do Google.");
         }
       } else {
-        // Se ambos não estiverem configurados na nuvem (ambiente local puro), orienta o uso do modo simulado
-        setShowSimulador(true);
-        setError("Ambiente local sem chaves ativas do OAuth. Selecione um perfil simulado abaixo para entrar instantaneamente.");
+        throw new Error("Provedor de Autenticação não configurado.");
       }
     } catch (err) {
       console.error("Erro no login:", err);
@@ -63,25 +55,6 @@ export default function Login({ onLoginSuccess }) {
     } finally {
       setLoading(false);
     }
-  };
-
-  // Executar Login Simulado (Local Dev)
-  const handleSimulatedLogin = (e) => {
-    e.preventDefault();
-    const emailToUse = useCustom ? customEmail : simulatedEmail;
-    
-    if (!emailToUse || !emailToUse.includes('@')) {
-      setError('Por favor, digite um e-mail funcional válido.');
-      return;
-    }
-
-    onLoginSuccess({
-      email: emailToUse.trim().toLowerCase(),
-      displayName: 'Simulado (' + emailToUse.split('@')[0] + ')',
-      photoURL: '',
-      uid: 'simulated-uid-123',
-      isSimulated: true
-    });
   };
 
   return (
@@ -215,7 +188,7 @@ export default function Login({ onLoginSuccess }) {
         overflow: 'hidden',
         display: 'flex',
         flexWrap: 'wrap',
-        minHeight: '520px',
+        minHeight: '500px',
         position: 'relative',
         zIndex: 10
       }}>
@@ -322,17 +295,17 @@ export default function Login({ onLoginSuccess }) {
         <div style={{
           flex: '1 1 420px',
           backgroundColor: '#ffffff',
-          padding: '2.75rem 2.5rem',
+          padding: '3rem 2.5rem',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
           boxSizing: 'border-box'
         }}>
           
-          <div style={{ marginBottom: '1.75rem' }}>
+          <div style={{ marginBottom: '2rem' }}>
             <h2 style={{
-              margin: '0 0 0.4rem 0',
-              fontSize: '1.5rem',
+              margin: '0 0 0.5rem 0',
+              fontSize: '1.6rem',
               fontWeight: 800,
               color: '#001d3d',
               letterSpacing: '-0.02em'
@@ -341,9 +314,9 @@ export default function Login({ onLoginSuccess }) {
             </h2>
             <p style={{
               margin: 0,
-              fontSize: '0.85rem',
+              fontSize: '0.88rem',
               color: '#64748b',
-              lineHeight: 1.45
+              lineHeight: 1.5
             }}>
               Utilize sua conta institucional educacional para entrar no sistema com segurança.
             </p>
@@ -355,9 +328,9 @@ export default function Login({ onLoginSuccess }) {
               backgroundColor: '#fef2f2',
               border: '1px solid #fecaca',
               borderRadius: '8px',
-              padding: '0.75rem 0.9rem',
-              marginBottom: '1.25rem',
-              fontSize: '0.8rem',
+              padding: '0.85rem 1rem',
+              marginBottom: '1.5rem',
+              fontSize: '0.82rem',
               color: '#b91c1c',
               display: 'flex',
               alignItems: 'flex-start',
@@ -368,8 +341,8 @@ export default function Login({ onLoginSuccess }) {
             </div>
           )}
 
-          {/* ── BOTÃO PRINCIPAL SOLICITADO PELO USUÁRIO ──────────────── */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+          {/* ── BOTÃO PRINCIPAL: LOGIN INSTITUCIONAL ───────────────── */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <button
               onClick={handleGoogleLogin}
               disabled={loading}
@@ -380,32 +353,32 @@ export default function Login({ onLoginSuccess }) {
                 color: '#ffffff',
                 border: 'none',
                 borderRadius: '10px',
-                padding: '0.95rem 1.25rem',
-                fontSize: '0.95rem',
+                padding: '1rem 1.4rem',
+                fontSize: '0.98rem',
                 fontWeight: 700,
                 cursor: loading ? 'wait' : 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: '0.75rem',
-                boxShadow: '0 6px 18px rgba(0, 45, 92, 0.28)',
+                gap: '0.85rem',
+                boxShadow: '0 8px 20px rgba(0, 45, 92, 0.3)',
                 transition: 'all 0.2s ease-in-out'
               }}
               onMouseEnter={(e) => {
                 if (!loading) {
                   e.currentTarget.style.transform = 'translateY(-2px)';
-                  e.currentTarget.style.boxShadow = '0 8px 22px rgba(0, 45, 92, 0.38)';
+                  e.currentTarget.style.boxShadow = '0 10px 24px rgba(0, 45, 92, 0.4)';
                 }
               }}
               onMouseLeave={(e) => {
                 if (!loading) {
                   e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 6px 18px rgba(0, 45, 92, 0.28)';
+                  e.currentTarget.style.boxShadow = '0 8px 20px rgba(0, 45, 92, 0.3)';
                 }
               }}
             >
               {/* Ícone oficial do Google */}
-              <svg width="20" height="20" viewBox="0 0 24 24">
+              <svg width="22" height="22" viewBox="0 0 24 24">
                 <path
                   fill="#4285F4"
                   d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"
@@ -426,117 +399,16 @@ export default function Login({ onLoginSuccess }) {
               <span>{loading ? 'Conectando...' : 'Faça Login com sua Conta Institucional'}</span>
             </button>
             
-            <div style={{ textAlign: 'center', fontSize: '0.74rem', color: '#64748b', marginTop: '0.2rem' }}>
+            <div style={{ textAlign: 'center', fontSize: '0.78rem', color: '#64748b', marginTop: '0.4rem', lineHeight: 1.4 }}>
               Acesso exclusivo para contas autorizadas com domínio <strong>@escola.pr.gov.br</strong>
             </div>
           </div>
 
-          {/* ── AMBIENTE DE SIMULAÇÃO LOCAL / DEV ───────────────────────── */}
-          <div style={{ marginTop: '1.75rem', paddingTop: '1.25rem', borderTop: '1px solid #e2e8f0' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.65rem' }}>
-              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-                Ambiente de Testes / Simulação Local
-              </span>
-              <button
-                type="button"
-                onClick={() => setShowSimulador(v => !v)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#0072bc',
-                  fontSize: '0.75rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  padding: 0
-                }}
-              >
-                {showSimulador ? 'Ocultar ▲' : 'Configurar Perfil ▼'}
-              </button>
-            </div>
-
-            {/* Formulário de Simulação */}
-            <form onSubmit={handleSimulatedLogin} style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-              <div>
-                <select
-                  value={simulatedEmail}
-                  onChange={e => { setSimulatedEmail(e.target.value); setError(''); }}
-                  disabled={useCustom}
-                  style={{
-                    width: '100%',
-                    padding: '0.55rem 0.75rem',
-                    borderRadius: '8px',
-                    border: '1px solid #cbd5e1',
-                    fontSize: '0.8rem',
-                    backgroundColor: useCustom ? '#f1f5f9' : '#ffffff',
-                    color: '#1e293b',
-                    outline: 'none',
-                    fontWeight: 600
-                  }}
-                >
-                  <option value="jorge.dotti@escola.pr.gov.br">Superadmin: Jorge Dotti (Observação do Tutor & Gestão Total)</option>
-                  <option value="diretoria@escola.pr.gov.br">Admin Geral (Acesso Total / Edição / Remanejamento)</option>
-                  <option value="liziani_scariot@escola.pr.gov.br">Técnico Pedagógico (Todas Turmas e Histórico)</option>
-                  <option value="dulce.carpes@escola.pr.gov.br">Tutor: Dulce Carpes</option>
-                  <option value="osmar.bugalski@escola.pr.gov.br">Formador: Osmar Bugalski</option>
-                </select>
-              </div>
-
-              {showSimulador && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.2rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                    <input
-                      type="checkbox"
-                      id="chk_custom"
-                      checked={useCustom}
-                      onChange={e => setUseCustom(e.target.checked)}
-                      style={{ cursor: 'pointer' }}
-                    />
-                    <label htmlFor="chk_custom" style={{ fontSize: '0.78rem', color: '#475569', cursor: 'pointer' }}>
-                      Informar outro e-mail institucional funcional:
-                    </label>
-                  </div>
-
-                  {useCustom && (
-                    <input
-                      type="email"
-                      placeholder="exemplo@escola.pr.gov.br"
-                      value={customEmail}
-                      onChange={e => setCustomEmail(e.target.value)}
-                      style={{
-                        width: '100%',
-                        padding: '0.5rem 0.75rem',
-                        borderRadius: '6px',
-                        border: '1px solid #cbd5e1',
-                        fontSize: '0.8rem',
-                        boxSizing: 'border-box'
-                      }}
-                    />
-                  )}
-                </div>
-              )}
-
-              <button
-                type="submit"
-                style={{
-                  backgroundColor: '#00984a',
-                  color: '#ffffff',
-                  border: 'none',
-                  borderRadius: '8px',
-                  padding: '0.6rem 1rem',
-                  fontSize: '0.82rem',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '0.4rem',
-                  boxShadow: '0 3px 8px rgba(0, 152, 74, 0.25)',
-                  marginTop: '0.2rem'
-                }}
-              >
-                <span>🚀</span> Acessar Ambiente Simulado
-              </button>
-            </form>
+          {/* Informações Institucionais no Rodapé */}
+          <div style={{ marginTop: '2.5rem', paddingTop: '1.25rem', borderTop: '1px solid #f1f5f9', textAlign: 'center' }}>
+            <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+              Secretaria de Estado da Educação do Paraná · DDI/EPAP
+            </span>
           </div>
 
         </div>
