@@ -15,896 +15,2312 @@ import {
   Radar,
   PolarGrid,
   PolarAngleAxis,
-  PolarRadiusAxis
+  PolarRadiusAxis,
 } from 'recharts';
-import { 
-  MOCK_TUTOR_OBSERVATIONS, 
-  getTutorObservacoesLocais, 
+import {
+  MOCK_TUTOR_OBSERVATIONS,
+  getTutorObservacoesLocais,
   salvarNovaObservacaoTutoria,
-  CRITERIOS_POR_MODALIDADE 
+  CRITERIOS_POR_MODALIDADE,
+  MODALIDADES_TUTORIA
 } from '../data/tutorInsightsData';
 
+// Paleta Oficial Institucional
 const BRAND = {
-  green: "#007a33",
-  greenDark: "#004d20",
-  blue: "#002b7f",
-  blueDark: "#001f5c",
+  primaryDark: "#001d3d",
+  primary: "#002d5c",
+  blueHighlight: "#0072bc",
+  green: "#00984a",
   amber: "#f59e0b",
-  red: "#c62828",
+  red: "#ef4444",
+  slate50: "#f8fafc",
+  slate100: "#f1f5f9",
+  slate200: "#e2e8f0",
+  slate600: "#475569",
+  slate800: "#1e293b",
 };
 
 const STATUS_COLORS = {
-  superou: "#002b7f",
-  atendeu: BRAND.green,
-  parcial: BRAND.amber,
-  nao: BRAND.red,
+  superou: "#0072bc",
+  atendeu: "#00984a",
+  parcial: "#f59e0b",
+  nao: "#ef4444",
 };
 
-export default function TutorInsightsDashboard({
-  userRole,
-  userEmail,
-  tutores = []
-}) {
+// Funções utilitárias de classificação e pontuação
+function stripAccents(s) {
+  return (s || '').normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+
+function normalizeStr(s) {
+  return stripAccents((s || "").normalize("NFC").toLowerCase().trim());
+}
+
+function classifyValue(v) {
+  if (!v) return null;
+  const plain = stripAccents(v.normalize("NFC").toUpperCase());
+  if (plain.includes("SUPEROU")) return "superou";
+  if (plain.includes("NAO OBSERVADO")) return null;
+  if (plain.includes("PARCIALMENTE")) return "parcial";
+  if (plain.includes("NAO ATENDEU")) return "nao";
+  if (plain.includes("INTEGRALMENTE") || plain.includes("ATENDEU")) return "atendeu";
+  return null;
+}
+
+function formatRadarLabel(criterio) {
+  const norm = stripAccents((criterio || '').toLowerCase());
+  if (norm.includes("repertorio") || norm.includes("sugestao")) return "Repertório";
+  if (norm.includes("planejamento")) return "Planejamento";
+  if (norm.includes("etapas")) return "Etapas da Ação";
+  if (norm.includes("materiais")) return "Materiais Didáticos";
+  if (norm.includes("questionamentos")) return "Questionamentos";
+  if (norm.includes("evidencias")) return "Evidências";
+  if (norm.includes("acolhimento")) return "Acolhimento";
+  if (norm.includes("mediacao") || norm.includes("conflitos")) return "Mediação Conflitos";
+  if (norm.includes("combinados")) return "Combinados";
+  if (norm.includes("tempo")) return "Gestão do Tempo";
+  if (norm.includes("roteiro")) return "Fidelidade Roteiro";
+  if (norm.includes("pdp") || norm.includes("rubrica")) return "PDP e Rubricas";
+  if (norm.includes("transposicao") || norm.includes("didatica")) return "Transposição";
+  if (norm.includes("interacao")) return "Interação";
+  if (norm.includes("comunicacao") || norm.includes("clima")) return "Clima e Diálogo";
+  if (norm.includes("digital")) return "Comp. Digital";
+  return criterio && criterio.length > 16 ? criterio.substring(0, 14) + "…" : criterio;
+}
+
+export default function TutorInsightsDashboard({ userRole, userEmail, tutores = [] }) {
   const [observacoes, setObservacoes] = useState(() => getTutorObservacoesLocais());
+  const [activeTab, setActiveTab] = useState('modalidade'); // 'modalidade' | 'tutor' | 'formador' | 'checklist' | 'coordenacao'
   const [selectedObs, setSelectedObs] = useState(null);
   const [modalNovaObs, setModalNovaObs] = useState(false);
 
-  // Filtros
+  // Sub-abas de modalidade
+  const [subModalidade, setSubModalidade] = useState("Diálogo Formativo");
+
+  // Filtros Globais
   const [filtroAcao, setFiltroAcao] = useState('todas');
   const [filtroModalidade, setFiltroModalidade] = useState('todas');
+  const [filtroTema, setFiltroTema] = useState('todos');
   const [filtroNre, setFiltroNre] = useState('todos');
-  const [filtroPessoa, setFiltroPessoa] = useState('todas');
+  const [filtroTutor, setFiltroTutor] = useState('todos');
+  const [filtroFormador, setFiltroFormador] = useState('todos');
   const [busca, setBusca] = useState('');
+  const [ordemData, setOrdemData] = useState('recentes'); // 'recentes' | 'antigos'
 
-  // Formulário de Nova Observação de Tutoria
-  const [formNova, setFormNova] = useState({
-    acaoAcompanhamento: 'Observação do Formador pelo Tutor',
-    acaoObservada: 'Diálogo Formativo',
-    dataObservacao: new Date().toISOString().split('T')[0],
-    tutorEmail: userRole === 'tutor' ? userEmail : '',
-    tutor: '',
-    formadorEmail: '',
-    formador: '',
-    nre: '',
-    tema: 'Planejamento e Prática',
-    linkAcaoObservada: '',
-    linkFeedback: '',
-    checklistRealizadas: '',
-    checklistNaoRealizadas: '',
-    destaques: '',
-    desenvolver: '',
-    encaminhamentos: '',
-    notas: {}
-  });
-
-  // Lista única de NREs presentes nos dados
-  const nreList = useMemo(() => {
-    const set = new Set();
-    observacoes.forEach(o => { if (o.nre) set.add(o.nre); });
-    return Array.from(set).sort();
+  // Listas únicas para dropdowns de filtros
+  const temasDisponiveis = useMemo(() => {
+    return Array.from(new Set(observacoes.map(o => o.tema).filter(Boolean))).sort();
   }, [observacoes]);
 
-  // Observações filtradas
-  const filteredObs = useMemo(() => {
-    return observacoes.filter(obs => {
-      // Regra de Permissão Hierárquica:
-      if (userRole === 'tutor') {
-        const cleanEmail = (userEmail || '').trim().toLowerCase();
-        const tutorEmail = (obs.tutorEmail || '').trim().toLowerCase();
-        // Tutor vê observações onde ele é o tutor ou formador observado
-        if (tutorEmail !== cleanEmail && (obs.formadorEmail || '').trim().toLowerCase() !== cleanEmail) {
-          // Permite se o tutor logado tiver mesmo NRE
-          const meuTutor = tutores.find(t => (t.email_educ || '').trim().toLowerCase() === cleanEmail);
-          if (!meuTutor || !meuTutor.nre_tutor || meuTutor.nre_tutor !== obs.nre) {
-            return false;
-          }
-        }
-      } else if (userRole === 'formador') {
-        const cleanEmail = (userEmail || '').trim().toLowerCase();
-        if ((obs.formadorEmail || '').trim().toLowerCase() !== cleanEmail) {
-          return false;
-        }
-      }
+  const nresDisponiveis = useMemo(() => {
+    return Array.from(new Set(observacoes.map(o => o.nre).filter(Boolean))).sort();
+  }, [observacoes]);
 
-      if (filtroAcao !== 'todas' && obs.acaoAcompanhamento !== filtroAcao) return false;
-      if (filtroModalidade !== 'todas' && (obs.modalidade || obs.acaoObservada) !== filtroModalidade) return false;
-      if (filtroNre !== 'todos' && obs.nre !== filtroNre) return false;
+  const tutoresDisponiveis = useMemo(() => {
+    return Array.from(new Set(observacoes.map(o => o.tutor).filter(Boolean))).sort();
+  }, [observacoes]);
 
-      if (busca) {
-        const q = busca.toLowerCase();
-        const m1 = (obs.tutor || '').toLowerCase().includes(q);
-        const m2 = (obs.formador || '').toLowerCase().includes(q);
-        const m3 = (obs.destaques || '').toLowerCase().includes(q);
-        const m4 = (obs.desenvolver || '').toLowerCase().includes(q);
-        if (!m1 && !m2 && !m3 && !m4) return false;
-      }
+  const formadoresDisponiveis = useMemo(() => {
+    return Array.from(new Set(observacoes.map(o => o.formador).filter(Boolean))).sort();
+  }, [observacoes]);
 
-      return true;
-    });
-  }, [observacoes, userRole, userEmail, tutores, filtroAcao, filtroModalidade, filtroNre, busca]);
+  // Aplicar Filtros Globais
+  const filteredRows = useMemo(() => {
+    let rows = [...observacoes];
 
-  // Cálculos de KPIs
-  const kpis = useMemo(() => {
-    const total = filteredObs.length;
-    if (total === 0) return { total: 0, avg: 0, superouPct: 0, atendeuPct: 0, sobAtencao: 0 };
-
-    let sum = 0;
-    let countScores = 0;
-    let superouCount = 0;
-    let atendeuCount = 0;
-    let sobAtencaoCount = 0;
-
-    filteredObs.forEach(obs => {
-      if (typeof obs.avgScore === 'number') {
-        sum += obs.avgScore;
-        countScores++;
-        if (obs.avgScore >= 2.5) superouCount++;
-        else if (obs.avgScore >= 1.8) atendeuCount++;
-        else sobAtencaoCount++;
-      }
-    });
-
-    const avg = countScores > 0 ? (sum / countScores).toFixed(2) : 0;
-    const superouPct = total > 0 ? Math.round((superouCount / total) * 100) : 0;
-    const atendeuPct = total > 0 ? Math.round((atendeuCount / total) * 100) : 0;
-
-    return { total, avg, superouPct, atendeuPct, sobAtencao: sobAtencaoCount };
-  }, [filteredObs]);
-
-  // Dados para o Radar Chart de Competências
-  const radarData = useMemo(() => {
-    const compMap = new Map();
-
-    filteredObs.forEach(obs => {
-      if (Array.isArray(obs.rubrics)) {
-        obs.rubrics.forEach(r => {
-          if (r.criterio && typeof r.score === 'number') {
-            const key = r.criterio.length > 20 ? r.criterio.slice(0, 18) + '...' : r.criterio;
-            if (!compMap.has(key)) compMap.set(key, { total: 0, count: 0 });
-            const item = compMap.get(key);
-            item.total += r.score;
-            item.count += 1;
-          }
-        });
-      }
-    });
-
-    return Array.from(compMap.entries()).map(([criterio, val]) => ({
-      criterio,
-      media: Number((val.total / val.count).toFixed(2)),
-      fullMark: 3
-    })).slice(0, 8); // Top 8 critérios
-  }, [filteredObs]);
-
-  // Dados para o Gráfico de Barras por Modalidade
-  const modalidadeBarData = useMemo(() => {
-    const map = {
-      'Diálogo Formativo': { count: 0, sum: 0 },
-      'Devolutiva': { count: 0, sum: 0 },
-      'Encontro Formativo': { count: 0, sum: 0 }
-    };
-
-    filteredObs.forEach(obs => {
-      const mod = obs.modalidade || obs.acaoObservada || 'Diálogo Formativo';
-      if (map[mod]) {
-        map[mod].count += 1;
-        if (typeof obs.avgScore === 'number') map[mod].sum += obs.avgScore;
-      }
-    });
-
-    return Object.entries(map).map(([modalidade, val]) => ({
-      modalidade,
-      total: val.count,
-      media: val.count > 0 ? Number((val.sum / val.count).toFixed(2)) : 0
-    }));
-  }, [filteredObs]);
-
-  // Dados para o Gráfico de Pizza (Distribuição de Menções)
-  const pieData = useMemo(() => {
-    let superou = 0;
-    let atendeu = 0;
-    let parcial = 0;
-    let nao = 0;
-
-    filteredObs.forEach(obs => {
-      if (Array.isArray(obs.rubrics)) {
-        obs.rubrics.forEach(r => {
-          const v = String(r.value || '').toUpperCase();
-          if (v.includes('SUPEROU')) superou++;
-          else if (v.includes('PARCIAL')) parcial++;
-          else if (v.includes('NAO ATENDEU')) nao++;
-          else if (v.includes('INTEGRALMENTE') || v.includes('ATENDEU')) atendeu++;
-        });
-      }
-    });
-
-    return [
-      { name: 'Superou (3.0)', value: superou, color: STATUS_COLORS.superou },
-      { name: 'Atendeu (2.0)', value: atendeu, color: STATUS_COLORS.atendeu },
-      { name: 'Parcial (1.0)', value: parcial, color: STATUS_COLORS.parcial },
-      { name: 'Não Atendeu (0.0)', value: nao, color: STATUS_COLORS.nao }
-    ].filter(d => d.value > 0);
-  }, [filteredObs]);
-
-  // Envio de nova observação
-  const handleSalvarNova = (e) => {
-    e.preventDefault();
-    if (!formNova.tutor || !formNova.formador) {
-      alert('Preencha os nomes do tutor e do formador/técnico.');
-      return;
+    if (filtroAcao !== 'todas') {
+      rows = rows.filter(r => r.acaoAcompanhamento === filtroAcao);
+    }
+    if (filtroModalidade !== 'todas') {
+      rows = rows.filter(r => r.modalidade === filtroModalidade);
+    }
+    if (filtroTema !== 'todos') {
+      rows = rows.filter(r => r.tema === filtroTema);
+    }
+    if (filtroNre !== 'todos') {
+      rows = rows.filter(r => r.nre === filtroNre);
+    }
+    if (filtroTutor !== 'todos') {
+      rows = rows.filter(r => r.tutor === filtroTutor);
+    }
+    if (filtroFormador !== 'todos') {
+      rows = rows.filter(r => r.formador === filtroFormador);
     }
 
-    const criterios = CRITERIOS_POR_MODALIDADE[formNova.acaoObservada] || [];
-    const rubrics = criterios.map(crit => {
-      const notaStr = formNova.notas[crit] || 'Atendeu integralmente';
-      let score = 2;
-      if (notaStr.includes('Superou')) score = 3;
-      else if (notaStr.includes('parcialmente')) score = 1;
-      else if (notaStr.includes('Não atendeu')) score = 0;
-      return { criterio: crit, value: notaStr, score };
+    if (busca.trim()) {
+      const q = normalizeStr(busca);
+      rows = rows.filter(r => {
+        return (
+          normalizeStr(r.tutor).includes(q) ||
+          normalizeStr(r.formador).includes(q) ||
+          normalizeStr(r.tutorEmail).includes(q) ||
+          normalizeStr(r.modalidade).includes(q) ||
+          normalizeStr(r.nre).includes(q) ||
+          normalizeStr(r.tema).includes(q) ||
+          normalizeStr(r.destaques).includes(q) ||
+          normalizeStr(r.desenvolver).includes(q) ||
+          normalizeStr(r.encaminhamentos).includes(q)
+        );
+      });
+    }
+
+    // Ordenação
+    rows.sort((a, b) => {
+      const da = new Date(a.timestamp || a.dataObservacao || 0);
+      const db = new Date(b.timestamp || b.dataObservacao || 0);
+      return ordemData === 'recentes' ? db - da : da - db;
     });
 
-    const sum = rubrics.reduce((acc, r) => acc + (r.score || 0), 0);
-    const avgScore = rubrics.length > 0 ? Number((sum / rubrics.length).toFixed(2)) : 2.0;
+    return rows;
+  }, [observacoes, filtroAcao, filtroModalidade, filtroTema, filtroNre, filtroTutor, filtroFormador, busca, ordemData]);
 
-    const nova = {
-      ...formNova,
-      modalidade: formNova.acaoObservada,
-      rubrics,
-      avgScore
+  // KPIs Globais
+  const kpis = useMemo(() => {
+    const total = filteredRows.length;
+    const tutoresUnicos = new Set(filteredRows.map(r => r.tutor).filter(Boolean)).size;
+    const formadoresUnicos = new Set(filteredRows.map(r => r.formador).filter(Boolean)).size;
+
+    let somaNotas = 0;
+    let totalComNota = 0;
+    const contagemMod = {};
+
+    filteredRows.forEach(r => {
+      if (typeof r.avgScore === 'number' && !isNaN(r.avgScore)) {
+        somaNotas += r.avgScore;
+        totalComNota++;
+      }
+      if (r.modalidade) {
+        contagemMod[r.modalidade] = (contagemMod[r.modalidade] || 0) + 1;
+      }
+    });
+
+    const mediaGeral = totalComNota > 0 ? (somaNotas / totalComNota).toFixed(2) : '0.00';
+
+    let formatoMaisFrequente = '—';
+    let maxModCount = 0;
+    Object.entries(contagemMod).forEach(([mod, cnt]) => {
+      if (cnt > maxModCount) {
+        maxModCount = cnt;
+        formatoMaisFrequente = `${mod} (${cnt})`;
+      }
+    });
+
+    return {
+      total,
+      tutoresUnicos,
+      formadoresUnicos,
+      mediaGeral,
+      formatoMaisFrequente
     };
+  }, [filteredRows]);
 
-    const salva = salvarNovaObservacaoTutoria(nova);
-    setObservacoes(prev => [salva, ...prev]);
-    setModalNovaObs(false);
-    alert('Nova Observação de Tutoria registrada com sucesso!');
+  const limparFiltros = () => {
+    setFiltroAcao('todas');
+    setFiltroModalidade('todas');
+    setFiltroTema('todos');
+    setFiltroNre('todos');
+    setFiltroTutor('todos');
+    setFiltroFormador('todos');
+    setBusca('');
   };
 
   return (
-    <div style={{ padding: '1.5rem', maxWidth: '1400px', margin: '0 auto' }}>
+    <div className="glass-panel animate-fade-in" style={{ padding: '1.5rem', width: '100%', boxSizing: 'border-box', fontFamily: 'inherit', color: BRAND.slate800 }}>
       
-      {/* Header do Módulo Tutor Insights */}
+      {/* ── Header Institucional ─────────────────────────────────── */}
       <div style={{
-        background: 'linear-gradient(135deg, #002b7f 0%, #004d20 100%)',
+        background: `linear-gradient(135deg, ${BRAND.primaryDark} 0%, ${BRAND.primary} 60%, ${BRAND.blueHighlight} 100%)`,
+        borderRadius: '16px',
+        padding: '1.75rem 2rem',
         color: 'white',
-        padding: '1.75rem',
-        borderRadius: '12px',
-        boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
         marginBottom: '1.5rem',
+        boxShadow: '0 8px 24px rgba(0, 29, 61, 0.2)',
         display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
         flexWrap: 'wrap',
+        alignItems: 'center',
+        justifyContent: 'space-between',
         gap: '1rem'
       }}>
-        <div>
-          <span style={{
-            fontSize: '0.75rem',
-            textTransform: 'uppercase',
-            letterSpacing: '0.1em',
-            background: 'rgba(255,255,255,0.2)',
-            padding: '0.2rem 0.6rem',
-            borderRadius: '4px',
-            fontWeight: 700
-          }}>
-            Módulo Integrado • Tutor Insights SEED-PR
-          </span>
-          <h2 style={{ margin: '0.5rem 0 0.25rem 0', fontSize: '1.6rem', fontWeight: 800 }}>
-            🤝 Acompanhamento de Tutoria & Formadores
-          </h2>
-          <p style={{ margin: 0, opacity: 0.9, fontSize: '0.9rem' }}>
-            Monitoramento das observações formativas de <b>Técnicos sobre Tutores</b> e <b>Tutores sobre Formadores</b>.
+        <div style={{ flex: '1 1 300px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.4rem' }}>
+            <span style={{ fontSize: '1.6rem' }}>◈</span>
+            <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, letterSpacing: '-0.02em' }}>
+              Observação do Tutor · Acompanhamento Pedagógico
+            </h1>
+            <span style={{
+              background: 'rgba(255,255,255,0.18)',
+              padding: '0.2rem 0.6rem',
+              borderRadius: '999px',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              letterSpacing: '0.04em',
+              textTransform: 'uppercase'
+            }}>
+              Superadmin
+            </span>
+          </div>
+          <p style={{ margin: 0, fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.85)', lineHeight: 1.4 }}>
+            Monitoramento analítico de sessões formativas: Técnicos da Coordenação acompanhando Tutores e Tutores acompanhando Formadores.
           </p>
         </div>
 
-        {(userRole === 'admin' || userRole === 'tecnico' || userRole === 'tutor') && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
           <button
             onClick={() => setModalNovaObs(true)}
             style={{
-              backgroundColor: '#007a33',
+              backgroundColor: BRAND.green,
               color: 'white',
               border: 'none',
-              padding: '0.75rem 1.4rem',
               borderRadius: '8px',
-              fontWeight: 800,
-              fontSize: '0.9rem',
+              padding: '0.65rem 1.2rem',
+              fontSize: '0.85rem',
+              fontWeight: 700,
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               gap: '0.5rem',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
+              boxShadow: '0 4px 12px rgba(0, 152, 74, 0.35)',
+              transition: 'all 0.2s'
             }}
           >
-            ➕ Inserir Observação de Tutoria
+            <span>+</span> Nova Observação de Tutoria
           </button>
+        </div>
+      </div>
+
+      {/* ── Barra de Filtros Globais Responsiva ───────────────────── */}
+      <div style={{
+        backgroundColor: 'white',
+        borderRadius: '12px',
+        padding: '1.25rem',
+        border: `1px solid ${BRAND.slate200}`,
+        boxShadow: '0 2px 8px rgba(0,0,0,0.03)',
+        marginBottom: '1.5rem',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '0.85rem'
+      }}>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
+          gap: '0.75rem',
+          alignItems: 'end'
+        }}>
+          {/* Nível de Ação */}
+          <div>
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: BRAND.slate600, marginBottom: '0.3rem' }}>
+              AÇÃO / NÍVEL
+            </label>
+            <select
+              value={filtroAcao}
+              onChange={e => setFiltroAcao(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '0.5rem 0.65rem',
+                borderRadius: '6px',
+                border: `1px solid ${BRAND.slate200}`,
+                fontSize: '0.82rem',
+                backgroundColor: BRAND.slate50
+              }}
+            >
+              <option value="todas">Todas as Ações</option>
+              <option value="Observação de Tutor pelo Técnico">Técnico avalia Tutor</option>
+              <option value="Observação do Formador pelo Tutor">Tutor avalia Formador</option>
+            </select>
+          </div>
+
+          {/* Formato / Modalidade */}
+          <div>
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: BRAND.slate600, marginBottom: '0.3rem' }}>
+              FORMATO / SESSÃO
+            </label>
+            <select
+              value={filtroModalidade}
+              onChange={e => setFiltroModalidade(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '0.5rem 0.65rem',
+                borderRadius: '6px',
+                border: `1px solid ${BRAND.slate200}`,
+                fontSize: '0.82rem',
+                backgroundColor: BRAND.slate50
+              }}
+            >
+              <option value="todas">Todos os Formatos</option>
+              {MODALIDADES_TUTORIA.map(m => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Temática */}
+          <div>
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: BRAND.slate600, marginBottom: '0.3rem' }}>
+              TEMÁTICA PEDAGÓGICA
+            </label>
+            <select
+              value={filtroTema}
+              onChange={e => setFiltroTema(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '0.5rem 0.65rem',
+                borderRadius: '6px',
+                border: `1px solid ${BRAND.slate200}`,
+                fontSize: '0.82rem',
+                backgroundColor: BRAND.slate50
+              }}
+            >
+              <option value="todos">Todos os Temas</option>
+              {temasDisponiveis.map(t => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* NRE */}
+          <div>
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: BRAND.slate600, marginBottom: '0.3rem' }}>
+              NÚCLEO REGIONAL (NRE)
+            </label>
+            <select
+              value={filtroNre}
+              onChange={e => setFiltroNre(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '0.5rem 0.65rem',
+                borderRadius: '6px',
+                border: `1px solid ${BRAND.slate200}`,
+                fontSize: '0.82rem',
+                backgroundColor: BRAND.slate50
+              }}
+            >
+              <option value="todos">Todos os NREs</option>
+              {nresDisponiveis.map(n => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Tutor */}
+          <div>
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: BRAND.slate600, marginBottom: '0.3rem' }}>
+              TUTOR
+            </label>
+            <select
+              value={filtroTutor}
+              onChange={e => setFiltroTutor(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '0.5rem 0.65rem',
+                borderRadius: '6px',
+                border: `1px solid ${BRAND.slate200}`,
+                fontSize: '0.82rem',
+                backgroundColor: BRAND.slate50
+              }}
+            >
+              <option value="todos">Todos os Tutores ({tutoresDisponiveis.length})</option>
+              {tutoresDisponiveis.map(t => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Formador */}
+          <div>
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: BRAND.slate600, marginBottom: '0.3rem' }}>
+              FORMADOR
+            </label>
+            <select
+              value={filtroFormador}
+              onChange={e => setFiltroFormador(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '0.5rem 0.65rem',
+                borderRadius: '6px',
+                border: `1px solid ${BRAND.slate200}`,
+                fontSize: '0.82rem',
+                backgroundColor: BRAND.slate50
+              }}
+            >
+              <option value="todos">Todos os Formadores ({formadoresDisponiveis.length})</option>
+              {formadoresDisponiveis.map(f => (
+                <option key={f} value={f}>{f}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Linha Inferior de Busca e Limpeza */}
+        <div style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: '0.75rem',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          borderTop: `1px solid ${BRAND.slate100}`,
+          paddingTop: '0.75rem'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: '1 1 280px' }}>
+            <span style={{ fontSize: '1rem', color: BRAND.slate600 }}>🔍</span>
+            <input
+              type="text"
+              placeholder="Buscar por tutor, formador, NRE, tema ou termos do feedback..."
+              value={busca}
+              onChange={e => setBusca(e.target.value)}
+              style={{
+                flex: 1,
+                padding: '0.5rem 0.75rem',
+                borderRadius: '6px',
+                border: `1px solid ${BRAND.slate200}`,
+                fontSize: '0.82rem',
+                outline: 'none'
+              }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            {(filtroAcao !== 'todas' || filtroModalidade !== 'todas' || filtroTema !== 'todos' || filtroNre !== 'todos' || filtroTutor !== 'todos' || filtroFormador !== 'todos' || busca) && (
+              <button
+                onClick={limparFiltros}
+                style={{
+                  backgroundColor: 'transparent',
+                  color: BRAND.primary,
+                  border: `1px solid ${BRAND.primary}`,
+                  borderRadius: '6px',
+                  padding: '0.45rem 0.85rem',
+                  fontSize: '0.78rem',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                Limpar Filtros
+              </button>
+            )}
+            <span style={{ fontSize: '0.8rem', color: BRAND.slate600 }}>
+              Exibindo <strong>{filteredRows.length}</strong> de {observacoes.length} registros
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Cards de KPIs Globais ─────────────────────────────────── */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
+        gap: '1rem',
+        marginBottom: '1.5rem'
+      }}>
+        <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '1rem 1.25rem', border: `1px solid ${BRAND.slate200}` }}>
+          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: BRAND.slate600, textTransform: 'uppercase' }}>Total Observações</div>
+          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: BRAND.primaryDark, marginTop: '0.2rem' }}>{kpis.total}</div>
+          <div style={{ fontSize: '0.72rem', color: BRAND.slate600, marginTop: '0.2rem' }}>Registros pedagógicos filtrados</div>
+        </div>
+
+        <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '1rem 1.25rem', border: `1px solid ${BRAND.slate200}` }}>
+          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: BRAND.slate600, textTransform: 'uppercase' }}>Tutores Acompanhados</div>
+          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: BRAND.blueHighlight, marginTop: '0.2rem' }}>{kpis.tutoresUnicos}</div>
+          <div style={{ fontSize: '0.72rem', color: BRAND.slate600, marginTop: '0.2rem' }}>Tutores com sessões no escopo</div>
+        </div>
+
+        <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '1rem 1.25rem', border: `1px solid ${BRAND.slate200}` }}>
+          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: BRAND.slate600, textTransform: 'uppercase' }}>Formadores Observados</div>
+          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: BRAND.primary, marginTop: '0.2rem' }}>{kpis.formadoresUnicos}</div>
+          <div style={{ fontSize: '0.72rem', color: BRAND.slate600, marginTop: '0.2rem' }}>Docentes formadores envolvidos</div>
+        </div>
+
+        <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '1rem 1.25rem', border: `1px solid ${BRAND.slate200}` }}>
+          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: BRAND.slate600, textTransform: 'uppercase' }}>Média Geral Formativa</div>
+          <div style={{
+            fontSize: '1.8rem',
+            fontWeight: 800,
+            color: parseFloat(kpis.mediaGeral) >= 2.0 ? BRAND.green : BRAND.amber,
+            marginTop: '0.2rem'
+          }}>
+            {kpis.mediaGeral} <span style={{ fontSize: '0.9rem', color: BRAND.slate600, fontWeight: 500 }}>/ 3.0</span>
+          </div>
+          <div style={{ fontSize: '0.72rem', color: BRAND.slate600, marginTop: '0.2rem' }}>
+            {parseFloat(kpis.mediaGeral) >= 2.0 ? '✓ Acima da meta pedagógica' : '⚠️ Atenção pedagógica recomendada'}
+          </div>
+        </div>
+
+        <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '1rem 1.25rem', border: `1px solid ${BRAND.slate200}` }}>
+          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: BRAND.slate600, textTransform: 'uppercase' }}>Formato Mais Frequente</div>
+          <div style={{ fontSize: '1.15rem', fontWeight: 800, color: BRAND.slate800, marginTop: '0.4rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {kpis.formatoMaisFrequente}
+          </div>
+          <div style={{ fontSize: '0.72rem', color: BRAND.slate600, marginTop: '0.4rem' }}>Modalidade com maior engajamento</div>
+        </div>
+      </div>
+
+      {/* ── Menu de Navegação em Abas (Superadmin) ────────────────── */}
+      <div style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: '0.4rem',
+        borderBottom: `2px solid ${BRAND.slate200}`,
+        marginBottom: '1.5rem',
+        paddingBottom: '0.25rem'
+      }}>
+        {[
+          { id: 'modalidade', label: '📊 Por Formato (Modalidade)' },
+          { id: 'tutor', label: '👤 Por Tutor' },
+          { id: 'formador', label: '👨‍🏫 Por Formador' },
+          { id: 'checklist', label: '📋 Checklist' },
+          { id: 'coordenacao', label: '🛡️ Painel Técnico (Coordenação)' },
+        ].map(tab => {
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              style={{
+                backgroundColor: isActive ? BRAND.primaryDark : 'transparent',
+                color: isActive ? 'white' : BRAND.slate600,
+                border: 'none',
+                borderRadius: '8px',
+                padding: '0.65rem 1.15rem',
+                fontSize: '0.85rem',
+                fontWeight: isActive ? 700 : 500,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease-in-out'
+              }}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ── Conteúdo da Aba Ativa ─────────────────────────────────── */}
+      <div style={{ minHeight: '380px', marginBottom: '2rem' }}>
+        {activeTab === 'modalidade' && (
+          <ModalidadeView
+            rows={filteredRows}
+            subModalidade={subModalidade}
+            setSubModalidade={setSubModalidade}
+            onSelectObservation={setSelectedObs}
+          />
+        )}
+
+        {activeTab === 'tutor' && (
+          <PersonView
+            rows={filteredRows}
+            field="tutor"
+            options={tutoresDisponiveis}
+            label="Tutor"
+            onSelectObservation={setSelectedObs}
+          />
+        )}
+
+        {activeTab === 'formador' && (
+          <PersonView
+            rows={filteredRows}
+            field="formador"
+            options={formadoresDisponiveis}
+            label="Formador"
+            onSelectObservation={setSelectedObs}
+          />
+        )}
+
+        {activeTab === 'checklist' && (
+          <ChecklistView rows={filteredRows} />
+        )}
+
+        {activeTab === 'coordenacao' && (
+          <CoordenacaoView rows={filteredRows} />
         )}
       </div>
 
-      {/* Cards de KPIs */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
-        <div style={{ backgroundColor: 'white', borderRadius: '10px', padding: '1.25rem', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-          <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#64748b' }}>TOTAL DE OBSERVAÇÕES</div>
-          <div style={{ fontSize: '2rem', fontWeight: 800, color: '#002b7f', marginTop: '0.25rem' }}>{kpis.total}</div>
-          <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.2rem' }}>Ações de Tutoria registradas</div>
-        </div>
-
-        <div style={{ backgroundColor: 'white', borderRadius: '10px', padding: '1.25rem', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-          <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#64748b' }}>MÉDIA GERAL (0 A 3.0)</div>
-          <div style={{ fontSize: '2rem', fontWeight: 800, color: '#007a33', marginTop: '0.25rem' }}>{kpis.avg}</div>
-          <div style={{ fontSize: '0.75rem', color: '#16a34a', marginTop: '0.2rem' }}>Padrão institucional atendido</div>
-        </div>
-
-        <div style={{ backgroundColor: 'white', borderRadius: '10px', padding: '1.25rem', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-          <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#64748b' }}>% SUPEROU EXPECTATIVAS</div>
-          <div style={{ fontSize: '2rem', fontWeight: 800, color: '#0284c7', marginTop: '0.25rem' }}>{kpis.superouPct}%</div>
-          <div style={{ fontSize: '0.75rem', color: '#0284c7', marginTop: '0.2rem' }}>Nota máxima nas rubricas</div>
-        </div>
-
-        <div style={{ backgroundColor: 'white', borderRadius: '10px', padding: '1.25rem', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-          <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#64748b' }}>ACOMPANHAMENTO PRIORITÁRIO</div>
-          <div style={{ fontSize: '2rem', fontWeight: 800, color: kpis.sobAtencao > 0 ? '#c62828' : '#16a34a', marginTop: '0.25rem' }}>
-            {kpis.sobAtencao}
-          </div>
-          <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem' }}>Média formativa &lt; 1.8</div>
-        </div>
-      </div>
-
-      {/* Seção de Gráficos (Radar, Barras e Donut) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: '1.25rem', marginBottom: '1.5rem' }}>
-        
-        {/* Radar de Competências Formativas */}
-        <div style={{ backgroundColor: 'white', borderRadius: '10px', padding: '1.25rem', border: '1px solid #e2e8f0' }}>
-          <h3 style={{ margin: '0 0 0.5rem 0', color: '#002b7f', fontSize: '1.05rem', fontWeight: 800 }}>
-            🎯 Radar de Competências Formativas
-          </h3>
-          <p style={{ margin: '0 0 1rem 0', fontSize: '0.8rem', color: '#64748b' }}>
-            Média de pontuação (0 a 3.0) por critério oficial nas sessões de tutoria.
-          </p>
-          <div style={{ width: '100%', height: '280px' }}>
-            <ResponsiveContainer>
-              <RadarChart data={radarData}>
-                <PolarGrid stroke="#cbd5e1" />
-                <PolarAngleAxis dataKey="criterio" tick={{ fill: '#334155', fontSize: 11, fontWeight: 600 }} />
-                <PolarRadiusAxis angle={30} domain={[0, 3]} stroke="#94a3b8" />
-                <Radar name="Média Formativa" dataKey="media" stroke="#007a33" fill="#007a33" fillOpacity={0.4} />
-                <Tooltip formatter={(value) => [`${value} / 3.0`, 'Média']} />
-              </RadarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Gráfico de Barras por Modalidade */}
-        <div style={{ backgroundColor: 'white', borderRadius: '10px', padding: '1.25rem', border: '1px solid #e2e8f0' }}>
-          <h3 style={{ margin: '0 0 0.5rem 0', color: '#002b7f', fontSize: '1.05rem', fontWeight: 800 }}>
-            📊 Ações por Formato de Tutoria
-          </h3>
-          <p style={{ margin: '0 0 1rem 0', fontSize: '0.8rem', color: '#64748b' }}>
-            Volume e média comparativa de Diálogo, Devolutiva e Encontro Formativo.
-          </p>
-          <div style={{ width: '100%', height: '280px' }}>
-            <ResponsiveContainer>
-              <BarChart data={modalidadeBarData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="modalidade" tick={{ fill: '#334155', fontSize: 12, fontWeight: 600 }} />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="total" name="Total de Ações" fill="#002b7f" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="media" name="Média Formativa" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Donut Chart de Distribuição de Menções */}
-        <div style={{ backgroundColor: 'white', borderRadius: '10px', padding: '1.25rem', border: '1px solid #e2e8f0' }}>
-          <h3 style={{ margin: '0 0 0.5rem 0', color: '#002b7f', fontSize: '1.05rem', fontWeight: 800 }}>
-            🍩 Distribuição Geral de Conceitos
-          </h3>
-          <p style={{ margin: '0 0 1rem 0', fontSize: '0.8rem', color: '#64748b' }}>
-            Proporção de menções concedidas em todos os critérios avaliados.
-          </p>
-          <div style={{ width: '100%', height: '280px' }}>
-            <ResponsiveContainer>
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={90}
-                  paddingAngle={4}
-                  dataKey="value"
-                >
-                  {pieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-      </div>
-
-      {/* Barra de Filtros e Pesquisa da Tabela */}
+      {/* ── Seção Inferior: Histórico Completo de Observações ─────── */}
       <div style={{
         backgroundColor: 'white',
-        borderRadius: '10px',
-        padding: '1rem',
-        border: '1px solid #e2e8f0',
-        marginBottom: '1rem',
-        display: 'flex',
-        gap: '0.75rem',
-        flexWrap: 'wrap',
-        alignItems: 'center'
+        borderRadius: '12px',
+        padding: '1.5rem',
+        border: `1px solid ${BRAND.slate200}`,
+        boxShadow: '0 2px 8px rgba(0,0,0,0.03)'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569' }}>Ação:</span>
-          <select
-            value={filtroAcao}
-            onChange={e => setFiltroAcao(e.target.value)}
-            style={{ padding: '0.4rem 0.6rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem' }}
-          >
-            <option value="todas">Todas as Ações</option>
-            <option value="Observação de Tutor pelo Técnico">Observação de Tutor pelo Técnico</option>
-            <option value="Observação do Formador pelo Tutor">Observação do Formador pelo Tutor</option>
-          </select>
+        <div style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '1rem',
+          marginBottom: '1.25rem',
+          borderBottom: `1px solid ${BRAND.slate100}`,
+          paddingBottom: '0.75rem'
+        }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: BRAND.primaryDark }}>
+              Registros e Evidências Pedagógicas ({filteredRows.length})
+            </h2>
+            <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.8rem', color: BRAND.slate600 }}>
+              Clique em qualquer card para inspecionar os critérios da rubrica, apontamentos de feedback e gravações.
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ fontSize: '0.78rem', color: BRAND.slate600 }}>Ordenar:</span>
+            <select
+              value={ordemData}
+              onChange={e => setOrdemData(e.target.value)}
+              style={{
+                padding: '0.35rem 0.65rem',
+                borderRadius: '6px',
+                border: `1px solid ${BRAND.slate200}`,
+                fontSize: '0.78rem',
+                backgroundColor: BRAND.slate50
+              }}
+            >
+              <option value="recentes">Mais recentes primeiro</option>
+              <option value="antigos">Mais antigas primeiro</option>
+            </select>
+          </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569' }}>Modalidade:</span>
-          <select
-            value={filtroModalidade}
-            onChange={e => setFiltroModalidade(e.target.value)}
-            style={{ padding: '0.4rem 0.6rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem' }}
-          >
-            <option value="todas">Todas</option>
-            <option value="Diálogo Formativo">Diálogo Formativo</option>
-            <option value="Devolutiva">Devolutiva</option>
-            <option value="Encontro Formativo">Encontro Formativo</option>
-          </select>
+        {filteredRows.length === 0 ? (
+          <div style={{ padding: '3rem 1rem', textAlign: 'center', color: BRAND.slate600 }}>
+            <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>📋</div>
+            <div style={{ fontWeight: 700, fontSize: '1rem', color: BRAND.slate800 }}>Nenhuma observação encontrada</div>
+            <div style={{ fontSize: '0.82rem', marginTop: '0.25rem' }}>Ajuste os filtros superiores ou a busca para localizar registros.</div>
+          </div>
+        ) : (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+            gap: '1rem'
+          }}>
+            {filteredRows.map((obs, idx) => {
+              const isSuperou = obs.avgScore >= 2.5;
+              const isAtendeu = obs.avgScore >= 2.0 && obs.avgScore < 2.5;
+              const isParcial = obs.avgScore >= 1.0 && obs.avgScore < 2.0;
+              const badgeBg = isSuperou ? BRAND.blueHighlight : isAtendeu ? BRAND.green : isParcial ? BRAND.amber : BRAND.red;
+
+              return (
+                <div
+                  key={obs.id || idx}
+                  onClick={() => setSelectedObs(obs)}
+                  style={{
+                    backgroundColor: BRAND.slate50,
+                    borderRadius: '10px',
+                    border: `1px solid ${BRAND.slate200}`,
+                    padding: '1rem 1.15rem',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease-in-out',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between'
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.06)';
+                    e.currentTarget.style.borderColor = BRAND.blueHighlight;
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = 'none';
+                    e.currentTarget.style.borderColor = BRAND.slate200;
+                  }}
+                >
+                  <div>
+                    {/* Linha superior: Ação e Média */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.6rem' }}>
+                      <span style={{
+                        backgroundColor: 'white',
+                        border: `1px solid ${BRAND.slate200}`,
+                        padding: '0.2rem 0.55rem',
+                        borderRadius: '6px',
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        color: BRAND.primaryDark
+                      }}>
+                        {obs.modalidade || 'Ação Formativa'}
+                      </span>
+                      {typeof obs.avgScore === 'number' && (
+                        <span style={{
+                          backgroundColor: badgeBg,
+                          color: 'white',
+                          padding: '0.2rem 0.6rem',
+                          borderRadius: '6px',
+                          fontSize: '0.75rem',
+                          fontWeight: 800,
+                          fontFamily: 'monospace'
+                        }}>
+                          {obs.avgScore.toFixed(2)}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Tutor e Formador */}
+                    <div style={{ marginBottom: '0.5rem' }}>
+                      <div style={{ fontSize: '0.72rem', fontWeight: 700, color: BRAND.slate600, textTransform: 'uppercase' }}>Tutor</div>
+                      <div style={{ fontSize: '0.9rem', fontWeight: 800, color: BRAND.slate800 }}>{obs.tutor}</div>
+                    </div>
+
+                    <div style={{ marginBottom: '0.5rem' }}>
+                      <div style={{ fontSize: '0.72rem', fontWeight: 700, color: BRAND.slate600, textTransform: 'uppercase' }}>Formador / Observador</div>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 600, color: BRAND.slate800 }}>{obs.formador}</div>
+                    </div>
+
+                    {/* Destaque ou resumo se houver */}
+                    {obs.destaques && (
+                      <div style={{
+                        fontSize: '0.75rem',
+                        color: BRAND.slate600,
+                        backgroundColor: 'white',
+                        padding: '0.4rem 0.6rem',
+                        borderRadius: '6px',
+                        border: `1px solid ${BRAND.slate100}`,
+                        marginTop: '0.5rem',
+                        lineHeight: 1.35
+                      }}>
+                        <strong style={{ color: BRAND.green }}>Destaque:</strong> {obs.destaques.length > 90 ? obs.destaques.substring(0, 90) + '…' : obs.destaques}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Rodapé do Card */}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginTop: '0.85rem',
+                    paddingTop: '0.6rem',
+                    borderTop: `1px solid ${BRAND.slate200}`,
+                    fontSize: '0.72rem',
+                    color: BRAND.slate600
+                  }}>
+                    <span>🗓️ {obs.dataObservacao || obs.timestamp?.substring(0, 10)}</span>
+                    <span style={{ fontWeight: 600, color: BRAND.blueHighlight }}>Ver Rubrica & Detalhes →</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ── Modal de Detalhe Completo (ObservationDetailDialog) ───── */}
+      {selectedObs && (
+        <ObservationDetailModal
+          obs={selectedObs}
+          onClose={() => setSelectedObs(null)}
+        />
+      )}
+
+      {/* ── Modal de Cadastro de Nova Observação ──────────────────── */}
+      {modalNovaObs && (
+        <NovaObservacaoModal
+          tutores={tutores}
+          onClose={() => setModalNovaObs(false)}
+          onSalvar={(nova) => {
+            const gravada = salvarNovaObservacaoTutoria(nova);
+            setObservacoes(getTutorObservacoesLocais());
+            setModalNovaObs(false);
+            setSelectedObs(gravada);
+          }}
+        />
+      )}
+
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// SUBVIEW 1: POR FORMATO / MODALIDADE
+// ═══════════════════════════════════════════════════════════════════════
+function ModalidadeView({ rows, subModalidade, setSubModalidade, onSelectObservation }) {
+  const currentRows = useMemo(() => {
+    return rows.filter(r => r.modalidade === subModalidade);
+  }, [rows, subModalidade]);
+
+  // Contagem por critério
+  const criteriaData = useMemo(() => {
+    const map = new Map();
+    currentRows.forEach(r => {
+      (r.rubrics || []).forEach(x => {
+        const c = classifyValue(x.value);
+        if (!c) return;
+        const label = formatRadarLabel(x.criterio);
+        const entry = map.get(label) || { criterio: label, superou: 0, atendeu: 0, parcial: 0, nao: 0 };
+        entry[c]++;
+        map.set(label, entry);
+      });
+    });
+    return Array.from(map.values());
+  }, [currentRows]);
+
+  // Donut de Menções
+  const donutData = useMemo(() => {
+    const counts = { superou: 0, atendeu: 0, parcial: 0, nao: 0 };
+    currentRows.forEach(r => {
+      (r.rubrics || []).forEach(x => {
+        const c = classifyValue(x.value);
+        if (c) counts[c]++;
+      });
+    });
+    return [
+      { name: 'Superou', value: counts.superou, color: STATUS_COLORS.superou },
+      { name: 'Atendeu Integralmente', value: counts.atendeu, color: STATUS_COLORS.atendeu },
+      { name: 'Atendeu Parcialmente', value: counts.parcial, color: STATUS_COLORS.parcial },
+      { name: 'Não Atendeu', value: counts.nao, color: STATUS_COLORS.nao },
+    ].filter(d => d.value > 0);
+  }, [currentRows]);
+
+  // Radar de Competências
+  const radarData = useMemo(() => {
+    return criteriaData.map(c => {
+      const total = c.superou + c.atendeu + c.parcial + c.nao;
+      const score = total > 0 ? (c.superou * 3 + c.atendeu * 2 + c.parcial * 1) / total : 0;
+      return {
+        criterio: c.criterio,
+        score: parseFloat(score.toFixed(2))
+      };
+    });
+  }, [criteriaData]);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+      {/* Pílulas de seleção de formato */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem' }}>
+        {MODALIDADES_TUTORIA.map(mod => {
+          const isSelected = subModalidade === mod;
+          const count = rows.filter(r => r.modalidade === mod).length;
+          return (
+            <button
+              key={mod}
+              onClick={() => setSubModalidade(mod)}
+              style={{
+                backgroundColor: isSelected ? BRAND.primary : 'white',
+                color: isSelected ? 'white' : BRAND.slate800,
+                border: `1px solid ${isSelected ? BRAND.primary : BRAND.slate200}`,
+                borderRadius: '999px',
+                padding: '0.5rem 1.1rem',
+                fontSize: '0.82rem',
+                fontWeight: isSelected ? 700 : 500,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.45rem',
+                boxShadow: isSelected ? '0 4px 10px rgba(0, 45, 92, 0.2)' : 'none'
+              }}
+            >
+              <span>{mod}</span>
+              <span style={{
+                backgroundColor: isSelected ? 'rgba(255,255,255,0.25)' : BRAND.slate100,
+                color: isSelected ? 'white' : BRAND.slate600,
+                padding: '0.1rem 0.45rem',
+                borderRadius: '999px',
+                fontSize: '0.72rem',
+                fontWeight: 800
+              }}>
+                {count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {currentRows.length === 0 ? (
+        <div style={{ padding: '3rem', textAlign: 'center', backgroundColor: 'white', borderRadius: '12px', border: `1px solid ${BRAND.slate200}` }}>
+          <p style={{ color: BRAND.slate600, fontSize: '0.9rem' }}>Nenhuma observação registrada para o formato <strong>{subModalidade}</strong> com os filtros selecionados.</p>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '1.25rem' }}>
+          
+          {/* Gráfico de Barras Empilhadas por Critério */}
+          <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '1.25rem', border: `1px solid ${BRAND.slate200}` }}>
+            <h3 style={{ margin: '0 0 0.35rem 0', fontSize: '0.95rem', fontWeight: 800, color: BRAND.primaryDark }}>
+              {subModalidade} · Desempenho por Critério
+            </h3>
+            <p style={{ margin: '0 0 1rem 0', fontSize: '0.75rem', color: BRAND.slate600 }}>
+              Distribuição de conceitos atribuídos nas sessões.
+            </p>
+            <div style={{ width: '100%', height: '340px' }}>
+              <ResponsiveContainer>
+                <BarChart data={criteriaData} layout="vertical" margin={{ left: 10, right: 10, top: 5, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <XAxis type="number" fontSize={11} stroke={BRAND.slate600} />
+                  <YAxis type="category" dataKey="criterio" width={110} fontSize={11} stroke={BRAND.slate800} />
+                  <Tooltip />
+                  <Legend wrapperStyle={{ fontSize: '0.75rem', paddingTop: '0.5rem' }} />
+                  <Bar dataKey="superou" name="Superou" fill={STATUS_COLORS.superou} stackId="a" />
+                  <Bar dataKey="atendeu" name="Atendeu" fill={STATUS_COLORS.atendeu} stackId="a" />
+                  <Bar dataKey="parcial" name="Parcial" fill={STATUS_COLORS.parcial} stackId="a" />
+                  <Bar dataKey="nao" name="Não atendeu" fill={STATUS_COLORS.nao} stackId="a" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Gráfico Radar de Competências da Modalidade */}
+          <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '1.25rem', border: `1px solid ${BRAND.slate200}` }}>
+            <h3 style={{ margin: '0 0 0.35rem 0', fontSize: '0.95rem', fontWeight: 800, color: BRAND.primaryDark }}>
+              🎯 Radar Formativo · {subModalidade}
+            </h3>
+            <p style={{ margin: '0 0 1rem 0', fontSize: '0.75rem', color: BRAND.slate600 }}>
+              Pontuação média (0 a 3.0) por dimensão avaliada.
+            </p>
+            <div style={{ width: '100%', height: '340px' }}>
+              <ResponsiveContainer>
+                <RadarChart data={radarData}>
+                  <PolarGrid stroke="#e2e8f0" />
+                  <PolarAngleAxis dataKey="criterio" tick={{ fill: BRAND.slate800, fontSize: 10, fontWeight: 600 }} />
+                  <PolarRadiusAxis angle={30} domain={[0, 3]} stroke="#94a3b8" />
+                  <Radar name="Média Formativa" dataKey="score" stroke={BRAND.blueHighlight} fill={BRAND.blueHighlight} fillOpacity={0.4} />
+                  <Tooltip formatter={(val) => [`${val} / 3.0`, 'Pontuação']} />
+                </RadarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Gráfico Donut de Proporção de Conceitos */}
+          <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '1.25rem', border: `1px solid ${BRAND.slate200}` }}>
+            <h3 style={{ margin: '0 0 0.35rem 0', fontSize: '0.95rem', fontWeight: 800, color: BRAND.primaryDark }}>
+              🍩 Conceitos Atribuídos · {subModalidade}
+            </h3>
+            <p style={{ margin: '0 0 1rem 0', fontSize: '0.75rem', color: BRAND.slate600 }}>
+              Volume geral de menções concedidas neste formato.
+            </p>
+            <div style={{ width: '100%', height: '340px' }}>
+              <ResponsiveContainer>
+                <PieChart>
+                  <Pie
+                    data={donutData}
+                    dataKey="value"
+                    nameKey="name"
+                    innerRadius={65}
+                    outerRadius={105}
+                    paddingAngle={3}
+                  >
+                    {donutData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend wrapperStyle={{ fontSize: '0.75rem' }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// SUBVIEW 2: POR TUTOR OU POR FORMADOR (PERSON VIEW)
+// ═══════════════════════════════════════════════════════════════════════
+function PersonView({ rows, field, options, label, onSelectObservation }) {
+  const [selectedPerson, setSelectedPerson] = useState(options[0] || '');
+  const [pagina, setPagina] = useState(1);
+  const itensPorPagina = 8;
+
+  // Garantir que selectedPerson exista
+  const activePerson = options.includes(selectedPerson) ? selectedPerson : (options[0] || '');
+
+  // Registros da pessoa selecionada
+  const personRows = useMemo(() => {
+    return rows.filter(r => r[field] === activePerson);
+  }, [rows, field, activePerson]);
+
+  // Estatísticas da pessoa selecionada
+  const personStats = useMemo(() => {
+    const total = personRows.length;
+    let soma = 0;
+    let count = 0;
+    personRows.forEach(r => {
+      if (typeof r.avgScore === 'number' && !isNaN(r.avgScore)) {
+        soma += r.avgScore;
+        count++;
+      }
+    });
+    const avg = count > 0 ? (soma / count).toFixed(2) : '0.00';
+    const email = personRows[0]?.[`${field}Email`] || '';
+    const nre = personRows[0]?.nre || '—';
+    return { total, avg, email, nre };
+  }, [personRows, field]);
+
+  // Radar da pessoa selecionada
+  const personRadarData = useMemo(() => {
+    const map = new Map();
+    personRows.forEach(r => {
+      (r.rubrics || []).forEach(x => {
+        if (x.score !== null && !isNaN(x.score)) {
+          const l = formatRadarLabel(x.criterio);
+          const entry = map.get(l) || { sum: 0, count: 0 };
+          entry.sum += x.score;
+          entry.count++;
+          map.set(l, entry);
+        }
+      });
+    });
+    return Array.from(map.entries()).map(([criterio, st]) => ({
+      criterio,
+      score: parseFloat((st.sum / st.count).toFixed(2))
+    }));
+  }, [personRows]);
+
+  // Ranking geral de todas as pessoas do campo
+  const ranking = useMemo(() => {
+    const map = new Map();
+    rows.forEach(r => {
+      const name = r[field];
+      if (!name) return;
+      const entry = map.get(name) || {
+        name,
+        email: r[`${field}Email`] || '',
+        nre: r.nre || '—',
+        total: 0,
+        sum: 0,
+        scoreCount: 0
+      };
+      entry.total++;
+      if (typeof r.avgScore === 'number' && !isNaN(r.avgScore)) {
+        entry.sum += r.avgScore;
+        entry.scoreCount++;
+      }
+      map.set(name, entry);
+    });
+
+    return Array.from(map.values())
+      .map(p => ({
+        ...p,
+        avg: p.scoreCount > 0 ? parseFloat((p.sum / p.scoreCount).toFixed(2)) : 0
+      }))
+      .sort((a, b) => b.total !== a.total ? b.total - a.total : b.avg - a.avg);
+  }, [rows, field]);
+
+  const totalPaginas = Math.ceil(ranking.length / itensPorPagina) || 1;
+  const rankingPaginado = ranking.slice((pagina - 1) * itensPorPagina, pagina * itensPorPagina);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      {/* Seletor da Pessoa e Mini-Perfil */}
+      <div style={{
+        backgroundColor: 'white',
+        borderRadius: '12px',
+        padding: '1.25rem',
+        border: `1px solid ${BRAND.slate200}`,
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '1rem'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', flex: '1 1 300px' }}>
+          <div style={{
+            width: '44px',
+            height: '44px',
+            borderRadius: '50%',
+            backgroundColor: BRAND.slate100,
+            color: BRAND.primaryDark,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '1.2rem',
+            fontWeight: 800
+          }}>
+            {activePerson ? activePerson.charAt(0) : '?'}
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: BRAND.slate600, textTransform: 'uppercase' }}>
+              SELECIONE O {label.toUpperCase()} PARA ANÁLISE INDIVIDUAL
+            </label>
+            <select
+              value={activePerson}
+              onChange={e => setSelectedPerson(e.target.value)}
+              style={{
+                fontSize: '1rem',
+                fontWeight: 700,
+                color: BRAND.primaryDark,
+                border: 'none',
+                background: 'transparent',
+                outline: 'none',
+                cursor: 'pointer',
+                padding: '0.2rem 0'
+              }}
+            >
+              {options.map(opt => (
+                <option key={opt} value={opt}>{opt}</option>
+              ))}
+            </select>
+            {personStats.email && (
+              <div style={{ fontSize: '0.75rem', color: BRAND.slate600 }}>{personStats.email} · {personStats.nre}</div>
+            )}
+          </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569' }}>NRE:</span>
-          <select
-            value={filtroNre}
-            onChange={e => setFiltroNre(e.target.value)}
-            style={{ padding: '0.4rem 0.6rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem' }}
-          >
-            <option value="todos">Todos os NREs</option>
-            {nreList.map(n => <option key={n} value={n}>{n}</option>)}
-          </select>
-        </div>
-
-        <div style={{ flex: 1, minWidth: '220px' }}>
-          <input
-            type="text"
-            placeholder="🔍 Buscar por tutor, formador, destaques..."
-            value={busca}
-            onChange={e => setBusca(e.target.value)}
-            style={{ width: '100%', padding: '0.4rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem' }}
-          />
+        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: '0.72rem', color: BRAND.slate600, fontWeight: 700, textTransform: 'uppercase' }}>Ações Observadas</div>
+            <div style={{ fontSize: '1.4rem', fontWeight: 800, color: BRAND.primaryDark }}>{personStats.total}</div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: '0.72rem', color: BRAND.slate600, fontWeight: 700, textTransform: 'uppercase' }}>Média de Pontuação</div>
+            <div style={{
+              fontSize: '1.4rem',
+              fontWeight: 800,
+              color: parseFloat(personStats.avg) >= 2.0 ? BRAND.green : BRAND.amber
+            }}>
+              {personStats.avg} <span style={{ fontSize: '0.8rem', color: BRAND.slate600 }}>/ 3.0</span>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Tabela de Observações de Tutoria */}
-      <div style={{ backgroundColor: 'white', borderRadius: '10px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-          <thead>
-            <tr style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0', color: '#1e293b', textAlign: 'left' }}>
-              <th style={{ padding: '0.75rem 1rem' }}>Ação de Acompanhamento</th>
-              <th style={{ padding: '0.75rem 1rem' }}>Modalidade</th>
-              <th style={{ padding: '0.75rem 1rem' }}>Tutor</th>
-              <th style={{ padding: '0.75rem 1rem' }}>Formador / Técnico</th>
-              <th style={{ padding: '0.75rem 1rem' }}>NRE</th>
-              <th style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>Média Formativa</th>
-              <th style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredObs.length === 0 ? (
-              <tr>
-                <td colSpan="7" style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>
-                  Nenhum registro encontrado com os filtros selecionados.
-                </td>
-              </tr>
+      {/* Grid de Gráficos e Ranking */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: '1.25rem' }}>
+        
+        {/* Radar da Pessoa */}
+        <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '1.25rem', border: `1px solid ${BRAND.slate200}` }}>
+          <h3 style={{ margin: '0 0 0.35rem 0', fontSize: '0.95rem', fontWeight: 800, color: BRAND.primaryDark }}>
+            🎯 Radar de Competências · {activePerson}
+          </h3>
+          <p style={{ margin: '0 0 1rem 0', fontSize: '0.75rem', color: BRAND.slate600 }}>
+            Média individual por competência pedagógica observada.
+          </p>
+          <div style={{ width: '100%', height: '320px' }}>
+            {personRadarData.length === 0 ? (
+              <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: BRAND.slate600, fontSize: '0.85rem' }}>
+                Sem dados de critérios para gerar o radar.
+              </div>
             ) : (
-              filteredObs.map((obs, idx) => (
-                <tr key={obs.id || idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                  <td style={{ padding: '0.75rem 1rem' }}>
-                    <span style={{
-                      backgroundColor: obs.acaoAcompanhamento.includes('Técnico') ? '#e0f2fe' : '#f0fdf4',
-                      color: obs.acaoAcompanhamento.includes('Técnico') ? '#0369a1' : '#15803d',
-                      fontSize: '0.75rem',
-                      fontWeight: 700,
-                      padding: '0.2rem 0.5rem',
-                      borderRadius: '4px'
-                    }}>
-                      {obs.acaoAcompanhamento}
-                    </span>
-                  </td>
-                  <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: '#334155' }}>
-                    {obs.modalidade || obs.acaoObservada}
-                  </td>
-                  <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: '#002b7f' }}>
-                    {obs.tutor}
-                  </td>
-                  <td style={{ padding: '0.75rem 1rem', color: '#475569' }}>
-                    {obs.formador}
-                  </td>
-                  <td style={{ padding: '0.75rem 1rem', color: '#64748b' }}>
-                    {obs.nre || 'Não informado'}
-                  </td>
-                  <td style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>
-                    <span style={{
-                      backgroundColor: (obs.avgScore || 0) >= 2.5 ? 'rgba(0,43,127,0.1)' : (obs.avgScore || 0) >= 1.8 ? 'rgba(0,122,51,0.1)' : 'rgba(198,40,40,0.1)',
-                      color: (obs.avgScore || 0) >= 2.5 ? '#002b7f' : (obs.avgScore || 0) >= 1.8 ? '#007a33' : '#c62828',
-                      fontWeight: 800,
-                      padding: '0.2rem 0.5rem',
-                      borderRadius: '4px'
-                    }}>
-                      {typeof obs.avgScore === 'number' ? obs.avgScore.toFixed(2) : '-'}
-                    </span>
-                  </td>
-                  <td style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>
-                    <button
-                      onClick={() => setSelectedObs(obs)}
+              <ResponsiveContainer>
+                <RadarChart data={personRadarData}>
+                  <PolarGrid stroke="#e2e8f0" />
+                  <PolarAngleAxis dataKey="criterio" tick={{ fill: BRAND.slate800, fontSize: 10, fontWeight: 600 }} />
+                  <PolarRadiusAxis angle={30} domain={[0, 3]} stroke="#94a3b8" />
+                  <Radar name="Média Individual" dataKey="score" stroke={BRAND.green} fill={BRAND.green} fillOpacity={0.4} />
+                  <Tooltip formatter={(val) => [`${val} / 3.0`, 'Pontuação']} />
+                </RadarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
+
+        {/* Tabela de Ranking Geral */}
+        <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '1.25rem', border: `1px solid ${BRAND.slate200}`, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+            <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: BRAND.primaryDark }}>
+              🏆 Ranking Geral de {label}es ({ranking.length})
+            </h3>
+            <span style={{ fontSize: '0.75rem', color: BRAND.slate600 }}>Página {pagina} de {totalPaginas}</span>
+          </div>
+
+          <div style={{ flex: 1, overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+              <thead>
+                <tr style={{ borderBottom: `2px solid ${BRAND.slate200}`, color: BRAND.slate600, textAlign: 'left' }}>
+                  <th style={{ padding: '0.5rem 0.6rem', fontWeight: 700 }}>Nome</th>
+                  <th style={{ padding: '0.5rem 0.6rem', fontWeight: 700 }}>NRE</th>
+                  <th style={{ padding: '0.5rem 0.6rem', fontWeight: 700, textAlign: 'center' }}>Ações</th>
+                  <th style={{ padding: '0.5rem 0.6rem', fontWeight: 700, textAlign: 'right' }}>Média</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rankingPaginado.map((p, idx) => {
+                  const isCur = p.name === activePerson;
+                  return (
+                    <tr
+                      key={p.name}
+                      onClick={() => setSelectedPerson(p.name)}
                       style={{
-                        backgroundColor: '#002b7f',
-                        color: 'white',
-                        border: 'none',
-                        padding: '0.35rem 0.75rem',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        fontSize: '0.78rem',
-                        fontWeight: 700
+                        borderBottom: `1px solid ${BRAND.slate100}`,
+                        backgroundColor: isCur ? 'rgba(0, 114, 188, 0.08)' : 'transparent',
+                        cursor: 'pointer'
                       }}
                     >
-                      Ver Detalhes 👁️
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+                      <td style={{ padding: '0.6rem', fontWeight: isCur ? 800 : 600, color: BRAND.slate800 }}>
+                        {p.name}
+                      </td>
+                      <td style={{ padding: '0.6rem', color: BRAND.slate600 }}>{p.nre}</td>
+                      <td style={{ padding: '0.6rem', textAlign: 'center', fontWeight: 700 }}>{p.total}</td>
+                      <td style={{ padding: '0.6rem', textAlign: 'right' }}>
+                        <span style={{
+                          backgroundColor: p.avg >= 2.0 ? BRAND.green : BRAND.amber,
+                          color: 'white',
+                          padding: '0.15rem 0.5rem',
+                          borderRadius: '4px',
+                          fontSize: '0.75rem',
+                          fontWeight: 800,
+                          fontFamily: 'monospace'
+                        }}>
+                          {p.avg.toFixed(2)}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Paginação do Ranking */}
+          {totalPaginas > 1 && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.4rem', marginTop: '0.75rem', paddingTop: '0.5rem', borderTop: `1px solid ${BRAND.slate100}` }}>
+              <button
+                disabled={pagina === 1}
+                onClick={() => setPagina(p => Math.max(1, p - 1))}
+                style={{
+                  padding: '0.3rem 0.6rem',
+                  fontSize: '0.75rem',
+                  borderRadius: '4px',
+                  border: `1px solid ${BRAND.slate200}`,
+                  backgroundColor: 'white',
+                  cursor: pagina === 1 ? 'not-allowed' : 'pointer',
+                  opacity: pagina === 1 ? 0.5 : 1
+                }}
+              >
+                Anterior
+              </button>
+              <button
+                disabled={pagina === totalPaginas}
+                onClick={() => setPagina(p => Math.min(totalPaginas, p + 1))}
+                style={{
+                  padding: '0.3rem 0.6rem',
+                  fontSize: '0.75rem',
+                  borderRadius: '4px',
+                  border: `1px solid ${BRAND.slate200}`,
+                  backgroundColor: 'white',
+                  cursor: pagina === totalPaginas ? 'not-allowed' : 'pointer',
+                  opacity: pagina === totalPaginas ? 0.5 : 1
+                }}
+              >
+                Próxima
+              </button>
+            </div>
+          )}
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// SUBVIEW 3: CHECKLIST OPERACIONAL
+// ═══════════════════════════════════════════════════════════════════════
+function ChecklistView({ rows }) {
+  const withChecklist = useMemo(() => {
+    return rows.filter(r => r.checklistRealizadas || r.checklistNaoRealizadas);
+  }, [rows]);
+
+  const realizadasCount = useMemo(() => {
+    const map = new Map();
+    withChecklist.forEach(r => {
+      const items = (r.checklistRealizadas || '').split(/[,;\n]/).map(s => s.trim()).filter(Boolean);
+      items.forEach(item => map.set(item, (map.get(item) || 0) + 1));
+    });
+    return Array.from(map.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([name, value]) => ({ name, value }));
+  }, [withChecklist]);
+
+  const naoRealizadasCount = useMemo(() => {
+    const map = new Map();
+    withChecklist.forEach(r => {
+      const items = (r.checklistNaoRealizadas || '').split(/[,;\n]/).map(s => s.trim()).filter(Boolean);
+      items.forEach(item => map.set(item, (map.get(item) || 0) + 1));
+    });
+    return Array.from(map.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([name, value]) => ({ name, value }));
+  }, [withChecklist]);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+      <div style={{
+        backgroundColor: BRAND.slate50,
+        padding: '0.75rem 1.25rem',
+        borderRadius: '8px',
+        border: `1px solid ${BRAND.slate200}`,
+        fontSize: '0.8rem',
+        color: BRAND.slate600,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between'
+      }}>
+        <span>📋 Foram localizados <strong>{withChecklist.length}</strong> registros com itens de checklist preenchidos.</span>
+        <span>Ações mais incidentes nas rotinas formativas</span>
       </div>
 
-      {/* Modal: Detalhes da Observação de Tutoria */}
-      {selectedObs && (
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: '1.25rem' }}>
+        
+        {/* Realizadas Corretamente */}
+        <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '1.25rem', border: `1px solid ${BRAND.slate200}` }}>
+          <h3 style={{ margin: '0 0 0.35rem 0', fontSize: '0.95rem', fontWeight: 800, color: BRAND.green }}>
+            ✓ Ações Realizadas Corretamente
+          </h3>
+          <p style={{ margin: '0 0 1rem 0', fontSize: '0.75rem', color: BRAND.slate600 }}>
+            Procedimentos mais frequentemente consolidados com êxito.
+          </p>
+          <div style={{ width: '100%', height: Math.max(220, realizadasCount.length * 36) }}>
+            {realizadasCount.length === 0 ? (
+              <div style={{ padding: '2rem', textAlign: 'center', color: BRAND.slate600 }}>Sem itens consolidados.</div>
+            ) : (
+              <ResponsiveContainer>
+                <BarChart data={realizadasCount} layout="vertical" margin={{ left: 10, right: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <XAxis type="number" fontSize={11} allowDecimals={false} stroke={BRAND.slate600} />
+                  <YAxis type="category" dataKey="name" width={180} fontSize={11} stroke={BRAND.slate800} />
+                  <Tooltip />
+                  <Bar dataKey="value" name="Ocorrências" fill={BRAND.green} radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
+
+        {/* NÃO Realizadas Adequadamente */}
+        <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '1.25rem', border: `1px solid ${BRAND.slate200}` }}>
+          <h3 style={{ margin: '0 0 0.35rem 0', fontSize: '0.95rem', fontWeight: 800, color: BRAND.red }}>
+            ⚠️ Ações NÃO Realizadas Adequadamente
+          </h3>
+          <p style={{ margin: '0 0 1rem 0', fontSize: '0.75rem', color: BRAND.slate600 }}>
+            Pontos de atenção operacional apontados nas observações.
+          </p>
+          <div style={{ width: '100%', height: Math.max(220, naoRealizadasCount.length * 36) }}>
+            {naoRealizadasCount.length === 0 ? (
+              <div style={{ padding: '2rem', textAlign: 'center', color: BRAND.slate600 }}>Nenhum ponto crítico de checklist.</div>
+            ) : (
+              <ResponsiveContainer>
+                <BarChart data={naoRealizadasCount} layout="vertical" margin={{ left: 10, right: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <XAxis type="number" fontSize={11} allowDecimals={false} stroke={BRAND.slate600} />
+                  <YAxis type="category" dataKey="name" width={180} fontSize={11} stroke={BRAND.slate800} />
+                  <Tooltip />
+                  <Bar dataKey="value" name="Ocorrências" fill={BRAND.red} radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// SUBVIEW 4: PAINEL TÉCNICO / COORDENAÇÃO (TUTORES SOB ATENÇÃO, DESTAQUES E GARGALOS)
+// ═══════════════════════════════════════════════════════════════════════
+function CoordenacaoView({ rows }) {
+  // Filtra observações feitas por Técnicos (Técnico observa Tutor)
+  const tecnicoObs = useMemo(() => {
+    return rows.filter(r => normalizeStr(r.acaoAcompanhamento).includes("tecnic"));
+  }, [rows]);
+
+  // Tutores com média técnica < 1.8
+  const tutoresSobAtencao = useMemo(() => {
+    const map = new Map();
+    tecnicoObs.forEach(r => {
+      if (!r.tutor) return;
+      const entry = map.get(r.tutor) || { total: 0, sum: 0, email: r.tutorEmail, countObs: 0 };
+      entry.countObs++;
+      (r.rubrics || []).forEach(rub => {
+        if (typeof rub.score === 'number' && !isNaN(rub.score)) {
+          entry.sum += rub.score;
+          entry.total++;
+        }
+      });
+      map.set(r.tutor, entry);
+    });
+
+    return Array.from(map.entries())
+      .map(([name, st]) => {
+        const avg = st.total > 0 ? parseFloat((st.sum / st.total).toFixed(2)) : 0;
+        return { name, email: st.email, avg, totalObs: st.countObs };
+      })
+      .filter(t => t.avg < 1.8 && t.totalObs > 0)
+      .sort((a, b) => a.avg - b.avg);
+  }, [tecnicoObs]);
+
+  // Média de ações por tutor para calcular destaques
+  const avgObsVal = useMemo(() => {
+    const tutores = Array.from(new Set(tecnicoObs.map(r => r.tutor))).filter(Boolean);
+    return tutores.length > 0 ? tecnicoObs.length / tutores.length : 0;
+  }, [tecnicoObs]);
+
+  // Tutores em destaque (ações acima da média)
+  const tutoresDestaque = useMemo(() => {
+    const map = new Map();
+    tecnicoObs.forEach(r => {
+      if (!r.tutor) return;
+      const entry = map.get(r.tutor) || { total: 0, sum: 0, email: r.tutorEmail, countObs: 0 };
+      entry.countObs++;
+      (r.rubrics || []).forEach(rub => {
+        if (typeof rub.score === 'number' && !isNaN(rub.score)) {
+          entry.sum += rub.score;
+          entry.total++;
+        }
+      });
+      map.set(r.tutor, entry);
+    });
+
+    return Array.from(map.entries())
+      .map(([name, st]) => {
+        const avg = st.total > 0 ? parseFloat((st.sum / st.total).toFixed(2)) : 0;
+        return { name, email: st.email, avg, totalObs: st.countObs };
+      })
+      .filter(t => t.totalObs >= avgObsVal)
+      .sort((a, b) => b.totalObs - a.totalObs);
+  }, [tecnicoObs, avgObsVal]);
+
+  // Gargalos Pedagógicos de Formação (critérios com média < 2.0)
+  const gargalosFormacao = useMemo(() => {
+    const map = new Map();
+    rows.forEach(r => {
+      (r.rubrics || []).forEach(rub => {
+        if (typeof rub.score === 'number' && !isNaN(rub.score)) {
+          const entry = map.get(rub.criterio) || { total: 0, sum: 0 };
+          entry.sum += rub.score;
+          entry.total++;
+          map.set(rub.criterio, entry);
+        }
+      });
+    });
+
+    return Array.from(map.entries())
+      .map(([criterio, st]) => {
+        const avg = st.total > 0 ? parseFloat((st.sum / st.total).toFixed(2)) : 0;
+        return { criterio, avg, total: st.total };
+      })
+      .filter(c => c.avg < 2.0 && c.total > 0)
+      .sort((a, b) => a.avg - b.avg);
+  }, [rows]);
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.25rem' }}>
+      
+      {/* Card 1: Tutores sob Atenção */}
+      <div style={{
+        backgroundColor: 'white',
+        borderRadius: '12px',
+        padding: '1.25rem',
+        border: `1px solid ${BRAND.amber}`,
+        boxShadow: '0 4px 12px rgba(245, 158, 11, 0.08)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
+          <span style={{ fontSize: '1.2rem' }}>⚠️</span>
+          <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: BRAND.amber }}>
+            Tutores sob Atenção (Média Técnico &lt; 1.8)
+          </h3>
+        </div>
+        <p style={{ margin: '0 0 1rem 0', fontSize: '0.75rem', color: BRAND.slate600 }}>
+          Tutores avaliados pela coordenação com rendimento abaixo do limiar formativo.
+        </p>
+
+        {tutoresSobAtencao.length === 0 ? (
+          <div style={{ padding: '2rem', textAlign: 'center', color: BRAND.slate600, fontSize: '0.82rem' }}>
+            Nenhum tutor com média técnica abaixo de 1.8.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+            {tutoresSobAtencao.map(t => (
+              <div
+                key={t.name}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '0.75rem',
+                  borderRadius: '8px',
+                  border: `1px solid ${BRAND.slate200}`,
+                  backgroundColor: BRAND.slate50
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '0.85rem', color: BRAND.slate800 }}>{t.name}</div>
+                  <div style={{ fontSize: '0.72rem', color: BRAND.slate600 }}>{t.totalObs} observações técnicas</div>
+                </div>
+                <span style={{
+                  backgroundColor: BRAND.amber,
+                  color: 'white',
+                  padding: '0.2rem 0.6rem',
+                  borderRadius: '6px',
+                  fontWeight: 800,
+                  fontSize: '0.78rem',
+                  fontFamily: 'monospace'
+                }}>
+                  {t.avg.toFixed(2)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Card 2: Tutores em Destaque */}
+      <div style={{
+        backgroundColor: 'white',
+        borderRadius: '12px',
+        padding: '1.25rem',
+        border: `1px solid ${BRAND.green}`,
+        boxShadow: '0 4px 12px rgba(0, 152, 74, 0.08)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
+          <span style={{ fontSize: '1.2rem' }}>🌟</span>
+          <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: BRAND.green }}>
+            Tutores em Destaque (Ações &gt;= {avgObsVal.toFixed(1)})
+          </h3>
+        </div>
+        <p style={{ margin: '0 0 1rem 0', fontSize: '0.75rem', color: BRAND.slate600 }}>
+          Tutores com alto volume de acompanhamentos registrados e boas práticas.
+        </p>
+
+        {tutoresDestaque.length === 0 ? (
+          <div style={{ padding: '2rem', textAlign: 'center', color: BRAND.slate600, fontSize: '0.82rem' }}>
+            Nenhum tutor com volume superior à média.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+            {tutoresDestaque.map(t => (
+              <div
+                key={t.name}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '0.75rem',
+                  borderRadius: '8px',
+                  border: `1px solid ${BRAND.slate200}`,
+                  backgroundColor: BRAND.slate50
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '0.85rem', color: BRAND.slate800 }}>{t.name}</div>
+                  <div style={{ fontSize: '0.72rem', color: BRAND.slate600 }}>{t.totalObs} observações realizadas</div>
+                </div>
+                <span style={{
+                  backgroundColor: BRAND.green,
+                  color: 'white',
+                  padding: '0.2rem 0.6rem',
+                  borderRadius: '6px',
+                  fontWeight: 800,
+                  fontSize: '0.78rem',
+                  fontFamily: 'monospace'
+                }}>
+                  {t.avg.toFixed(2)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Card 3: Gargalos de Formação */}
+      <div style={{
+        backgroundColor: 'white',
+        borderRadius: '12px',
+        padding: '1.25rem',
+        border: `1px solid ${BRAND.red}`,
+        boxShadow: '0 4px 12px rgba(239, 68, 68, 0.08)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
+          <span style={{ fontSize: '1.2rem' }}>🔧</span>
+          <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: BRAND.red }}>
+            Gargalos de Formação (Média &lt; 2.0)
+          </h3>
+        </div>
+        <p style={{ margin: '0 0 1rem 0', fontSize: '0.75rem', color: BRAND.slate600 }}>
+          Critérios da rubrica com maior dificuldade geral nas sessões.
+        </p>
+
+        {gargalosFormacao.length === 0 ? (
+          <div style={{ padding: '2rem', textAlign: 'center', color: BRAND.slate600, fontSize: '0.82rem' }}>
+            Nenhum critério com média crítica.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+            {gargalosFormacao.map(c => (
+              <div
+                key={c.criterio}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '0.75rem',
+                  borderRadius: '8px',
+                  border: `1px solid ${BRAND.slate200}`,
+                  backgroundColor: BRAND.slate50
+                }}
+              >
+                <div style={{ maxWidth: '75%' }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.82rem', color: BRAND.slate800 }}>{c.criterio}</div>
+                  <div style={{ fontSize: '0.72rem', color: BRAND.slate600 }}>{c.total} avaliações</div>
+                </div>
+                <span style={{
+                  backgroundColor: BRAND.red,
+                  color: 'white',
+                  padding: '0.2rem 0.6rem',
+                  borderRadius: '6px',
+                  fontWeight: 800,
+                  fontSize: '0.78rem',
+                  fontFamily: 'monospace'
+                }}>
+                  {c.avg.toFixed(2)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// MODAL: DETALHE COMPLETO DA OBSERVAÇÃO (ObservationDetailModal)
+// ═══════════════════════════════════════════════════════════════════════
+function ObservationDetailModal({ obs, onClose }) {
+  if (!obs) return null;
+
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0, 29, 61, 0.65)',
+      backdropFilter: 'blur(4px)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '1rem',
+      zIndex: 9999
+    }}>
+      <div style={{
+        backgroundColor: 'white',
+        borderRadius: '16px',
+        maxWidth: '820px',
+        width: '100%',
+        maxHeight: '90vh',
+        overflowY: 'auto',
+        boxShadow: '0 20px 40px rgba(0,0,0,0.25)',
+        display: 'flex',
+        flexDirection: 'column'
+      }}>
+        {/* Cabeçalho do Modal */}
         <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.6)',
+          background: `linear-gradient(135deg, ${BRAND.primaryDark} 0%, ${BRAND.primary} 100%)`,
+          padding: '1.25rem 1.75rem',
+          color: 'white',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 99999,
-          padding: '1rem'
+          justifyContent: 'space-between',
+          borderTopLeftRadius: '16px',
+          borderTopRightRadius: '16px'
         }}>
+          <div>
+            <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.04em', opacity: 0.85 }}>
+              {obs.acaoAcompanhamento || 'Observação Formativa'}
+            </div>
+            <h2 style={{ margin: '0.2rem 0 0 0', fontSize: '1.25rem', fontWeight: 800 }}>
+              Detalhamento da Sessão · {obs.modalidade}
+            </h2>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            {typeof obs.avgScore === 'number' && (
+              <span style={{
+                backgroundColor: 'white',
+                color: BRAND.primaryDark,
+                padding: '0.3rem 0.8rem',
+                borderRadius: '8px',
+                fontWeight: 800,
+                fontSize: '0.9rem',
+                fontFamily: 'monospace'
+              }}>
+                Média {obs.avgScore.toFixed(2)}
+              </span>
+            )}
+            <button
+              onClick={onClose}
+              style={{
+                backgroundColor: 'rgba(255,255,255,0.2)',
+                color: 'white',
+                border: 'none',
+                width: '32px',
+                height: '32px',
+                borderRadius: '50%',
+                cursor: 'pointer',
+                fontSize: '1.1rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        {/* Corpo do Modal */}
+        <div style={{ padding: '1.5rem 1.75rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          
+          {/* Metadados e Participantes */}
           <div style={{
-            backgroundColor: 'white',
-            borderRadius: '12px',
-            width: '100%',
-            maxWidth: '750px',
-            maxHeight: '90vh',
-            display: 'flex',
-            flexDirection: 'column',
-            boxShadow: '0 20px 40px rgba(0,0,0,0.25)',
-            overflow: 'hidden'
+            backgroundColor: BRAND.slate50,
+            borderRadius: '10px',
+            padding: '1rem',
+            border: `1px solid ${BRAND.slate200}`,
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            gap: '0.75rem'
           }}>
-            {/* Header Modal */}
-            <div style={{
-              padding: '1.25rem 1.5rem',
-              background: 'linear-gradient(135deg, #002b7f 0%, #007a33 100%)',
-              color: 'white',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
-            }}>
-              <div>
-                <span style={{ fontSize: '0.75rem', background: 'rgba(255,255,255,0.2)', padding: '0.15rem 0.5rem', borderRadius: '4px', fontWeight: 700 }}>
-                  {selectedObs.acaoAcompanhamento}
-                </span>
-                <h3 style={{ margin: '0.35rem 0 0 0', fontSize: '1.25rem', fontWeight: 800 }}>
-                  {selectedObs.modalidade || selectedObs.acaoObservada}
-                </h3>
-              </div>
-              <button
-                onClick={() => setSelectedObs(null)}
-                style={{ background: 'none', border: 'none', color: 'white', fontSize: '1.4rem', cursor: 'pointer' }}
-              >
-                ✕
-              </button>
+            <div>
+              <div style={{ fontSize: '0.7rem', fontWeight: 700, color: BRAND.slate600, textTransform: 'uppercase' }}>Tutor Pedagógico</div>
+              <div style={{ fontSize: '0.92rem', fontWeight: 800, color: BRAND.slate800 }}>{obs.tutor}</div>
+              {obs.tutorEmail && <div style={{ fontSize: '0.75rem', color: BRAND.slate600 }}>{obs.tutorEmail}</div>}
             </div>
 
-            {/* Conteúdo com Scroll */}
-            <div style={{ padding: '1.5rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', backgroundColor: '#f8fafc', padding: '1rem', borderRadius: '8px' }}>
-                <div>
-                  <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 700 }}>TUTOR:</div>
-                  <div style={{ fontWeight: 800, color: '#002b7f' }}>{selectedObs.tutor}</div>
-                  <div style={{ fontSize: '0.8rem', color: '#64748b' }}>{selectedObs.tutorEmail}</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 700 }}>FORMADOR / TÉCNICO:</div>
-                  <div style={{ fontWeight: 800, color: '#007a33' }}>{selectedObs.formador}</div>
-                  <div style={{ fontSize: '0.8rem', color: '#64748b' }}>{selectedObs.formadorEmail}</div>
-                </div>
-              </div>
+            <div>
+              <div style={{ fontSize: '0.7rem', fontWeight: 700, color: BRAND.slate600, textTransform: 'uppercase' }}>Formador / Observador</div>
+              <div style={{ fontSize: '0.92rem', fontWeight: 800, color: BRAND.slate800 }}>{obs.formador}</div>
+              {obs.formadorEmail && <div style={{ fontSize: '0.75rem', color: BRAND.slate600 }}>{obs.formadorEmail}</div>}
+            </div>
 
-              {/* Rubricas */}
-              {Array.isArray(selectedObs.rubrics) && selectedObs.rubrics.length > 0 && (
-                <div>
-                  <h4 style={{ margin: '0 0 0.5rem 0', color: '#002b7f', fontWeight: 800 }}>
-                    Critérios & Rubricas Avaliadas:
-                  </h4>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                    {selectedObs.rubrics.map((r, i) => (
-                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0.75rem', backgroundColor: '#f8fafc', borderRadius: '6px', fontSize: '0.85rem' }}>
-                        <span style={{ color: '#334155', fontWeight: 600 }}>{r.criterio}</span>
+            <div>
+              <div style={{ fontSize: '0.7rem', fontWeight: 700, color: BRAND.slate600, textTransform: 'uppercase' }}>Local e Temática</div>
+              <div style={{ fontSize: '0.85rem', fontWeight: 600, color: BRAND.slate800 }}>📍 {obs.nre || 'NRE Geral'}</div>
+              <div style={{ fontSize: '0.75rem', color: BRAND.slate600 }}>📚 Tema: {obs.tema || '—'}</div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: '0.7rem', fontWeight: 700, color: BRAND.slate600, textTransform: 'uppercase' }}>Datas Registradas</div>
+              <div style={{ fontSize: '0.85rem', color: BRAND.slate800 }}>🗓️ Observação: <strong>{obs.dataObservacao || '—'}</strong></div>
+              <div style={{ fontSize: '0.75rem', color: BRAND.slate600 }}>💬 Feedback: <strong>{obs.dataFeedback || '—'}</strong></div>
+            </div>
+          </div>
+
+          {/* Critérios da Rubrica Avaliada */}
+          <div>
+            <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '0.95rem', fontWeight: 800, color: BRAND.primaryDark }}>
+              📊 Critérios da Rubrica Avaliada ({(obs.rubrics || []).length})
+            </h3>
+            <div style={{
+              borderRadius: '8px',
+              border: `1px solid ${BRAND.slate200}`,
+              overflow: 'hidden'
+            }}>
+              {(obs.rubrics || []).map((r, idx) => {
+                const c = classifyValue(r.value);
+                const bg = c === 'superou' ? BRAND.blueHighlight : c === 'atendeu' ? BRAND.green : c === 'parcial' ? BRAND.amber : c === 'nao' ? BRAND.red : BRAND.slate600;
+
+                return (
+                  <div
+                    key={idx}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '0.65rem 0.85rem',
+                      borderBottom: idx !== (obs.rubrics.length - 1) ? `1px solid ${BRAND.slate100}` : 'none',
+                      backgroundColor: idx % 2 === 0 ? 'white' : BRAND.slate50
+                    }}
+                  >
+                    <span style={{ fontSize: '0.82rem', fontWeight: 600, color: BRAND.slate800, maxWidth: '65%' }}>
+                      {r.criterio}
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span style={{ fontSize: '0.78rem', color: BRAND.slate600 }}>
+                        {r.value || 'Não registrado'}
+                      </span>
+                      {r.score !== null ? (
                         <span style={{
-                          backgroundColor: r.score === 3 ? 'rgba(0,43,127,0.1)' : r.score === 2 ? 'rgba(0,122,51,0.1)' : r.score === 1 ? 'rgba(245,158,11,0.1)' : 'rgba(198,40,40,0.1)',
-                          color: r.score === 3 ? '#002b7f' : r.score === 2 ? '#007a33' : r.score === 1 ? '#d97706' : '#c62828',
-                          fontWeight: 700,
+                          backgroundColor: bg,
+                          color: 'white',
+                          padding: '0.15rem 0.5rem',
+                          borderRadius: '4px',
                           fontSize: '0.75rem',
-                          padding: '0.15rem 0.45rem',
-                          borderRadius: '4px'
+                          fontWeight: 800,
+                          fontFamily: 'monospace'
                         }}>
-                          {r.value} ({r.score !== null ? r.score : '-'})
+                          {r.score.toFixed(1)}
                         </span>
-                      </div>
-                    ))}
+                      ) : (
+                        <span style={{ fontSize: '0.75rem', color: BRAND.slate600 }}>—</span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
-
-              {/* Destaques e A Desenvolver */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', padding: '0.9rem', borderRadius: '8px' }}>
-                  <div style={{ fontWeight: 800, color: '#166534', fontSize: '0.85rem', marginBottom: '0.35rem' }}>
-                    🌟 Habilidades de Destaque:
-                  </div>
-                  <div style={{ fontSize: '0.85rem', color: '#14532d', lineHeight: 1.5 }}>
-                    {selectedObs.destaques || 'Nenhum destaque específico registrado.'}
-                  </div>
-                </div>
-
-                <div style={{ backgroundColor: '#fffbeb', border: '1px solid #fde68a', padding: '0.9rem', borderRadius: '8px' }}>
-                  <div style={{ fontWeight: 800, color: '#b45309', fontSize: '0.85rem', marginBottom: '0.35rem' }}>
-                    🎯 A Desenvolver / Metas Formativas:
-                  </div>
-                  <div style={{ fontSize: '0.85rem', color: '#78350f', lineHeight: 1.5 }}>
-                    {selectedObs.desenvolver || 'Nenhum ponto registrado.'}
-                  </div>
-                </div>
-              </div>
-
-              {/* Encaminhamentos */}
-              {selectedObs.encaminhamentos && (
-                <div style={{ backgroundColor: '#f1f5f9', padding: '0.9rem', borderRadius: '8px' }}>
-                  <div style={{ fontWeight: 800, color: '#1e293b', fontSize: '0.85rem', marginBottom: '0.25rem' }}>
-                    📌 Próximos Passos & Encaminhamentos:
-                  </div>
-                  <div style={{ fontSize: '0.85rem', color: '#475569', lineHeight: 1.5 }}>
-                    {selectedObs.encaminhamentos}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Rodapé */}
-            <div style={{ padding: '0.75rem 1.5rem', backgroundColor: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end' }}>
-              <button
-                onClick={() => setSelectedObs(null)}
-                style={{ padding: '0.45rem 1.25rem', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: 'white', cursor: 'pointer', fontWeight: 700 }}
-              >
-                Fechar
-              </button>
+                );
+              })}
             </div>
           </div>
-        </div>
-      )}
 
-      {/* Modal: Inserir Nova Observação de Tutoria */}
-      {modalNovaObs && (
+          {/* Checklist Operacional */}
+          {(obs.checklistRealizadas || obs.checklistNaoRealizadas) && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.75rem' }}>
+              {obs.checklistRealizadas && (
+                <div style={{ backgroundColor: 'rgba(0, 152, 74, 0.05)', border: `1px solid ${BRAND.green}`, borderRadius: '8px', padding: '0.75rem' }}>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 800, color: BRAND.green, marginBottom: '0.25rem' }}>
+                    ✓ Checklist: Ações Realizadas
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: BRAND.slate800, lineHeight: 1.4 }}>
+                    {obs.checklistRealizadas}
+                  </div>
+                </div>
+              )}
+              {obs.checklistNaoRealizadas && (
+                <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.05)', border: `1px solid ${BRAND.red}`, borderRadius: '8px', padding: '0.75rem' }}>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 800, color: BRAND.red, marginBottom: '0.25rem' }}>
+                    ⚠️ Checklist: Ações Não Realizadas
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: BRAND.slate800, lineHeight: 1.4 }}>
+                    {obs.checklistNaoRealizadas}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Destaques, Pontos a Desenvolver e Encaminhamentos */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+            {obs.destaques && (
+              <div style={{ backgroundColor: BRAND.slate50, padding: '0.75rem', borderRadius: '8px', border: `1px solid ${BRAND.slate200}` }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 800, color: BRAND.green, display: 'block', marginBottom: '0.2rem' }}>
+                  🌟 Pontos de Destaque Identificados
+                </span>
+                <p style={{ margin: 0, fontSize: '0.82rem', color: BRAND.slate800, lineHeight: 1.4 }}>{obs.destaques}</p>
+              </div>
+            )}
+            {obs.desenvolver && (
+              <div style={{ backgroundColor: BRAND.slate50, padding: '0.75rem', borderRadius: '8px', border: `1px solid ${BRAND.slate200}` }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 800, color: BRAND.amber, display: 'block', marginBottom: '0.2rem' }}>
+                  🎯 Pontos a Desenvolver / Melhorias
+                </span>
+                <p style={{ margin: 0, fontSize: '0.82rem', color: BRAND.slate800, lineHeight: 1.4 }}>{obs.desenvolver}</p>
+              </div>
+            )}
+            {obs.encaminhamentos && (
+              <div style={{ backgroundColor: BRAND.slate50, padding: '0.75rem', borderRadius: '8px', border: `1px solid ${BRAND.slate200}` }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 800, color: BRAND.blueHighlight, display: 'block', marginBottom: '0.2rem' }}>
+                  📌 Encaminhamentos e Combinados
+                </span>
+                <p style={{ margin: 0, fontSize: '0.82rem', color: BRAND.slate800, lineHeight: 1.4 }}>{obs.encaminhamentos}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Links e Evidências Gravadas */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', paddingTop: '0.5rem', borderTop: `1px solid ${BRAND.slate100}` }}>
+            {obs.linkAcaoObservada && (
+              <a
+                href={obs.linkAcaoObservada}
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  backgroundColor: BRAND.primaryDark,
+                  color: 'white',
+                  padding: '0.5rem 0.85rem',
+                  borderRadius: '6px',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  textDecoration: 'none',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.4rem'
+                }}
+              >
+                📹 Link da Gravação da Ação ↗
+              </a>
+            )}
+            {obs.linkFeedback && (
+              <a
+                href={obs.linkFeedback}
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  backgroundColor: BRAND.green,
+                  color: 'white',
+                  padding: '0.5rem 0.85rem',
+                  borderRadius: '6px',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  textDecoration: 'none',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.4rem'
+                }}
+              >
+                💬 Link da Gravação do Feedback ↗
+              </a>
+            )}
+          </div>
+
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// MODAL: FORMULÁRIO DE NOVA OBSERVAÇÃO DE TUTORIA
+// ═══════════════════════════════════════════════════════════════════════
+function NovaObservacaoModal({ tutores, onClose, onSalvar }) {
+  const [acaoAcompanhamento, setAcaoAcompanhamento] = useState("Observação de Tutor pelo Técnico");
+  const [modalidade, setModalidade] = useState("Diálogo Formativo");
+  const [tutor, setTutor] = useState("");
+  const [tutorEmail, setTutorEmail] = useState("");
+  const [formador, setFormador] = useState("");
+  const [formadorEmail, setFormadorEmail] = useState("");
+  const [nre, setNre] = useState("NRE Curitiba");
+  const [tema, setTema] = useState("Gestão de Sala de Aula");
+  const [dataObservacao, setDataObservacao] = useState(new Date().toISOString().substring(0, 10));
+  const [linkAcaoObservada, setLinkAcaoObservada] = useState("");
+  const [dataFeedback, setDataFeedback] = useState(new Date().toISOString().substring(0, 10));
+  const [linkFeedback, setLinkFeedback] = useState("");
+  const [checklistRealizadas, setChecklistRealizadas] = useState("");
+  const [checklistNaoRealizadas, setChecklistNaoRealizadas] = useState("");
+  const [destaques, setDestaques] = useState("");
+  const [desenvolver, setDesenvolver] = useState("");
+  const [encaminhamentos, setEncaminhamentos] = useState("");
+
+  // Critérios da modalidade atual
+  const criterios = CRITERIOS_POR_MODALIDADE[modalidade] || [];
+  const [rubricasState, setRubricasState] = useState({});
+
+  const handleMudarRubrica = (crit, valor) => {
+    setRubricasState(prev => ({ ...prev, [crit]: valor }));
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!tutor.trim() || !formador.trim()) {
+      alert("Por favor, preencha o nome do Tutor e do Formador.");
+      return;
+    }
+
+    let somaScore = 0;
+    let countScore = 0;
+
+    const rubricsArray = criterios.map(crit => {
+      const val = rubricasState[crit] || "Atendeu integralmente";
+      let score = null;
+      if (val.includes("Superou")) score = 3;
+      else if (val.includes("Atendeu") && !val.includes("parcialmente")) score = 2;
+      else if (val.includes("parcialmente")) score = 1;
+      else if (val.includes("Não atendeu")) score = 0;
+
+      if (score !== null) {
+        somaScore += score;
+        countScore++;
+      }
+      return { criterio: crit, value: val, score };
+    });
+
+    const avgScore = countScore > 0 ? parseFloat((somaScore / countScore).toFixed(2)) : 2.0;
+
+    const nova = {
+      acaoAcompanhamento,
+      modalidade,
+      tutor,
+      tutorEmail,
+      formador,
+      formadorEmail,
+      nre,
+      tema,
+      dataObservacao,
+      linkAcaoObservada,
+      dataFeedback,
+      linkFeedback,
+      checklistRealizadas,
+      checklistNaoRealizadas,
+      destaques,
+      desenvolver,
+      encaminhamentos,
+      rubrics: rubricsArray,
+      avgScore
+    };
+
+    onSalvar(nova);
+  };
+
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0, 29, 61, 0.65)',
+      backdropFilter: 'blur(4px)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '1rem',
+      zIndex: 9999
+    }}>
+      <div style={{
+        backgroundColor: 'white',
+        borderRadius: '16px',
+        maxWidth: '780px',
+        width: '100%',
+        maxHeight: '90vh',
+        overflowY: 'auto',
+        boxShadow: '0 20px 40px rgba(0,0,0,0.25)',
+        display: 'flex',
+        flexDirection: 'column'
+      }}>
         <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.6)',
+          background: `linear-gradient(135deg, ${BRAND.primaryDark} 0%, ${BRAND.primary} 100%)`,
+          padding: '1.25rem 1.75rem',
+          color: 'white',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 99999,
-          padding: '1rem'
+          justifyContent: 'space-between',
+          borderTopLeftRadius: '16px',
+          borderTopRightRadius: '16px'
         }}>
-          <div style={{
-            backgroundColor: 'white',
-            borderRadius: '12px',
-            width: '100%',
-            maxWidth: '700px',
-            maxHeight: '90vh',
-            display: 'flex',
-            flexDirection: 'column',
-            boxShadow: '0 20px 40px rgba(0,0,0,0.25)',
-            overflow: 'hidden'
-          }}>
-            <div style={{
-              padding: '1.25rem 1.5rem',
-              background: 'linear-gradient(135deg, #007a33 0%, #002b7f 100%)',
+          <div>
+            <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.04em', opacity: 0.85 }}>
+              Registro Pedagógico Oficial
+            </div>
+            <h2 style={{ margin: '0.2rem 0 0 0', fontSize: '1.2rem', fontWeight: 800 }}>
+              Nova Observação de Tutoria
+            </h2>
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              backgroundColor: 'rgba(255,255,255,0.2)',
               color: 'white',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
-            }}>
-              <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>
-                ➕ Nova Observação de Tutoria
-              </h3>
-              <button
-                onClick={() => setModalNovaObs(false)}
-                style={{ background: 'none', border: 'none', color: 'white', fontSize: '1.4rem', cursor: 'pointer' }}
+              border: 'none',
+              width: '32px',
+              height: '32px',
+              borderRadius: '50%',
+              cursor: 'pointer',
+              fontSize: '1.1rem'
+            }}
+          >
+            ✕
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} style={{ padding: '1.5rem 1.75rem', display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
+          
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: BRAND.slate600, marginBottom: '0.25rem' }}>
+                AÇÃO DE ACOMPANHAMENTO
+              </label>
+              <select
+                value={acaoAcompanhamento}
+                onChange={e => setAcaoAcompanhamento(e.target.value)}
+                style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: `1px solid ${BRAND.slate200}`, fontSize: '0.82rem' }}
               >
-                ✕
-              </button>
+                <option value="Observação de Tutor pelo Técnico">Observação de Tutor pelo Técnico</option>
+                <option value="Observação do Formador pelo Tutor">Observação do Formador pelo Tutor</option>
+              </select>
             </div>
 
-            <form onSubmit={handleSalvarNova} style={{ padding: '1.5rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '0.2rem' }}>
-                    Ação de Acompanhamento:
-                  </label>
-                  <select
-                    value={formNova.acaoAcompanhamento}
-                    onChange={e => setFormNova({ ...formNova, acaoAcompanhamento: e.target.value })}
-                    style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
-                  >
-                    <option value="Observação do Formador pelo Tutor">Observação do Formador pelo Tutor</option>
-                    <option value="Observação de Tutor pelo Técnico">Observação de Tutor pelo Técnico</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '0.2rem' }}>
-                    Modalidade Formativa:
-                  </label>
-                  <select
-                    value={formNova.acaoObservada}
-                    onChange={e => setFormNova({ ...formNova, acaoObservada: e.target.value })}
-                    style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
-                  >
-                    <option value="Diálogo Formativo">Diálogo Formativo (10 Critérios)</option>
-                    <option value="Devolutiva">Devolutiva Formativa (6 Critérios)</option>
-                    <option value="Encontro Formativo">Encontro Formativo (7 Critérios)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '0.2rem' }}>
-                    Nome do Tutor:
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ex: Ana Silva"
-                    value={formNova.tutor}
-                    onChange={e => setFormNova({ ...formNova, tutor: e.target.value })}
-                    style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '0.2rem' }}>
-                    Nome do Formador / Avaliado:
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ex: Carlos Formador"
-                    value={formNova.formador}
-                    onChange={e => setFormNova({ ...formNova, formador: e.target.value })}
-                    style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '0.2rem' }}>
-                  NRE:
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ex: NRE Curitiba"
-                  value={formNova.nre}
-                  onChange={e => setFormNova({ ...formNova, nre: e.target.value })}
-                  style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
-                />
-              </div>
-
-              {/* Rubricas dinâmicas da modalidade selecionada */}
-              <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '0.75rem' }}>
-                <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#002b7f' }}>
-                  Rubricas Oficiais: {formNova.acaoObservada}
-                </span>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem' }}>
-                  {(CRITERIOS_POR_MODALIDADE[formNova.acaoObservada] || []).map(crit => (
-                    <div key={crit} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.82rem' }}>
-                      <span style={{ color: '#334155', fontWeight: 600 }}>{crit}</span>
-                      <select
-                        value={formNova.notas[crit] || 'Atendeu integralmente'}
-                        onChange={e => setFormNova({
-                          ...formNova,
-                          notas: { ...formNova.notas, [crit]: e.target.value }
-                        })}
-                        style={{ padding: '0.3rem', borderRadius: '4px', border: '1px solid #cbd5e1', fontSize: '0.8rem' }}
-                      >
-                        <option value="Superou">Superou (3.0)</option>
-                        <option value="Atendeu integralmente">Atendeu integralmente (2.0)</option>
-                        <option value="Atendeu parcialmente">Atendeu parcialmente (1.0)</option>
-                        <option value="Não atendeu">Não atendeu (0.0)</option>
-                      </select>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '0.2rem' }}>
-                  Habilidades de Destaque:
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder="Pontos fortes observados durante a ação..."
-                  value={formNova.destaques}
-                  onChange={e => setFormNova({ ...formNova, destaques: e.target.value })}
-                  style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '0.2rem' }}>
-                  Pontos a Desenvolver & Encaminhamentos:
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder="Orientações e combinados para a próxima ação..."
-                  value={formNova.desenvolver}
-                  onChange={e => setFormNova({ ...formNova, desenvolver: e.target.value })}
-                  style={{ width: '100%', padding: '0.45rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
-                <button
-                  type="button"
-                  onClick={() => setModalNovaObs(false)}
-                  style={{ padding: '0.5rem 1rem', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: 'white', cursor: 'pointer', fontWeight: 600 }}
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  style={{ padding: '0.5rem 1.25rem', borderRadius: '6px', border: 'none', backgroundColor: '#007a33', color: 'white', cursor: 'pointer', fontWeight: 700 }}
-                >
-                  Salvar Observação de Tutoria
-                </button>
-              </div>
-            </form>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: BRAND.slate600, marginBottom: '0.25rem' }}>
+                FORMATO / SESSÃO
+              </label>
+              <select
+                value={modalidade}
+                onChange={e => setModalidade(e.target.value)}
+                style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: `1px solid ${BRAND.slate200}`, fontSize: '0.82rem' }}
+              >
+                {MODALIDADES_TUTORIA.map(m => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            </div>
           </div>
-        </div>
-      )}
 
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: BRAND.slate600, marginBottom: '0.25rem' }}>
+                NOME DO TUTOR *
+              </label>
+              <input
+                type="text"
+                required
+                value={tutor}
+                onChange={e => setTutor(e.target.value)}
+                placeholder="Ex: Ana Silva"
+                style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: `1px solid ${BRAND.slate200}`, fontSize: '0.82rem' }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: BRAND.slate600, marginBottom: '0.25rem' }}>
+                E-MAIL DO TUTOR
+              </label>
+              <input
+                type="email"
+                value={tutorEmail}
+                onChange={e => setTutorEmail(e.target.value)}
+                placeholder="Ex: ana.silva@escola.pr.gov.br"
+                style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: `1px solid ${BRAND.slate200}`, fontSize: '0.82rem' }}
+              />
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: BRAND.slate600, marginBottom: '0.25rem' }}>
+                FORMADOR / OBSERVADOR *
+              </label>
+              <input
+                type="text"
+                required
+                value={formador}
+                onChange={e => setFormador(e.target.value)}
+                placeholder="Ex: Carlos Formador"
+                style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: `1px solid ${BRAND.slate200}`, fontSize: '0.82rem' }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: BRAND.slate600, marginBottom: '0.25rem' }}>
+                E-MAIL DO FORMADOR
+              </label>
+              <input
+                type="email"
+                value={formadorEmail}
+                onChange={e => setFormadorEmail(e.target.value)}
+                placeholder="Ex: carlos@escola.pr.gov.br"
+                style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: `1px solid ${BRAND.slate200}`, fontSize: '0.82rem' }}
+              />
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: BRAND.slate600, marginBottom: '0.25rem' }}>
+                NÚCLEO REGIONAL (NRE)
+              </label>
+              <input
+                type="text"
+                value={nre}
+                onChange={e => setNre(e.target.value)}
+                placeholder="Ex: NRE Curitiba"
+                style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: `1px solid ${BRAND.slate200}`, fontSize: '0.82rem' }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: BRAND.slate600, marginBottom: '0.25rem' }}>
+                TEMÁTICA PEDAGÓGICA
+              </label>
+              <input
+                type="text"
+                value={tema}
+                onChange={e => setTema(e.target.value)}
+                placeholder="Ex: Gestão de Sala de Aula"
+                style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: `1px solid ${BRAND.slate200}`, fontSize: '0.82rem' }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: BRAND.slate600, marginBottom: '0.25rem' }}>
+                DATA DA OBSERVAÇÃO
+              </label>
+              <input
+                type="date"
+                value={dataObservacao}
+                onChange={e => setDataObservacao(e.target.value)}
+                style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: `1px solid ${BRAND.slate200}`, fontSize: '0.82rem' }}
+              />
+            </div>
+          </div>
+
+          {/* Critérios da Rubrica */}
+          <div style={{ borderTop: `1px solid ${BRAND.slate200}`, paddingTop: '0.85rem' }}>
+            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 800, color: BRAND.primaryDark, marginBottom: '0.5rem' }}>
+              Rubrica de Avaliação ({modalidade})
+            </label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              {criterios.map((crit, idx) => (
+                <div key={crit} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', padding: '0.4rem 0', borderBottom: `1px solid ${BRAND.slate100}` }}>
+                  <span style={{ fontSize: '0.8rem', color: BRAND.slate800, fontWeight: 500 }}>{crit}</span>
+                  <select
+                    value={rubricasState[crit] || "Atendeu integralmente"}
+                    onChange={e => handleMudarRubrica(crit, e.target.value)}
+                    style={{ padding: '0.35rem 0.6rem', borderRadius: '4px', border: `1px solid ${BRAND.slate200}`, fontSize: '0.78rem' }}
+                  >
+                    <option value="Superou">Superou (3.0)</option>
+                    <option value="Atendeu integralmente">Atendeu integralmente (2.0)</option>
+                    <option value="Atendeu parcialmente">Atendeu parcialmente (1.0)</option>
+                    <option value="Não atendeu">Não atendeu (0.0)</option>
+                    <option value="Não observado">Não observado (—)</option>
+                  </select>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Destaques e Encaminhamentos */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: BRAND.slate600, marginBottom: '0.2rem' }}>
+                PONTOS DE DESTAQUE
+              </label>
+              <textarea
+                rows={2}
+                value={destaques}
+                onChange={e => setDestaques(e.target.value)}
+                placeholder="Acolhimento, domínio do conteúdo, escuta ativa..."
+                style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: `1px solid ${BRAND.slate200}`, fontSize: '0.82rem' }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: BRAND.slate600, marginBottom: '0.2rem' }}>
+                PONTOS A DESENVOLVER
+              </label>
+              <textarea
+                rows={2}
+                value={desenvolver}
+                onChange={e => setDesenvolver(e.target.value)}
+                placeholder="Sugestão de literatura teórica, gestão do tempo..."
+                style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: `1px solid ${BRAND.slate200}`, fontSize: '0.82rem' }}
+              />
+            </div>
+          </div>
+
+          {/* Botões do Rodapé */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                backgroundColor: BRAND.slate100,
+                color: BRAND.slate800,
+                border: 'none',
+                padding: '0.65rem 1.25rem',
+                borderRadius: '8px',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              style={{
+                backgroundColor: BRAND.primaryDark,
+                color: 'white',
+                border: 'none',
+                padding: '0.65rem 1.4rem',
+                borderRadius: '8px',
+                fontSize: '0.85rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(0, 29, 61, 0.25)'
+              }}
+            >
+              Salvar Observação
+            </button>
+          </div>
+
+        </form>
+      </div>
     </div>
   );
 }

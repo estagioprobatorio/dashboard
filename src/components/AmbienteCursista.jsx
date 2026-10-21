@@ -4,6 +4,8 @@ import TurmaModal from './TurmaModal';
 import ObservacaoModalDetalhes from './ObservacaoModalDetalhes';
 import DossieCursistaModal from './DossieCursistaModal';
 import CurvaEvolucaoPedagogica from './CurvaEvolucaoPedagogica';
+import RadarCompetenciasCursista from './RadarCompetenciasCursista';
+import IntencaoMatricula2027 from './IntencaoMatricula2027';
 import { formatDatePtBr } from '../utils/dateUtils';
 import { getObservacoes2024PorCursista } from '../utils/observacoes2024Service';
 import { gerarDiagnosticoCursistaIA, parseScore, scoreLabel, getNivelInfo, normalizeString } from '../utils/aiPedagogicalService';
@@ -408,6 +410,25 @@ export default function AmbienteCursista({ userEmail, records, observacoes = [],
           }}
         >
           📝 Suas Solicitações & Movimentações
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('matricula2027')}
+          style={{
+            flex: 1,
+            minWidth: '170px',
+            padding: '0.6rem 1rem',
+            borderRadius: '8px',
+            border: 'none',
+            fontWeight: 700,
+            fontSize: '0.88rem',
+            cursor: 'pointer',
+            backgroundColor: activeSubTab === 'matricula2027' ? '#007a33' : 'transparent',
+            color: activeSubTab === 'matricula2027' ? '#ffffff' : 'var(--color-text-muted)',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          📅 Intenção 2027
         </button>
       </div>
 
@@ -856,6 +877,9 @@ export default function AmbienteCursista({ userEmail, records, observacoes = [],
                 />
               </div>
 
+              {/* Card 1.5: Radar de Competências Docentes do Cursista */}
+              <RadarCompetenciasCursista observacoes={minhasObservacoes} />
+
               {/* Card 2: Diagnóstico Pedagógico IA */}
               {diagnosticoIA && (
                 <div className="glass-panel" style={{ background: '#ffffff', padding: '1.25rem', borderRadius: '14px', border: '1px solid var(--color-card-border)', borderTop: '4px solid #0072bc', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
@@ -1084,6 +1108,15 @@ export default function AmbienteCursista({ userEmail, records, observacoes = [],
             })
           )}
         </div>
+      )}
+
+      {/* BLOCO 4: INTENÇÃO DE MATRÍCULA 2027 */}
+      {activeSubTab === 'matricula2027' && (
+        <IntencaoMatricula2027
+          cursista={cursistaRecord}
+          records={records}
+          userEmail={userEmail}
+        />
       )}
 
       {/* Modal Formulário */}

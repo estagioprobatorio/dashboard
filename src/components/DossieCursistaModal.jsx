@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { formatDatePtBr, parseDateToTimestamp } from '../utils/dateUtils';
 import FormularioInserirObservacao from './FormularioInserirObservacao';
 import CurvaEvolucaoPedagogica from './CurvaEvolucaoPedagogica';
+import HistoricoTurmasCursista from './HistoricoTurmasCursista';
 import { getObservacoes2024PorCursista } from '../utils/observacoes2024Service';
 import { parseScore, scoreLabel, gerarDiagnosticoCursistaIA, getNivelInfo, normalizeString } from '../utils/aiPedagogicalService';
 
@@ -258,6 +259,9 @@ export default function DossieCursistaModal({
         {/* Corpo com Scroll */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', backgroundColor: '#f8fafc' }}>
           
+          {/* HISTÓRICO DE TURMAS (somente Admin e Técnico) */}
+          <HistoricoTurmasCursista cursista={cursista} turmaAtual={turmaInfo?.turma} />
+
           {/* CARDS DE KPIS */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '1rem' }}>
             

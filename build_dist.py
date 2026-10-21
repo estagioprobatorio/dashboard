@@ -39,6 +39,9 @@ cmd = [
     "--loader:.png=file",
     "--loader:.jpg=file",
     "--loader:.css=css",
+    "--external:/*.png",
+    "--external:/*.svg",
+    "--external:/*.jpg",
     "--jsx=automatic",
     "--minify",
     "--target=es2020",
@@ -75,6 +78,18 @@ if os.path.exists(public_dir):
         dst_f = os.path.join(DIST_DIR, f)
         if os.path.isfile(src_f):
             shutil.copy2(src_f, dst_f)
+
+# Atualiza dist/index.html apontando para os novos arquivos JS e CSS
+index_html = os.path.join(DIST_DIR, "index.html")
+if os.path.exists(index_html):
+    with open(index_html, "r", encoding="utf-8") as f:
+        html = f.read()
+    import re
+    html = re.sub(r'/assets/index-[^"]+\.js', f'/assets/{os.path.basename(out_js)}', html)
+    html = re.sub(r'/assets/index-[^"]+\.css', f'/assets/{os.path.basename(out_css)}', html)
+    with open(index_html, "w", encoding="utf-8") as f:
+        f.write(html)
+    print("dist/index.html atualizado com os novos hashes JS/CSS!")
 
 print(f"\nDist atualizado com sucesso a partir do GitHub!")
 print(f"Arquivo JS gerado: {out_js} ({os.path.getsize(out_js)} bytes)")

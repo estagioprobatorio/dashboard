@@ -45,25 +45,19 @@ export default function CentralDocumentos({ userRole }) {
           </p>
         </div>
 
-        <button
-          onClick={() => window.print()}
-          style={{
-            backgroundColor: 'white',
-            color: '#002b7f',
-            border: 'none',
-            padding: '0.6rem 1.2rem',
-            borderRadius: '8px',
-            fontWeight: 700,
-            fontSize: '0.85rem',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
-          }}
-        >
-          🖨️ Imprimir Documento
-        </button>
+        <div style={{
+          backgroundColor: 'rgba(255,255,255,0.2)',
+          color: 'white',
+          padding: '0.5rem 1rem',
+          borderRadius: '8px',
+          fontWeight: 700,
+          fontSize: '0.82rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem'
+        }}>
+          <span>📌</span> Repositório Institucional
+        </div>
       </div>
 
       {/* Navegação Secundária da Central */}
@@ -386,77 +380,128 @@ export default function CentralDocumentos({ userRole }) {
                 Modelos de Formulários Oficiais do Estágio Probatório
               </h3>
               <p style={{ color: '#64748b', fontSize: '0.88rem', margin: '0.35rem 0 0 0' }}>
-                Modelos oficiais para visualização, impressão ou preenchimento manual em casos de contingência.
+                Os formulários serão disponibilizados diretamente via links institucionais integrados para preenchimento online.
               </p>
             </div>
 
+            {/* Aviso de Em Construção */}
+            <div style={{
+              backgroundColor: '#fffbeb',
+              border: '2px dashed #f59e0b',
+              borderRadius: '10px',
+              padding: '1.25rem',
+              marginBottom: '1.5rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '1rem',
+              color: '#92400e'
+            }}>
+              <span style={{ fontSize: '2rem' }}>🚧</span>
+              <div>
+                <h4 style={{ margin: '0 0 0.25rem 0', fontWeight: 800, fontSize: '1rem' }}>Páginas e Links em Construção</h4>
+                <p style={{ margin: 0, fontSize: '0.85rem', lineHeight: 1.5 }}>
+                  Os formulários eletrônicos oficiais não utilizam impressão. Os links digitais oficiais da SEED-PR estão sendo preparados com base nesses modelos estruturais e serão vinculados diretamente aqui em breve.
+                </p>
+              </div>
+            </div>
+
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1rem' }}>
-              <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '1.25rem', backgroundColor: '#fafafa' }}>
-                <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>📝</div>
-                <h4 style={{ margin: '0 0 0.25rem 0', color: '#1e293b', fontWeight: 700 }}>Ficha de Observação da Prática Docente</h4>
-                <p style={{ margin: '0 0 1rem 0', color: '#64748b', fontSize: '0.82rem' }}>
-                  Registro do Formador para acompanhamento de aula do professor cursista (Temas 1 a 7).
+              <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1.25rem', backgroundColor: '#fafafa', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <span style={{ fontSize: '1.5rem' }}>📝</span>
+                  <span style={{ backgroundColor: '#fef3c7', color: '#b45309', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 800 }}>
+                    EM CONSTRUÇÃO
+                  </span>
+                </div>
+                <h4 style={{ margin: '0 0 0.25rem 0', color: '#1e293b', fontWeight: 800 }}>Ficha de Observação da Prática Docente</h4>
+                <p style={{ margin: '0 0 1.25rem 0', color: '#64748b', fontSize: '0.82rem', flex: 1 }}>
+                  Instrumento digital oficial do Formador para acompanhamento e registro de aula do professor cursista (Temas 1 a 7).
                 </p>
                 <button
-                  onClick={() => window.print()}
+                  type="button"
+                  disabled
                   style={{
-                    backgroundColor: '#002b7f',
-                    color: 'white',
-                    border: 'none',
-                    padding: '0.45rem 0.9rem',
+                    backgroundColor: '#e2e8f0',
+                    color: '#64748b',
+                    border: '1px solid #cbd5e1',
+                    padding: '0.55rem 0.9rem',
                     borderRadius: '6px',
-                    fontSize: '0.8rem',
+                    fontSize: '0.82rem',
                     fontWeight: 700,
-                    cursor: 'pointer'
+                    cursor: 'not-allowed',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.4rem'
                   }}
                 >
-                  Imprimir Ficha Padrão
+                  🔗 Link do Formulário Online (Em Breve)
                 </button>
               </div>
 
-              <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '1.25rem', backgroundColor: '#fafafa' }}>
-                <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>🤝</div>
-                <h4 style={{ margin: '0 0 0.25rem 0', color: '#1e293b', fontWeight: 700 }}>Ficha de Diálogo e Devolutiva Formativa</h4>
-                <p style={{ margin: '0 0 1rem 0', color: '#64748b', fontSize: '0.82rem' }}>
-                  Roteiro de 10 a 20 minutos com acolhimento, análise de evidências e combinados com o docente.
+              <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1.25rem', backgroundColor: '#fafafa', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <span style={{ fontSize: '1.5rem' }}>🤝</span>
+                  <span style={{ backgroundColor: '#fef3c7', color: '#b45309', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 800 }}>
+                    EM CONSTRUÇÃO
+                  </span>
+                </div>
+                <h4 style={{ margin: '0 0 0.25rem 0', color: '#1e293b', fontWeight: 800 }}>Ficha de Diálogo e Devolutiva Formativa</h4>
+                <p style={{ margin: '0 0 1.25rem 0', color: '#64748b', fontSize: '0.82rem', flex: 1 }}>
+                  Roteiro formativo de devolutiva com acolhimento, análise de evidências e pactuação de combinados pedagógicos.
                 </p>
                 <button
-                  onClick={() => window.print()}
+                  type="button"
+                  disabled
                   style={{
-                    backgroundColor: '#007a33',
-                    color: 'white',
-                    border: 'none',
-                    padding: '0.45rem 0.9rem',
+                    backgroundColor: '#e2e8f0',
+                    color: '#64748b',
+                    border: '1px solid #cbd5e1',
+                    padding: '0.55rem 0.9rem',
                     borderRadius: '6px',
-                    fontSize: '0.8rem',
+                    fontSize: '0.82rem',
                     fontWeight: 700,
-                    cursor: 'pointer'
+                    cursor: 'not-allowed',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.4rem'
                   }}
                 >
-                  Imprimir Ficha Padrão
+                  🔗 Link do Formulário Online (Em Breve)
                 </button>
               </div>
 
-              <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '1.25rem', backgroundColor: '#fafafa' }}>
-                <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>🔄</div>
-                <h4 style={{ margin: '0 0 0.25rem 0', color: '#1e293b', fontWeight: 700 }}>Formulário de Remanejamento & Modalidade</h4>
-                <p style={{ margin: '0 0 1rem 0', color: '#64748b', fontSize: '0.82rem' }}>
-                  Requerimento padrão para solicitação de troca de turma, turno ou modalidade formativa.
+              <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1.25rem', backgroundColor: '#fafafa', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <span style={{ fontSize: '1.5rem' }}>🔄</span>
+                  <span style={{ backgroundColor: '#fef3c7', color: '#b45309', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 800 }}>
+                    EM CONSTRUÇÃO
+                  </span>
+                </div>
+                <h4 style={{ margin: '0 0 0.25rem 0', color: '#1e293b', fontWeight: 800 }}>Formulário de Remanejamento & Modalidade</h4>
+                <p style={{ margin: '0 0 1.25rem 0', color: '#64748b', fontSize: '0.82rem', flex: 1 }}>
+                  Requerimento padrão para solicitação e análise de alteração de turma, horário de aula ou modalidade formativa.
                 </p>
                 <button
-                  onClick={() => window.print()}
+                  type="button"
+                  disabled
                   style={{
-                    backgroundColor: '#d97706',
-                    color: 'white',
-                    border: 'none',
-                    padding: '0.45rem 0.9rem',
+                    backgroundColor: '#e2e8f0',
+                    color: '#64748b',
+                    border: '1px solid #cbd5e1',
+                    padding: '0.55rem 0.9rem',
                     borderRadius: '6px',
-                    fontSize: '0.8rem',
+                    fontSize: '0.82rem',
                     fontWeight: 700,
-                    cursor: 'pointer'
+                    cursor: 'not-allowed',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.4rem'
                   }}
                 >
-                  Imprimir Requerimento
+                  🔗 Link do Formulário Online (Em Breve)
                 </button>
               </div>
             </div>
