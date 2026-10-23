@@ -15,7 +15,9 @@ export const SUPERADMINS_TUTOR_INSIGHTS = [
   "mariangela.iurk@escola.pr.gov.br",
   "eliane.bruning@escola.pr.gov.br",
   "elianaprovenci@escola.pr.gov.br",
-  "elianaprovenci@escola.pr.gov.br"
+  "elianaprovenci@escola.pr.gov.br",
+  "chrystiankrone@escola.pr.gov.br",
+  "vinicius.prattes@escola.pr.gov.br"
 ];
 
 export const DEFAULT_ADMINS = [
