@@ -1,0 +1,27 @@
+{
+  "name": "novo-dashboard-estagio-probatorio",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "populate:tidb": "node popular_tidb.cjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.112.0",
+    "@tidbcloud/serverless": "^0.1.1",
+    "firebase": "^10.12.2",
+    "mysql2": "^3.24.6",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^3.10.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "vite": "^5.3.1"
+  }
+}

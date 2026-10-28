@@ -1,0 +1,965 @@
+import React, { useState, useMemo } from 'react';
+import { exportToCSV, printReportPDF, printEnsalamentoTurmasPDF } from '../utils/exportUtils';
+import ObservacaoModalDetalhes from './ObservacaoModalDetalhes';
+import DossieCursistaModal from './DossieCursistaModal';
+import observacoesFallback from '../observacoes_fallback.json';
+import { normalizeString } from '../utils/aiPedagogicalService';
+
+export default function ListaTurmas({ data, observacoes = [], userRole, onNovaObservacao }) {
+  const isAdmin = userRole === 'admin';
+
+  // Filtros de seleção e busca
+  const [tutorFilter, setTutorFilter] = useState('');
+  const [formadorFilter, setFormadorFilter] = useState('');
+  const [turmaSearch, setTurmaSearch] = useState('');
+
+  // Modal de Detalhes da Turma, Observação e Dossiê
+  const [selectedTurma, setSelectedTurma] = useState(null);
+  const [cursistaSearch, setCursistaSearch] = useState('');
+  const [selectedObs, setSelectedObs] = useState(null);
+  const [selectedCursistaDossie, setSelectedCursistaDossie] = useState(null);
+
+  // Paginação
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 12;
+
+  // Agrupar dados por TURMA única
+  const turmasList = useMemo(() => {
+    const map = new Map();
+
+    data.forEach(item => {
+      if (!item.turmas) return;
+      const turmaKey = item.turmas.trim();
+
+      if (!map.has(turmaKey)) {
+        map.set(turmaKey, {
+          turma: turmaKey,
+          turmas: turmaKey,
+          anoFormativo: item.ano_formativo || 'Não informado',
+          componente: item.componente || item.componente_conc || 'Não informado',
+          modalidade: item.modalidade || '',
+          turno: item.turno || '',
+          diaSemana: item.dia_da_semana || '',
+          horarioInicial: item.horario_inicial || '',
+          horarioFim: item.horario_fim || '',
+          formador: item.nome_formador || 'SEM FORMADOR',
+          emailFormador: item['e-mail_formador'] || item.e_mail_formador || item.email_formador || '',
+          tutor: item.tutor_responsavel || 'Não Atribuído',
+          emailTutor: item.email_tutor || '',
+          nreTutor: item.nre_tutor || '',
+          linkClassroom: item['Link Classroom'] || item.link || item.link || '',
+          idClassroom: item.id_classroom || item.id_classroom || '',
+          cursistas: []
+        });
+      }
+
+      // Adicionar cursista à lista da turma
+      const record = map.get(turmaKey);
+      record.cursistas.push({
+        nome: item.nome_cursista || 'NÃO INFORMADO',
+        email: item['e-mail'] || item.email || item.email_cursista || '',
+        cgm: item.cgm || '',
+        rg: item.rg || '',
+        municipios: item.munic_exe || item.municipios || '',
+        telefone: item.telefone_cursista || '',
+        ano_formativo: item.ano_formativo || record.anoFormativo || '',
+        componente: item.componente || record.componente || '',
+        turma: turmaKey
+      });
+    });
+
+    // Ordena cursistas de cada turma por nome
+    map.forEach(record => {
+      record.cursistas.sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR', { sensitivity: 'base' }));
+    });
+
+    return Array.from(map.values()).sort((a, b) => (a.turma || '').localeCompare(b.turma || '', 'pt-BR', { sensitivity: 'base' }));
+  }, [data]);
+
+  // Obter listas únicas para popular os seletores dos Filtros (Filtro cascateado: Tutor -> Formadores)
+  const filterOptions = useMemo(() => {
+    const tutoresSet = new Set();
+    const formadoresSet = new Set();
+
+    turmasList.forEach(item => {
+      if (item.tutor && item.tutor !== 'Não Atribuído') {
+        tutoresSet.add(item.tutor);
+      }
+      // Se um tutor estiver selecionado, exibe apenas os formadores que possuem turmas com esse tutor
+      if (!tutorFilter || item.tutor === tutorFilter) {
+        if (item.formador && item.formador !== 'SEM FORMADOR') {
+          formadoresSet.add(item.formador);
+        }
+      }
+    });
+
+    const sortPtBR = (arr) => Array.from(arr).sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
+
+    return {
+      tutores: sortPtBR(tutoresSet),
+      formadores: sortPtBR(formadoresSet)
+    };
+  }, [turmasList, tutorFilter]);
+
+  // Aplicar filtros com tratamento seguro contra nulos e ordenação alfabética
+  const filteredTurmas = useMemo(() => {
+    setCurrentPage(1); // Reseta para a primeira página ao alterar o filtro
+    return turmasList.filter(item => {
+      if (tutorFilter && (item.tutor || '') !== tutorFilter) return false;
+      if (formadorFilter && (item.formador || '') !== formadorFilter) return false;
+      if (turmaSearch) {
+        const query = turmaSearch.trim().toLowerCase();
+        const turmaMatch = String(item.turma || item.turmas || '').toLowerCase().includes(query);
+        const compMatch = String(item.componente || '').toLowerCase().includes(query);
+        const formadorMatch = String(item.formador || '').toLowerCase().includes(query);
+        if (!turmaMatch && !compMatch && !formadorMatch) return false;
+      }
+      return true;
+    }).sort((a, b) => (a.turma || '').localeCompare(b.turma || '', 'pt-BR', { sensitivity: 'base' }));
+  }, [turmasList, tutorFilter, formadorFilter, turmaSearch]);
+
+  // Turmas da página atual
+  const paginatedTurmas = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredTurmas.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredTurmas, currentPage]);
+
+  const totalPages = Math.max(Math.ceil(filteredTurmas.length / itemsPerPage), 1);
+
+  // Limpar filtros
+  const handleClearFilters = () => {
+    setTutorFilter('');
+    setFormadorFilter('');
+    setTurmaSearch('');
+  };
+
+  // Cursistas filtrados dentro do Modal de Detalhes (ordenados alfabeticamente)
+  const filteredCursistasInModal = useMemo(() => {
+    if (!selectedTurma) return [];
+    const list = cursistaSearch
+      ? selectedTurma.cursistas.filter(c => 
+          c.nome.toLowerCase().includes(cursistaSearch.toLowerCase()) || 
+          c.email.toLowerCase().includes(cursistaSearch.toLowerCase()) || 
+          c.cgm.includes(cursistaSearch)
+        )
+      : selectedTurma.cursistas;
+    return [...list].sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR', { sensitivity: 'base' }));
+  }, [selectedTurma, cursistaSearch]);
+
+  // Observações efetivas (com fallback)
+  const effectiveObservacoes = useMemo(() => {
+    return (observacoes && observacoes.length > 0) ? observacoes : (observacoesFallback || []);
+  }, [observacoes]);
+
+  // Mapeamentos rápidos de observações por e-mail institucional e por nome do cursista
+  const obsMap = useMemo(() => {
+    const byEmail = new Map();
+    const byNome = new Map();
+
+    effectiveObservacoes.forEach(o => {
+      const email = (o.email_cursista || '').trim().toLowerCase();
+      if (email) {
+        if (!byEmail.has(email)) byEmail.set(email, []);
+        byEmail.get(email).push(o);
+      }
+      const nomeNorm = normalizeString(o.nome_cursista || '');
+      if (nomeNorm) {
+        if (!byNome.has(nomeNorm)) byNome.set(nomeNorm, []);
+        byNome.get(nomeNorm).push(o);
+      }
+    });
+
+    return { byEmail, byNome };
+  }, [effectiveObservacoes]);
+
+  const getObsForCursista = (cursista) => {
+    if (!cursista) return null;
+    const emailKey = (cursista.email || '').trim().toLowerCase();
+    if (emailKey && obsMap.byEmail.has(emailKey)) {
+      const list = obsMap.byEmail.get(emailKey);
+      return list[list.length - 1] || null;
+    }
+    const nomeNorm = normalizeString(cursista.nome || '');
+    if (nomeNorm && obsMap.byNome.has(nomeNorm)) {
+      const list = obsMap.byNome.get(nomeNorm);
+      return list[list.length - 1] || null;
+    }
+    return null;
+  };
+
+  const handleOpenObsDetails = (cursista, obs) => {
+    if (obs) {
+      setSelectedObs({
+        ...obs,
+        tutor_responsavel: obs.tutor_responsavel || selectedTurma?.tutor || 'Não atribuído',
+        nre_tutor: obs.nre_tutor || selectedTurma?.nreTutor || '',
+        componente: obs.componente || selectedTurma?.componente || '',
+        turma: obs.turma || selectedTurma?.turma || '',
+        munic_exe: obs.munic_exe || cursista.municipios || ''
+      });
+    } else {
+      setSelectedObs({
+        nome_cursista: cursista.nome,
+        email_cursista: cursista.email,
+        turma: selectedTurma?.turma || '',
+        componente: selectedTurma?.componente || '',
+        tutor_responsavel: selectedTurma?.tutor || 'Não atribuído',
+        nome_formador: selectedTurma?.formador || '',
+        email_formador: selectedTurma?.emailFormador || '',
+        is_realizada: false,
+        observacao_realizada: 'Não realizada / Pendente',
+        etapa: 'Observação Pendente',
+        tema: 'Ainda não registrado',
+        observacoes_gerais: 'Nenhuma observação da prática pedagógica registrada até o momento para este cursista.'
+      });
+    }
+  };
+
+  const totalObservadosNaTurma = useMemo(() => {
+    if (!selectedTurma || !selectedTurma.cursistas) return 0;
+    return selectedTurma.cursistas.filter(c => {
+      const obs = getObsForCursista(c);
+      return obs && (obs.is_realizada || String(obs.observacao_realizada || '').toLowerCase().includes('sim'));
+    }).length;
+  }, [selectedTurma, obsMap]);
+
+  const handleExportCSV = () => {
+    if (!filteredTurmas || !filteredTurmas.length) {
+      alert("Não há turmas para exportar.");
+      return;
+    }
+
+    const rows = [];
+    filteredTurmas.forEach(t => {
+      if (t.cursistas && t.cursistas.length > 0) {
+        t.cursistas.forEach((c, idx) => {
+          rows.push({
+            turma: t.turma || t.turmas || '',
+            componente: t.componente || '',
+            turno: t.turno || '',
+            diaSemana: t.diaSemana || '',
+            horarios: t.horarioInicial ? `${t.horarioInicial} às ${t.horarioFim}` : '',
+            formador: t.formador || '',
+            emailFormador: t.emailFormador || '',
+            tutor: t.tutor || '',
+            emailTutor: t.emailTutor || '',
+            nreTutor: t.nreTutor || '',
+            numeroAluno: idx + 1,
+            nomeCursista: c.nome || '',
+            emailCursista: c.email || '',
+            cgmCursista: c.cgm || '',
+            municipioCursista: c.municipios || '',
+            telefoneCursista: c.telefone || ''
+          });
+        });
+      } else {
+        rows.push({
+          turma: t.turma || t.turmas || '',
+          componente: t.componente || '',
+          turno: t.turno || '',
+          diaSemana: t.diaSemana || '',
+          horarios: t.horarioInicial ? `${t.horarioInicial} às ${t.horarioFim}` : '',
+          formador: t.formador || '',
+          emailFormador: t.emailFormador || '',
+          tutor: t.tutor || '',
+          emailTutor: t.emailTutor || '',
+          nreTutor: t.nreTutor || '',
+          numeroAluno: 0,
+          nomeCursista: 'Sem cursistas enturmados',
+          emailCursista: '',
+          cgmCursista: '',
+          municipioCursista: '',
+          telefoneCursista: ''
+        });
+      }
+    });
+
+    const fullColumns = [
+      { label: 'Turma', accessor: r => r.turma },
+      { label: 'Componente Curricular', accessor: r => r.componente },
+      { label: 'Turno', accessor: r => r.turno },
+      { label: 'Dia da Semana', accessor: r => r.diaSemana },
+      { label: 'Horário', accessor: r => r.horarios },
+      { label: 'Formador Responsável', accessor: r => r.formador },
+      { label: 'E-mail Formador', accessor: r => r.emailFormador },
+      { label: 'Tutor Responsável', accessor: r => r.tutor },
+      { label: 'E-mail Tutor', accessor: r => r.emailTutor },
+      { label: 'NRE', accessor: r => r.nreTutor },
+      { label: '# Cursista', accessor: r => r.numeroAluno },
+      { label: 'Nome Cursista', accessor: r => r.nomeCursista },
+      { label: 'E-mail Cursista', accessor: r => r.emailCursista },
+      { label: 'CGM Cursista', accessor: r => r.cgmCursista },
+      { label: 'Município Cursista', accessor: r => r.municipioCursista },
+      { label: 'Telefone Cursista', accessor: r => r.telefoneCursista }
+    ];
+
+    exportToCSV('Relatorio_Completo_Ensalamento_Turmas', fullColumns, rows);
+  };
+
+  const handlePrintPDF = () => {
+    const filters = [
+      tutorFilter && `Tutor: ${tutorFilter}`,
+      formadorFilter && `Formador: ${formadorFilter}`,
+      turmaSearch && `Busca: "${turmaSearch}"`
+    ].filter(Boolean).join(' | ') || 'Todas as Turmas';
+
+    printEnsalamentoTurmasPDF({
+      title: 'Relatório Oficial de Ensalamento - Fichas das Turmas e Cursistas',
+      subtitle: 'Secretaria de Estado da Educação do Paraná - SEED/PR',
+      turmas: filteredTurmas,
+      filterSummary: filters
+    });
+  };
+
+  return (
+    <div className="tab-content animate-fade-in" style={{ padding: '0.5rem 0' }}>
+      
+      {/* Banner da Seção */}
+      <div className="section-header" style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+        <div>
+          <h2 style={{ fontSize: '1.4rem', color: 'var(--color-primary-dark)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ fontSize: '1.5rem' }}>🏫</span> Ensalamento e Lista de Turmas
+          </h2>
+          <p style={{ fontSize: '0.88rem', color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>
+            Visualização e exportação do ensalamento de cursistas e formadores por turma, disciplina e turno.
+          </p>
+        </div>
+
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <button
+            onClick={handleExportCSV}
+            style={{
+              backgroundColor: '#0b3c5d',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '8px',
+              padding: '0.5rem 1rem',
+              fontSize: '0.82rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.4rem'
+            }}
+          >
+            <span>📊</span> Exportar Ensalamento (CSV)
+          </button>
+          
+          <button
+            onClick={handlePrintPDF}
+            style={{
+              backgroundColor: '#002d5c',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '8px',
+              padding: '0.5rem 1rem',
+              fontSize: '0.82rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.4rem'
+            }}
+          >
+            <span>📄</span> Imprimir Ensalamento (PDF)
+          </button>
+
+          <div className="kpi-card" style={{ padding: '0.5rem 1rem', minWidth: 'auto', background: 'white', borderRadius: '10px', boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '0.1rem' }}>
+            <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total de Turmas</span>
+            <span style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--color-primary-dark)', fontFamily: 'var(--font-header)' }}>{filteredTurmas.length}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Painel de Filtros */}
+      <div className="glass-panel" style={{ padding: '1.25rem', marginBottom: '1.5rem', borderRadius: '14px', background: 'white', border: '1px solid var(--color-card-border)', boxShadow: 'var(--shadow-sm)' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem', alignItems: 'flex-end' }}>
+          
+          {/* Filtro por Tutor */}
+          <div>
+            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-primary-dark)', marginBottom: '0.4rem' }}>
+              👤 Filtrar por Tutor Responsável:
+            </label>
+            <select
+              value={tutorFilter}
+              onChange={(e) => {
+                setTutorFilter(e.target.value);
+                setFormadorFilter('');
+              }}
+              style={{ width: '100%', padding: '0.65rem 0.8rem', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', fontSize: '0.88rem' }}
+            >
+              <option value="">-- Todos os Tutores ({filterOptions.tutores.length}) --</option>
+              {filterOptions.tutores.map(tutor => (
+                <option key={tutor} value={tutor}>{tutor}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Filtro por Formador */}
+          <div>
+            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-primary-dark)', marginBottom: '0.4rem' }}>
+              🎓 Filtrar por Formador:
+            </label>
+            <select
+              value={formadorFilter}
+              onChange={(e) => setFormadorFilter(e.target.value)}
+              style={{ width: '100%', padding: '0.65rem 0.8rem', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', fontSize: '0.88rem' }}
+            >
+              <option value="">-- Todos os Formadores ({filterOptions.formadores.length}) --</option>
+              {filterOptions.formadores.map(formador => (
+                <option key={formador} value={formador}>{formador}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Busca por Turma / Componente */}
+          <div>
+            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-primary-dark)', marginBottom: '0.4rem' }}>
+              🔍 Buscar por Nome da Turma / Componente:
+            </label>
+            <input
+              type="text"
+              placeholder="Ex: FORM-ARTE EST PROB I TARDE..."
+              value={turmaSearch}
+              onChange={(e) => setTurmaSearch(e.target.value)}
+              style={{ width: '100%', padding: '0.65rem 0.8rem', borderRadius: '8px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', fontSize: '0.88rem' }}
+            />
+          </div>
+
+          {/* Botão de Limpar */}
+          <div>
+            <button
+              onClick={handleClearFilters}
+              className="btn-secondary"
+              style={{ width: '100%', padding: '0.65rem', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
+            >
+              🧹 Limpar Filtros
+            </button>
+          </div>
+
+        </div>
+      </div>
+
+      {/* Grid de Cards de Turmas */}
+      {paginatedTurmas.length === 0 ? (
+        <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center', color: 'var(--color-text-muted)', background: 'white', borderRadius: '12px' }}>
+          <p style={{ fontSize: '1.1rem', fontWeight: 600 }}>Nenhuma turma encontrada com os filtros selecionados.</p>
+          <button onClick={handleClearFilters} className="btn-primary" style={{ marginTop: '1rem', padding: '0.6rem 1.2rem' }}>
+            Ver Todas as Turmas
+          </button>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '1.2rem' }}>
+          {paginatedTurmas.map((tItem) => (
+            <div
+              key={tItem.turma || tItem.turmas}
+              className="glass-panel"
+              onClick={() => { setSelectedTurma(tItem); setCursistaSearch(''); }}
+              style={{
+                background: 'white',
+                borderRadius: '14px',
+                padding: '1.25rem',
+                border: '1px solid var(--color-card-border)',
+                boxShadow: 'var(--shadow-sm)',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                display: 'flex',
+                flexDirection: 'column',
+                justify: 'space-between',
+                position: 'relative',
+                overflow: 'hidden'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-3px)';
+                e.currentTarget.style.boxShadow = 'var(--shadow-md)';
+                e.currentTarget.style.borderColor = 'var(--color-accent-blue)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
+                e.currentTarget.style.borderColor = 'var(--color-card-border)';
+              }}
+            >
+              {/* Header do Card */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                  <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '0.2rem 0.59rem', borderRadius: '6px', backgroundColor: tItem.turno === 'MANHA' ? '#e0f2fe' : tItem.turno === 'TARDE' ? '#fef3c7' : '#f3e8ff', color: tItem.turno === 'MANHA' ? '#0369a1' : tItem.turno === 'TARDE' ? '#b45309' : '#6b21a8', textTransform: 'uppercase' }}>
+                    {tItem.turno || 'GERAL'} • {tItem.anoFormativo}
+                  </span>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-accent-green)', backgroundColor: 'rgba(15, 155, 15, 0.1)', padding: '0.2rem 0.5rem', borderRadius: '6px' }}>
+                    👥 {tItem.cursistas.length} Cursistas
+                  </span>
+                </div>
+
+                <h3 style={{ fontSize: '1.05rem', color: 'var(--color-primary-dark)', marginBottom: '0.6rem', fontWeight: 800, lineHeight: 1.3 }}>
+                  {tItem.turma || tItem.turmas}
+                </h3>
+
+                <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', display: 'flex', flexDirection: 'column', gap: '0.35rem', marginBottom: '1rem' }}>
+                  <div>
+                    <strong style={{ color: 'var(--color-text-main)' }}>🎓 Formador:</strong> {tItem.formador}
+                  </div>
+                  <div>
+                    <strong style={{ color: 'var(--color-text-main)' }}>👤 Tutor:</strong> {tItem.tutor}
+                  </div>
+                  {tItem.diaSemana && (
+                    <div style={{ fontSize: '0.8rem', opacity: 0.9 }}>
+                      🗓️ {tItem.diaSemana} {tItem.horarioInicial ? `(${tItem.horarioInicial} - ${tItem.horarioFim})` : ''}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Botão de Ação */}
+              <div style={{ paddingTop: '0.75rem', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.78rem', color: 'var(--color-accent-blue)', fontWeight: 700 }}>
+                  Clique para ver cursistas ➔
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Controle de Paginação */}
+      {totalPages > 1 && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.75rem', marginTop: '2rem' }}>
+          <button
+            onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
+            disabled={currentPage === 1}
+            className="btn-secondary"
+            style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}
+          >
+            ◀ Anterior
+          </button>
+
+          <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text-muted)' }}>
+            Página <b style={{ color: 'var(--color-primary-dark)' }}>{currentPage}</b> de <b>{totalPages}</b>
+          </span>
+
+          <button
+            onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
+            disabled={currentPage === totalPages}
+            className="btn-secondary"
+            style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}
+          >
+            Próxima ▶
+          </button>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL DE DETALHES DA TURMA & LISTA DE CURSISTAS */}
+      {/* ======================================================== */}
+      {selectedTurma && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 29, 61, 0.65)',
+          backdropFilter: 'blur(5px)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000,
+          padding: '1.5rem'
+        }}>
+          <div className="animate-fade-in" style={{
+            background: 'white',
+            borderRadius: '16px',
+            width: '96%',
+            maxWidth: '1280px',
+            maxHeight: '92vh',
+            display: 'flex',
+            flexDirection: 'column',
+            boxShadow: 'var(--shadow-lg)',
+            overflow: 'hidden'
+          }}>
+            
+            {/* Modal Header */}
+            <div style={{
+              background: 'linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-primary-mid) 100%)',
+              color: 'white',
+              padding: '1.1rem 1.5rem',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <div>
+                <span style={{ fontSize: '0.75rem', backgroundColor: 'var(--color-accent-green)', color: 'white', padding: '0.2rem 0.6rem', borderRadius: '4px', textTransform: 'uppercase', fontWeight: 800 }}>
+                  🏫 {selectedTurma.turma || selectedTurma.turmas}
+                </span>
+                <h2 style={{ fontSize: '1.2rem', marginTop: '0.35rem', fontWeight: 700, color: '#f1f5f9', margin: '0.35rem 0 0 0' }}>
+                  {selectedTurma.componente} • {selectedTurma.anoFormativo} {selectedTurma.turno ? `(${selectedTurma.turno})` : ''}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedTurma(null)}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.15)',
+                  border: 'none',
+                  color: 'white',
+                  borderRadius: '50%',
+                  width: '32px',
+                  height: '32px',
+                  fontSize: '1rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.3)'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)'}
+                title="Fechar modal"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Content - Body com rolagem */}
+            <div style={{ padding: '1.5rem', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              
+              {/* Bloco de Informações da Turma, Formador e Tutor */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem' }}>
+                
+                {/* Formador */}
+                <div style={{ backgroundColor: '#f8fafc', padding: '1rem', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                  <h4 style={{ fontSize: '0.85rem', color: 'var(--color-primary-dark)', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    🎓 Formador Responsável
+                  </h4>
+                  <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--color-text-main)' }}>
+                    {selectedTurma.formador}
+                  </div>
+                  {selectedTurma.emailFormador ? (
+                    <div style={{ marginTop: '0.3rem', fontSize: '0.82rem' }}>
+                      <a href={`mailto:${selectedTurma.emailFormador}`} style={{ color: 'var(--color-accent-blue)', textDecoration: 'none', wordBreak: 'break-all' }}>
+                        ✉️ {selectedTurma.emailFormador}
+                      </a>
+                    </div>
+                  ) : (
+                    <span style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Sem e-mail cadastrado</span>
+                  )}
+                </div>
+
+                {/* Tutor */}
+                <div style={{ backgroundColor: '#f8fafc', padding: '1rem', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                  <h4 style={{ fontSize: '0.85rem', color: 'var(--color-primary-dark)', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    👤 Tutor Responsável
+                  </h4>
+                  <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--color-text-main)' }}>
+                    {selectedTurma.tutor}
+                  </div>
+                  {selectedTurma.emailTutor ? (
+                    <div style={{ marginTop: '0.3rem', fontSize: '0.82rem' }}>
+                      <a href={`mailto:${selectedTurma.emailTutor}`} style={{ color: 'var(--color-accent-blue)', textDecoration: 'none', wordBreak: 'break-all' }}>
+                        ✉️ {selectedTurma.emailTutor}
+                      </a>
+                    </div>
+                  ) : (
+                    <span style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Sem e-mail cadastrado</span>
+                  )}
+                  {selectedTurma.nreTutor && (
+                    <div style={{ marginTop: '0.2rem', fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
+                      📍 NRE: {selectedTurma.nreTutor}
+                    </div>
+                  )}
+                </div>
+
+                {/* Dados da Turma */}
+                <div style={{ backgroundColor: '#f8fafc', padding: '1rem', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                  <h4 style={{ fontSize: '0.85rem', color: 'var(--color-primary-dark)', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    📅 Horário & Sala
+                  </h4>
+                  <div style={{ fontSize: '0.85rem', color: 'var(--color-text-main)' }}>
+                    <b>Dia:</b> {selectedTurma.diaSemana || 'Não informado'}
+                  </div>
+                  <div style={{ fontSize: '0.85rem', color: 'var(--color-text-main)', marginTop: '0.2rem' }}>
+                    <b>Horário:</b> {selectedTurma.horarioInicial ? `${selectedTurma.horarioInicial} às ${selectedTurma.horarioFim}` : 'Não informado'}
+                  </div>
+                  {selectedTurma.linkClassroom && (
+                    <div style={{ marginTop: '0.5rem' }}>
+                      <a
+                        href={selectedTurma.linkClassroom}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          display: 'inline-block',
+                          backgroundColor: 'var(--color-accent-green)',
+                          color: 'white',
+                          padding: '0.3rem 0.7rem',
+                          borderRadius: '6px',
+                          fontSize: '0.78rem',
+                          fontWeight: 700,
+                          textDecoration: 'none'
+                        }}
+                      >
+                        🔗 Acessar Google Classroom
+                      </a>
+                    </div>
+                  )}
+                </div>
+
+              </div>
+
+              {/* Seção da Lista de Cursistas */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+                    <h3 style={{ fontSize: '1.1rem', color: 'var(--color-primary-dark)', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.4rem', margin: 0 }}>
+                      👥 Cursistas da Turma ({selectedTurma.cursistas.length})
+                    </h3>
+                    {!isAdmin && (
+                      <span className="logo-badge" style={{ backgroundColor: 'var(--color-accent-green)', color: 'white', fontSize: '0.78rem' }}>
+                        {selectedTurma.cursistas.filter(c => !!getObsForCursista(c)).length} de {selectedTurma.cursistas.length} com observação registrada
+                      </span>
+                    )}
+                  </div>
+                  
+                  {/* Busca rápida na lista de cursistas do modal */}
+                  <input
+                    type="text"
+                    placeholder="Filtrar aluno por nome ou e-mail..."
+                    value={cursistaSearch}
+                    onChange={(e) => setCursistaSearch(e.target.value)}
+                    style={{ padding: '0.45rem 0.8rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem', width: '260px' }}
+                  />
+                </div>
+
+                <div className="table-responsive" style={{ maxHeight: '420px', overflowY: 'auto', overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
+                  <table className="data-table" style={{ width: '100%', minWidth: isAdmin ? '700px' : '950px', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: 'var(--color-primary-dark)', color: 'white', textAlign: 'left', position: 'sticky', top: 0, zIndex: 10 }}>
+                        <th style={{ padding: '0.65rem 0.6rem', width: '40px', textAlign: 'center' }}>#</th>
+                        <th style={{ padding: '0.65rem 0.8rem', minWidth: '180px' }}>Nome do Cursista</th>
+                        <th style={{ padding: '0.65rem 0.8rem', minWidth: '200px' }}>E-mail Institucional</th>
+                        <th style={{ padding: '0.65rem 0.6rem', width: '100px', textAlign: 'center' }}>CGM</th>
+                        <th style={{ padding: '0.65rem 0.8rem', width: '130px' }}>Município</th>
+                        <th style={{ padding: '0.65rem 0.8rem', width: '120px', textAlign: 'center' }}>Telefone</th>
+                        {!isAdmin && (
+                          <>
+                            <th style={{ padding: '0.65rem 0.6rem', width: '110px', textAlign: 'center' }}>Status Obs.</th>
+                            <th style={{ padding: '0.65rem 0.6rem', minWidth: '170px', textAlign: 'center' }}>Gravações & Links</th>
+                            <th style={{ padding: '0.65rem 0.6rem', width: '90px', textAlign: 'center' }}>Dossiê & Obs</th>
+                          </>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredCursistasInModal.length === 0 ? (
+                        <tr>
+                          <td colSpan={isAdmin ? 6 : 9} style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--color-text-muted)' }}>
+                            Nenhum cursista encontrado.
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredCursistasInModal.map((c, idx) => {
+                          const obs = !isAdmin ? getObsForCursista(c) : null;
+                          const hasPratica = obs && obs.link_gravacao_pratica;
+                          const hasFeedback = obs && obs.link_gravacao_feedback;
+                          const hasPlanejamento = obs && (obs.link_planejamento || obs.link_pdp);
+
+                          return (
+                            <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#f8fafc', borderBottom: '1px solid #edf2f7' }}>
+                              <td style={{ padding: '0.6rem 0.6rem', fontWeight: 600, color: 'var(--color-text-muted)', textAlign: 'center' }}>{idx + 1}</td>
+                              <td style={{ padding: '0.6rem 0.8rem', fontWeight: 700, color: '#0f172a' }}>
+                                {c.nome}
+                              </td>
+                              <td style={{ padding: '0.6rem 0.8rem' }}>
+                                {c.email ? (
+                                  <a href={`mailto:${c.email}`} style={{ color: 'var(--color-accent-blue)', textDecoration: 'none', wordBreak: 'break-all' }}>
+                                    {c.email}
+                                  </a>
+                                ) : (
+                                  <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>-</span>
+                                )}
+                              </td>
+                              <td style={{ padding: '0.6rem 0.6rem', color: 'var(--color-text-muted)', textAlign: 'center', whiteSpace: 'nowrap' }}>{c.cgm || '-'}</td>
+                              <td style={{ padding: '0.6rem 0.8rem', color: 'var(--color-text-muted)' }}>{c.municipios || '-'}</td>
+                              <td style={{ padding: '0.6rem 0.8rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>{c.telefone || '-'}</td>
+                              {!isAdmin && (
+                                <>
+                                  <td style={{ padding: '0.6rem 0.6rem', textAlign: 'center' }}>
+                                    {obs ? (
+                                      <span style={{
+                                        display: 'inline-block',
+                                        backgroundColor: '#dcfce7',
+                                        color: '#15803d',
+                                        border: '1px solid #bbf7d0',
+                                        padding: '0.2rem 0.5rem',
+                                        borderRadius: '999px',
+                                        fontSize: '0.72rem',
+                                        fontWeight: 800,
+                                        whiteSpace: 'nowrap'
+                                      }}>
+                                        ● Observado
+                                      </span>
+                                    ) : (
+                                      <span style={{
+                                        display: 'inline-block',
+                                        backgroundColor: '#f1f5f9',
+                                        color: '#64748b',
+                                        border: '1px solid #e2e8f0',
+                                        padding: '0.2rem 0.5rem',
+                                        borderRadius: '999px',
+                                        fontSize: '0.72rem',
+                                        fontWeight: 600,
+                                        whiteSpace: 'nowrap'
+                                      }}>
+                                        Pendente
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td style={{ padding: '0.6rem 0.6rem', textAlign: 'center' }}>
+                                    <div style={{ display: 'flex', gap: '0.35rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+                                      {hasPratica && (
+                                        <a
+                                          href={obs.link_gravacao_pratica}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          title="Gravação da Prática Pedagógica"
+                                          style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '0.2rem',
+                                            backgroundColor: '#eff6ff',
+                                            color: '#1d4ed8',
+                                            border: '1px solid #bfdbfe',
+                                            padding: '0.25rem 0.45rem',
+                                            borderRadius: '6px',
+                                            fontSize: '0.72rem',
+                                            fontWeight: 700,
+                                            textDecoration: 'none',
+                                            whiteSpace: 'nowrap'
+                                          }}
+                                        >
+                                          🎥 Prática
+                                        </a>
+                                      )}
+                                      {hasFeedback && (
+                                        <a
+                                          href={obs.link_gravacao_feedback}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          title="Gravação do Feedback / Diálogo Formativo"
+                                          style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '0.2rem',
+                                            backgroundColor: '#fdf2f8',
+                                            color: '#be185d',
+                                            border: '1px solid #fbcfe8',
+                                            padding: '0.25rem 0.45rem',
+                                            borderRadius: '6px',
+                                            fontSize: '0.72rem',
+                                            fontWeight: 700,
+                                            textDecoration: 'none',
+                                            whiteSpace: 'nowrap'
+                                          }}
+                                        >
+                                          🗣️ Feedback
+                                        </a>
+                                      )}
+                                      {hasPlanejamento && (
+                                        <a
+                                          href={obs.link_planejamento || obs.link_pdp}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          title="Planejamento Pedagógico (PDP)"
+                                          style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '0.2rem',
+                                            backgroundColor: '#f0fdf4',
+                                            color: '#15803d',
+                                            border: '1px solid #bbf7d0',
+                                            padding: '0.25rem 0.45rem',
+                                            borderRadius: '6px',
+                                            fontSize: '0.72rem',
+                                            fontWeight: 700,
+                                            textDecoration: 'none',
+                                            whiteSpace: 'nowrap'
+                                          }}
+                                        >
+                                          📄 PDP
+                                        </a>
+                                      )}
+                                      {!hasPratica && !hasFeedback && !hasPlanejamento && (
+                                        <span style={{ color: '#94a3b8', fontSize: '0.75rem', fontStyle: 'italic' }}>Sem links</span>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td style={{ padding: '0.6rem 0.6rem', textAlign: 'center' }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenObsDetails(c, obs)}
+                                      title={`Ver detalhes de ${c.nome}`}
+                                      style={{
+                                        background: 'linear-gradient(135deg, rgba(11,60,93,0.1) 0%, rgba(15,107,173,0.15) 100%)',
+                                        border: '1px solid rgba(15,107,173,0.3)',
+                                        borderRadius: '6px',
+                                        cursor: 'pointer',
+                                        padding: '0.25rem 0.5rem',
+                                        fontSize: '0.9rem',
+                                        lineHeight: 1,
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center'
+                                      }}
+                                    >
+                                      👁️
+                                    </button>
+                                  </td>
+                                </>
+                              )}
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{ padding: '1rem 1.5rem', backgroundColor: '#f1f5f9', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setSelectedTurma(null)}
+                className="btn-secondary"
+                style={{ padding: '0.5rem 1.2rem', fontWeight: 600 }}
+              >
+                Fechar
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Detalhes da Observação da Prática */}
+      {selectedObs && (
+        <ObservacaoModalDetalhes
+          observacao={selectedObs}
+          onClose={() => setSelectedObs(null)}
+        />
+      )}
+
+      {/* Modal de Dossiê Pedagógico Completo do Cursista com Gráficos e Inserção de Observação */}
+      {selectedCursistaDossie && (
+        <DossieCursistaModal
+          cursista={selectedCursistaDossie}
+          turmaInfo={selectedTurma}
+          observacoes={effectiveObservacoes}
+          onClose={() => setSelectedCursistaDossie(null)}
+          onSaveObservacao={onNovaObservacao}
+        />
+      )}
+
+    </div>
+  );
+}
