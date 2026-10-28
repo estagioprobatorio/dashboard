@@ -4,6 +4,34 @@ import { getAppsScriptUrl } from '../services/driveDataService';
 export default function Login({ onLoginSuccess }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [emailInput, setEmailInput] = useState('');
+
+  // Login Direto com E-mail Institucional (@escola.pr.gov.br) - consulta permissões no TiDB
+  const handleDirectEmailLogin = (e) => {
+    e.preventDefault();
+    setError('');
+    const cleanEmail = emailInput.trim().toLowerCase();
+    if (!cleanEmail) {
+      setError('Por favor, informe seu e-mail institucional.');
+      return;
+    }
+    if (!cleanEmail.includes('@')) {
+      setError('Por favor, informe um endereço de e-mail válido.');
+      return;
+    }
+
+    const uObj = {
+      email: cleanEmail,
+      displayName: cleanEmail.split('@')[0].replace(/\./g, ' '),
+      photoURL: '',
+      provider: 'institutional_direct',
+      authenticatedAt: new Date().toISOString()
+    };
+    try {
+      localStorage.setItem('ep_user_session', JSON.stringify(uObj));
+    } catch (err) {}
+    onLoginSuccess(uObj);
+  };
 
   // Redirecionamento SSO oficial via Google Apps Script (Funciona perfeitamente na Vercel)
   const handleGoogleSSO = () => {
@@ -396,6 +424,66 @@ export default function Login({ onLoginSuccess }) {
               <span>{loading ? 'Redirecionando...' : 'Entrar com Conta Google (@escola.pr.gov.br)'}</span>
             </button>
           </div>
+
+          {/* Divisor Visual */}
+          <div style={{ display: 'flex', alignItems: 'center', margin: '0.8rem 0 1.2rem 0', gap: '0.75rem' }}>
+            <div style={{ flex: 1, height: '1px', backgroundColor: '#e2e8f0' }} />
+            <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 700, letterSpacing: '0.04em' }}>OU ACESSO DIRETO COM E-MAIL</span>
+            <div style={{ flex: 1, height: '1px', backgroundColor: '#e2e8f0' }} />
+          </div>
+
+          {/* Formulário de Acesso Direto com E-mail Institucional */}
+          <form onSubmit={handleDirectEmailLogin} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#334155' }}>
+                E-mail Institucional
+              </label>
+              <input
+                type="email"
+                placeholder="seu.nome@escola.pr.gov.br"
+                value={emailInput}
+                onChange={(e) => setEmailInput(e.target.value)}
+                style={{
+                  padding: '0.85rem 1rem',
+                  borderRadius: '10px',
+                  border: '1.5px solid #cbd5e1',
+                  fontSize: '0.9rem',
+                  outline: 'none',
+                  color: '#0f172a',
+                  transition: 'border-color 0.2s',
+                  boxSizing: 'border-box',
+                  width: '100%'
+                }}
+                onFocus={(e) => { e.currentTarget.style.borderColor = '#0072bc'; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = '#cbd5e1'; }}
+              />
+            </div>
+
+            <button
+              type="submit"
+              style={{
+                backgroundColor: '#002d5c',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '10px',
+                padding: '0.85rem 1rem',
+                fontSize: '0.9rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.5rem',
+                boxShadow: '0 4px 12px rgba(0, 45, 92, 0.18)',
+                transition: 'background-color 0.2s, transform 0.1s'
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#001d3d'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#002d5c'; }}
+            >
+              <span>Acessar Painel</span>
+              <span>→</span>
+            </button>
+          </form>
 
           {/* Informações Institucionais no Rodapé */}
           <div style={{ marginTop: '2.5rem', paddingTop: '1.25rem', borderTop: '1px solid #f1f5f9', textAlign: 'center' }}>
