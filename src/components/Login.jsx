@@ -1,94 +1,83 @@
 import React, { useState } from 'react';
 import { getAppsScriptUrl } from '../services/driveDataService';
+import { auth, googleProvider, isConfigured as isFirebaseConfigured } from '../firebase';
+import { signInWithPopup } from 'firebase/auth';
 
 export default function Login({ onLoginSuccess }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [emailInput, setEmailInput] = useState('');
 
-  // Login Direto com E-mail Institucional (@escola.pr.gov.br) - consulta permissões no TiDB
-  const handleDirectEmailLogin = (e) => {
-    e.preventDefault();
+  // Autenticação Obrigatória com Conta Google Institucional (@escola.pr.gov.br)
+  const handleGoogleAuth = async () => {
     setError('');
-    const cleanEmail = emailInput.trim().toLowerCase();
-    if (!cleanEmail) {
-      setError('Por favor, informe seu e-mail institucional.');
-      return;
-    }
-    if (!cleanEmail.includes('@')) {
-      setError('Por favor, informe um endereço de e-mail válido.');
-      return;
-    }
-
-    const uObj = {
-      email: cleanEmail,
-      displayName: cleanEmail.split('@')[0].replace(/\./g, ' '),
-      photoURL: '',
-      provider: 'institutional_direct',
-      authenticatedAt: new Date().toISOString()
-    };
-    try {
-      localStorage.setItem('ep_user_session', JSON.stringify(uObj));
-    } catch (err) {}
-    onLoginSuccess(uObj);
-  };
-
-  // Redirecionamento SSO oficial via Google Apps Script (Funciona perfeitamente na Vercel)
-  const handleGoogleSSO = () => {
-    setError('');
-    const appsScriptUrl = getAppsScriptUrl();
-
-    if (!appsScriptUrl || !appsScriptUrl.startsWith('http')) {
-      setError('A URL do Google Apps Script ainda não foi configurada no ambiente (VITE_APPS_SCRIPT_URL).');
-      return;
-    }
-
     setLoading(true);
-    const returnUri = window.location.origin;
-    const targetUrl = `${appsScriptUrl}?action=sso_login&redirect_uri=${encodeURIComponent(returnUri)}`;
-    
-    console.log('[Login SSO] Redirecionando para autenticação Google:', targetUrl);
-    window.location.href = targetUrl;
-  };
 
-  // Executar Login via Google Auth (quando Firebase configurado)
-  const handleGoogleLogin = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      if (isFirebaseConfigured && auth) {
+    // 1. Tenta login via Firebase Google Auth (Popup oficial Google) se configurado
+    if (isFirebaseConfigured && auth) {
+      try {
+        console.log('[Login] Tentando autenticação Google via Firebase...');
         const result = await signInWithPopup(auth, googleProvider);
         const user = result.user;
-        
+
         if (user && user.email) {
+          const cleanEmail = user.email.toLowerCase().trim();
+
+          // Validação institucional obrigatória da SEED/PR
+          const isInstitucional = 
+            cleanEmail.endsWith('@escola.pr.gov.br') || 
+            cleanEmail.endsWith('@seed.pr.gov.br') ||
+            cleanEmail.endsWith('@professor.pr.gov.br') ||
+            cleanEmail.endsWith('@gestao.pr.gov.br');
+
+          if (!isInstitucional) {
+            await auth.signOut();
+            setError(`Acesso negado (${cleanEmail}): Apenas contas institucionais (@escola.pr.gov.br) são permitidas.`);
+            setLoading(false);
+            return;
+          }
+
           const uObj = {
-            email: user.email.toLowerCase().trim(),
-            displayName: user.displayName || user.email.split('@')[0],
+            email: cleanEmail,
+            displayName: user.displayName || cleanEmail.split('@')[0].replace(/\./g, ' '),
             photoURL: user.photoURL || '',
-            uid: user.uid
+            uid: user.uid,
+            provider: 'firebase_google_auth',
+            authenticatedAt: new Date().toISOString()
           };
+
           try {
             localStorage.setItem('ep_user_session', JSON.stringify(uObj));
           } catch (err) {}
+
           onLoginSuccess(uObj);
-        } else {
-          throw new Error('Não foi possível obter o e-mail institucional do Google.');
+          return;
         }
-      } else {
-        setError('Google Auth popup direto não está ativo no momento. Por favor, digite seu e-mail institucional no campo acima.');
+      } catch (err) {
+        console.warn('[Firebase Auth] Erro no popup:', err);
+        if (err.code === 'auth/popup-closed-by-user') {
+          setLoading(false);
+          return;
+        }
+        if (err.code === 'auth/popup-blocked') {
+          setError('O pop-up de login foi bloqueado pelo seu navegador. Por favor, autorize pop-ups para este site.');
+          setLoading(false);
+          return;
+        }
       }
-    } catch (err) {
-      console.error('Erro no login:', err);
-      if (err.code === 'auth/popup-blocked') {
-        setError('O pop-up de login foi bloqueado pelo seu navegador. Por favor, libere pop-ups para este site.');
-      } else if (err.code === 'auth/popup-closed-by-user') {
-        setError('A janela de login foi fechada antes de concluir o processo.');
-      } else {
-        setError(err.message || 'Falha ao conectar com o Google Auth institucional.');
-      }
-    } finally {
-      setLoading(false);
     }
+
+    // 2. Redirecionamento Google SSO via Google Apps Script (Workspace Institucional SEED/PR)
+    const appsScriptUrl = getAppsScriptUrl();
+    if (appsScriptUrl && appsScriptUrl.startsWith('http')) {
+      const returnUri = window.location.origin;
+      const targetUrl = `${appsScriptUrl}?action=sso_login&redirect_uri=${encodeURIComponent(returnUri)}`;
+      console.log('[Login SSO] Redirecionando para autenticação Google Apps Script:', targetUrl);
+      window.location.href = targetUrl;
+      return;
+    }
+
+    setLoading(false);
+    setError('Nenhum serviço de autenticação Google ativo. Configure as chaves do Firebase Auth ou a VITE_APPS_SCRIPT_URL nas variáveis de ambiente.');
   };
 
   return (
@@ -113,8 +102,6 @@ export default function Login({ onLoginSuccess }) {
     }}>
 
       {/* ── GRÁFICOS EDUCACIONAIS NO FUNDO (SVG) ────────────────── */}
-      
-      {/* 1. Gráfico de Evolução Pedagógica e Curvas de Desempenho (Topo Direito) */}
       <svg
         style={{
           position: 'absolute',
@@ -132,16 +119,13 @@ export default function Login({ onLoginSuccess }) {
         <circle cx="250" cy="250" r="220" stroke="#0072bc" strokeWidth="2" strokeDasharray="6 6" />
         <circle cx="250" cy="250" r="160" stroke="#00984a" strokeWidth="1.5" />
         <circle cx="250" cy="250" r="100" stroke="#ffffff" strokeWidth="1" strokeDasharray="4 4" />
-        {/* Curva de gráfico de aprendizagem */}
         <path d="M 50 400 Q 150 380 220 280 T 380 180 T 450 110" stroke="#0072bc" strokeWidth="4" fill="none" />
         <path d="M 50 420 Q 180 390 260 250 T 420 120" stroke="#00984a" strokeWidth="3" fill="none" strokeDasharray="8 4" />
-        {/* Pontos de dados nos picos */}
         <circle cx="220" cy="280" r="6" fill="#0072bc" />
         <circle cx="380" cy="180" r="7" fill="#00984a" />
         <circle cx="450" cy="110" r="8" fill="#f59e0b" />
       </svg>
 
-      {/* 2. Gráfico de Barras Educacionais e Métricas (Fundo Inferior Esquerdo) */}
       <svg
         style={{
           position: 'absolute',
@@ -156,63 +140,16 @@ export default function Login({ onLoginSuccess }) {
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
       >
-        {/* Eixo de coordenadas */}
         <line x1="40" y1="340" x2="420" y2="340" stroke="#ffffff" strokeWidth="2" />
         <line x1="40" y1="50" x2="40" y2="340" stroke="#ffffff" strokeWidth="2" />
-        {/* Barras estatísticas crescentes */}
         <rect x="70" y="240" width="34" height="100" rx="4" fill="#0072bc" />
         <rect x="130" y="190" width="34" height="150" rx="4" fill="#00984a" />
         <rect x="190" y="140" width="34" height="200" rx="4" fill="#0072bc" />
         <rect x="250" y="90" width="34" height="250" rx="4" fill="#f59e0b" />
         <rect x="310" y="60" width="34" height="280" rx="4" fill="#00984a" />
-        {/* Malha pontilhada (dot matrix pedagógica) */}
-        <g opacity="0.6">
-          <circle cx="70" cy="60" r="3" fill="#ffffff" />
-          <circle cx="100" cy="60" r="3" fill="#ffffff" />
-          <circle cx="130" cy="60" r="3" fill="#ffffff" />
-          <circle cx="70" cy="90" r="3" fill="#ffffff" />
-          <circle cx="100" cy="90" r="3" fill="#ffffff" />
-          <circle cx="130" cy="90" r="3" fill="#ffffff" />
-        </g>
       </svg>
 
-      {/* 3. Ícones Educacionais Flutuantes em Vetor (Capelo, Livro, Bússola) */}
-      <div style={{
-        position: 'absolute',
-        top: '12%',
-        left: '8%',
-        fontSize: '2.8rem',
-        opacity: 0.12,
-        pointerEvents: 'none',
-        transform: 'rotate(-12deg)'
-      }}>
-        🎓
-      </div>
-
-      <div style={{
-        position: 'absolute',
-        bottom: '15%',
-        right: '10%',
-        fontSize: '3.2rem',
-        opacity: 0.12,
-        pointerEvents: 'none',
-        transform: 'rotate(15deg)'
-      }}>
-        📖
-      </div>
-
-      <div style={{
-        position: 'absolute',
-        top: '25%',
-        right: '25%',
-        fontSize: '2.4rem',
-        opacity: 0.1,
-        pointerEvents: 'none'
-      }}>
-        📈
-      </div>
-
-      {/* ── CARD PRINCIPAL (SPLIT CARD - MODELO IMAGEM 4) ────────── */}
+      {/* ── CARD PRINCIPAL ─────────────────────────────────────── */}
       <div style={{
         width: '100%',
         maxWidth: '960px',
@@ -222,12 +159,12 @@ export default function Login({ onLoginSuccess }) {
         overflow: 'hidden',
         display: 'flex',
         flexWrap: 'wrap',
-        minHeight: '500px',
+        minHeight: '480px',
         position: 'relative',
         zIndex: 10
       }}>
 
-        {/* ── METADE ESQUERDA: APRESENTAÇÃO INSTITUCIONAL & DESIGN ──── */}
+        {/* ── METADE ESQUERDA: APRESENTAÇÃO INSTITUCIONAL ──── */}
         <div style={{
           flex: '1 1 420px',
           background: 'linear-gradient(135deg, #001d3d 0%, #002d5c 55%, #0072bc 100%)',
@@ -239,28 +176,6 @@ export default function Login({ onLoginSuccess }) {
           position: 'relative',
           overflow: 'hidden'
         }}>
-          {/* Círculos e grafismos translúcidos no interior do card esquerdo */}
-          <div style={{
-            position: 'absolute',
-            top: '-60px',
-            right: '-60px',
-            width: '220px',
-            height: '220px',
-            borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(255, 255, 255, 0.15) 0%, transparent 70%)',
-            pointerEvents: 'none'
-          }} />
-          <div style={{
-            position: 'absolute',
-            bottom: '-40px',
-            left: '-40px',
-            width: '180px',
-            height: '180px',
-            borderRadius: '50%',
-            border: '2px solid rgba(255, 255, 255, 0.08)',
-            pointerEvents: 'none'
-          }} />
-
           {/* Topo: Brasão / Logo Institucional */}
           <div style={{ position: 'relative', zIndex: 2 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
@@ -302,7 +217,6 @@ export default function Login({ onLoginSuccess }) {
               Plataforma Integrada de Gestão e Acompanhamento Pedagógico do Estágio Probatório Docente.
             </p>
 
-            {/* Badges de Destaque das Ferramentas */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.8rem', color: 'rgba(255,255,255,0.92)' }}>
                 <span style={{ backgroundColor: 'rgba(0, 152, 74, 0.35)', color: '#4ade80', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 700 }}>✓</span>
@@ -314,7 +228,7 @@ export default function Login({ onLoginSuccess }) {
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.8rem', color: 'rgba(255,255,255,0.92)' }}>
                 <span style={{ backgroundColor: 'rgba(245, 158, 11, 0.35)', color: '#fcd34d', padding: '0.2rem 0.5rem', borderRadius: '6px', fontWeight: 700 }}>✓</span>
-                <span>Ensalamento, Turmas e Remanejamentos</span>
+                <span>Banco de Dados TiDB Cloud Serverless</span>
               </div>
             </div>
           </div>
@@ -325,18 +239,18 @@ export default function Login({ onLoginSuccess }) {
           </div>
         </div>
 
-        {/* ── METADE DIREITA: AÇÃO DE LOGIN & AUTENTICAÇÃO ─────────── */}
+        {/* ── METADE DIREITA: AÇÃO DE LOGIN GOOGLE EXCLUSIVO ───────── */}
         <div style={{
           flex: '1 1 420px',
           backgroundColor: '#ffffff',
-          padding: '3rem 2.5rem',
+          padding: '3.5rem 2.5rem',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
           boxSizing: 'border-box'
         }}>
           
-          <div style={{ marginBottom: '2rem' }}>
+          <div style={{ marginBottom: '2.5rem' }}>
             <h2 style={{
               margin: '0 0 0.5rem 0',
               fontSize: '1.6rem',
@@ -352,7 +266,7 @@ export default function Login({ onLoginSuccess }) {
               color: '#64748b',
               lineHeight: 1.5
             }}>
-              Utilize sua conta institucional educacional para entrar no sistema com segurança.
+              O acesso é restrito e validado exclusivamente através da sua <strong>conta Google institucional (@escola.pr.gov.br)</strong>.
             </p>
           </div>
 
@@ -375,11 +289,11 @@ export default function Login({ onLoginSuccess }) {
             </div>
           )}
 
-          {/* ── BOTÃO PRINCIPAL DE SSO GOOGLE APPS SCRIPT ───────────────── */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem', marginBottom: '1.2rem' }}>
+          {/* ── BOTÃO PRINCIPAL DE AUTENTICAÇÃO GOOGLE ───────────────── */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
             <button
               type="button"
-              onClick={handleGoogleSSO}
+              onClick={handleGoogleAuth}
               disabled={loading}
               style={{
                 width: '100%',
@@ -387,8 +301,8 @@ export default function Login({ onLoginSuccess }) {
                 color: '#002d5c',
                 border: '2px solid #002d5c',
                 borderRadius: '12px',
-                padding: '1.05rem 1.2rem',
-                fontSize: '0.96rem',
+                padding: '1.15rem 1.2rem',
+                fontSize: '0.98rem',
                 fontWeight: 800,
                 cursor: loading ? 'wait' : 'pointer',
                 display: 'flex',
@@ -421,69 +335,13 @@ export default function Login({ onLoginSuccess }) {
                 <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 10.04 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/>
                 <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
               </svg>
-              <span>{loading ? 'Redirecionando...' : 'Entrar com Conta Google (@escola.pr.gov.br)'}</span>
+              <span>{loading ? 'Validando conta Google...' : 'Entrar com Conta Google (@escola.pr.gov.br)'}</span>
             </button>
           </div>
 
-          {/* Divisor Visual */}
-          <div style={{ display: 'flex', alignItems: 'center', margin: '0.8rem 0 1.2rem 0', gap: '0.75rem' }}>
-            <div style={{ flex: 1, height: '1px', backgroundColor: '#e2e8f0' }} />
-            <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 700, letterSpacing: '0.04em' }}>OU ACESSO DIRETO COM E-MAIL</span>
-            <div style={{ flex: 1, height: '1px', backgroundColor: '#e2e8f0' }} />
+          <div style={{ marginTop: '1.25rem', padding: '0.8rem 1rem', backgroundColor: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '0.78rem', color: '#64748b', lineHeight: 1.4 }}>
+            🔒 <strong>Autenticação Institucional Obrigatória:</strong> Somente usuários autenticados com credencial educacional ativa da SEED/PR terão permissão de acesso ao sistema.
           </div>
-
-          {/* Formulário de Acesso Direto com E-mail Institucional */}
-          <form onSubmit={handleDirectEmailLogin} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#334155' }}>
-                E-mail Institucional
-              </label>
-              <input
-                type="email"
-                placeholder="seu.nome@escola.pr.gov.br"
-                value={emailInput}
-                onChange={(e) => setEmailInput(e.target.value)}
-                style={{
-                  padding: '0.85rem 1rem',
-                  borderRadius: '10px',
-                  border: '1.5px solid #cbd5e1',
-                  fontSize: '0.9rem',
-                  outline: 'none',
-                  color: '#0f172a',
-                  transition: 'border-color 0.2s',
-                  boxSizing: 'border-box',
-                  width: '100%'
-                }}
-                onFocus={(e) => { e.currentTarget.style.borderColor = '#0072bc'; }}
-                onBlur={(e) => { e.currentTarget.style.borderColor = '#cbd5e1'; }}
-              />
-            </div>
-
-            <button
-              type="submit"
-              style={{
-                backgroundColor: '#002d5c',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: '10px',
-                padding: '0.85rem 1rem',
-                fontSize: '0.9rem',
-                fontWeight: 700,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '0.5rem',
-                boxShadow: '0 4px 12px rgba(0, 45, 92, 0.18)',
-                transition: 'background-color 0.2s, transform 0.1s'
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#001d3d'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#002d5c'; }}
-            >
-              <span>Acessar Painel</span>
-              <span>→</span>
-            </button>
-          </form>
 
           {/* Informações Institucionais no Rodapé */}
           <div style={{ marginTop: '2.5rem', paddingTop: '1.25rem', borderTop: '1px solid #f1f5f9', textAlign: 'center' }}>
