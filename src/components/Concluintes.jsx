@@ -221,7 +221,7 @@ export default function Concluintes({ concluintes = [], cursistasAtivos = [], ob
           🎓 Cursistas Concluintes (1º Chamamento)
         </h2>
         <p style={{ margin: '0.3rem 0 0 0', fontSize: '0.9rem', color: '#475569', lineHeight: 1.5 }}>
-          Registro oficial dos professores que já concluíram o ciclo formativo do Estágio Probatório. Este painel permite auditar a trajetória dos formados e conciliar o histórico geral de observações da rede.
+          Registro oficial dos professores que já concluíram o ciclo formativo do Estágio Probatório com certificação da avaliação formativa. Este painel permite auditar a trajetória dos concluintes e conciliar o histórico geral de observações da rede.
         </p>
       </div>
 
@@ -280,7 +280,7 @@ export default function Concluintes({ concluintes = [], cursistasAtivos = [], ob
               {concluintes.length.toLocaleString('pt-BR')}
             </div>
             <span style={{ fontSize: '0.76rem', color: '#16a34a' }}>
-              Professores formados e certificados no 1º chamamento
+              Professores com certificação da avaliação formativa no 1º chamamento
             </span>
           </div>
 

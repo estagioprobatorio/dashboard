@@ -214,9 +214,11 @@ async function main() {
     console.log('[4/5] Populando concluintes (src/concluintes_fallback.json)...');
     const concluintesPath = path.join(__dirname, 'src', 'concluintes_fallback.json');
     if (fs.existsSync(concluintesPath)) {
+      await conn.query('TRUNCATE TABLE cursistas_concluintes');
       const concluintes = JSON.parse(fs.readFileSync(concluintesPath, 'utf8'));
       const batchSize = 200;
       let totalInseridos = 0;
+      const seenCpf = new Set();
 
       for (let i = 0; i < concluintes.length; i += batchSize) {
         const batch = concluintes.slice(i, i + batchSize);
@@ -224,13 +226,17 @@ async function main() {
         const values = [];
 
         for (const r of batch) {
+          const cpf = (r.cpf || '').trim();
+          if (cpf && seenCpf.has(cpf)) continue;
+          if (cpf) seenCpf.add(cpf);
+
           placeholders.push('(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
           values.push(
-            r.cod_cursista || `CONC_${Date.now()}_${Math.random()}`,
+            r.cod_cursista || (cpf ? `CONC_${cpf}` : `CONC_${r.cgm || Math.random()}`),
             r.cgm ? String(r.cgm) : null,
             r.nome_cursista || 'CONCLUINTE',
             r.email || null,
-            r.cpf || null,
+            cpf || null,
             r.rg || null,
             r.chamamento || '1º Chamamento',
             r.ano_formativo || '1º ANO',
@@ -238,6 +244,11 @@ async function main() {
             r.componente || null,
             r.turmas || null,
             r.nre_exe || null,
+            r.munic_exe || null,
+            r.situacao || 'CONCLUÍDO',
+            r.data_conclusao || null
+          );
+        }
             r.munic_exe || null,
             r.situacao || 'CONCLUÍDO',
             r.data_conclusao || null

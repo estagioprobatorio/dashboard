@@ -9,11 +9,11 @@
  * 2. Acesse: Extensões ➔ Apps Script
  * 3. Cole o código deste arquivo (crie um arquivo chamado 'SincronizarTiDB.gs')
  * 4. Altere a variável VERCEL_URL com o endereço do seu dashboard na Vercel:
- *    Exemplo: const VERCEL_URL = "https://seu-dashboard.vercel.app";
+ *    Exemplo: const VERCEL_URL = "https://dashboard-tawny-delta-96.vercel.app";
  * 5. Selecione a função 'configurarGatilhoDiario7h' e clique em 'Executar'.
  *
  * Pronto! Todos os dias às 07:00 da manhã o Google Apps Script rodará nos servidores do Google,
- * lerá as abas atualizadas e carregará o banco de dados TiDB Cloud automaticamente.
+ * lerá as abas atualizadas (DADOS, CONCLUINTES-1CH, EXONERADOS e Observações) e atualizará o TiDB.
  * =========================================================================================
  */
 
@@ -45,7 +45,7 @@ function configurarGatilhoDiario7h() {
     }
   }
 
-  // Cria o novo gatilho diário às 07:00 da manhã
+  // Cria o novo gatilho diário às 07:00 da manhã (Horário de Brasília)
   ScriptApp.newTrigger('executarSincronizacaoCompletaTiDB')
     .timeBased()
     .atHour(7)
@@ -68,17 +68,29 @@ function configurarGatilhoDiario7h() {
 function executarSincronizacaoCompletaTiDB() {
   Logger.log('Iniciando sincronização matinal das planilhas com o TiDB Cloud...');
   
+  // 1. Cursistas Ativos (DADOS)
   const resCursistas = sincronizarAbaDadosParaTiDB();
-  Logger.log('Resultado Cursistas: ' + JSON.stringify(resCursistas));
+  Logger.log('Resultado Cursistas (DADOS): ' + JSON.stringify(resCursistas));
 
+  // 2. Concluintes do 1º Chamamento (CONCLUINTES-1CH)
+  const resConcluintes = sincronizarAbaConcluintesParaTiDB();
+  Logger.log('Resultado Concluintes (CONCLUINTES-1CH): ' + JSON.stringify(resConcluintes));
+
+  // 3. Servidores Exonerados (EXONERADOS)
+  const resExonerados = sincronizarAbaExoneradosParaTiDB();
+  Logger.log('Resultado Exonerados: ' + JSON.stringify(resExonerados));
+
+  // 4. Observações Pedagógicas
   const resObservacoes = sincronizarAbaObservacoesParaTiDB();
   Logger.log('Resultado Observações: ' + JSON.stringify(resObservacoes));
 
-  Logger.log('Sincronização matinal concluída!');
+  Logger.log('✓ Sincronização matinal completa concluída com sucesso!');
 }
 
 /**
- * 3. Sincroniza a aba DADOS (Cursistas)
+ * -----------------------------------------------------------------------------------------
+ * 3. Sincroniza a aba DADOS (Cursistas Ativos)
+ * -----------------------------------------------------------------------------------------
  */
 function sincronizarAbaDadosParaTiDB() {
   const ss = obterPlanilhaMestra();
@@ -144,7 +156,6 @@ function sincronizarAbaDadosParaTiDB() {
     });
   }
 
-  // Envia em lotes de 200 para a API TiDB da Vercel
   const BATCH_SIZE = 200;
   let totalSinc = 0;
   for (let i = 0; i < cursistas.length; i += BATCH_SIZE) {
@@ -177,7 +188,221 @@ function sincronizarAbaDadosParaTiDB() {
 }
 
 /**
- * 4. Sincroniza a aba Observações de Prática
+ * -----------------------------------------------------------------------------------------
+ * 4. Sincroniza a aba CONCLUINTES-1CH (Certificados na Avaliação Formativa)
+ * -----------------------------------------------------------------------------------------
+ */
+function sincronizarAbaConcluintesParaTiDB() {
+  const ss = obterPlanilhaMestra();
+  const nomesPossiveis = ["CONCLUINTES-1CH", "CONCLUINTES", "Concluintes-1CH", "Concluintes"];
+  let aba = null;
+  for (let nome of nomesPossiveis) {
+    aba = ss.getSheetByName(nome);
+    if (aba) break;
+  }
+  if (!aba) return { status: 'nao_encontrada', mensagem: 'Aba CONCLUINTES-1CH não encontrada.' };
+
+  const dados = aba.getDataRange().getValues();
+  if (dados.length < 2) return { status: 'vazio' };
+
+  const cabecalho = dados[0].map(c => String(c || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
+
+  function getIdx(keywords) {
+    for (let kw of keywords) {
+      let idx = cabecalho.indexOf(kw.toLowerCase());
+      if (idx !== -1) return idx;
+    }
+    for (let kw of keywords) {
+      let idx = cabecalho.findIndex(c => c.includes(kw.toLowerCase()));
+      if (idx !== -1) return idx;
+    }
+    return -1;
+  }
+
+  const idxNome = getIdx(["nome cursista", "nome", "cursista"]);
+  const idxEmail = getIdx(["e-mail", "email cursista", "email"]);
+  const idxCgm = getIdx(["cgm"]);
+  const idxCpf = getIdx(["cpf"]);
+  const idxRg = getIdx(["rg"]);
+  const idxComponente = getIdx(["componente", "disciplina"]);
+  const idxNre = getIdx(["nre"]);
+  const idxMunic = getIdx(["munic"]);
+  const idxTurma = getIdx(["turmas", "turma"]);
+  const idxModalidade = getIdx(["modalidade"]);
+  const idxDataConc = getIdx(["conclus", "data"]);
+
+  const concluintes = [];
+  const cpfsVistos = new Set();
+
+  for (let i = 1; i < dados.length; i++) {
+    const row = dados[i];
+    const nome = idxNome !== -1 ? String(row[idxNome] || "").trim() : "";
+    if (!nome) continue;
+
+    const cpf = idxCpf !== -1 ? String(row[idxCpf] || "").replace(/\D/g, "").trim() : "";
+    if (cpf && cpfsVistos.has(cpf)) continue;
+    if (cpf) cpfsVistos.add(cpf);
+
+    concluintes.push({
+      cod_cursista: cpf ? `CONC_${cpf}` : `CONC_${i}`,
+      cgm: idxCgm !== -1 ? String(row[idxCgm] || "").trim() : null,
+      nome_cursista: nome,
+      email: idxEmail !== -1 ? String(row[idxEmail] || "").trim().toLowerCase() : null,
+      cpf: cpf || null,
+      rg: idxRg !== -1 ? String(row[idxRg] || "").trim() : null,
+      componente: idxComponente !== -1 ? String(row[idxComponente] || "").trim() : null,
+      nre_exe: idxNre !== -1 ? String(row[idxNre] || "").trim() : null,
+      munic_exe: idxMunic !== -1 ? String(row[idxMunic] || "").trim() : null,
+      turmas: idxTurma !== -1 ? String(row[idxTurma] || "").trim() : null,
+      ano_formativo: "1º ANO",
+      modalidade: idxModalidade !== -1 ? String(row[idxModalidade] || "").trim() : "Docentes",
+      chamamento: "1º Chamamento",
+      situacao: "CONCLUÍDO",
+      data_conclusao: idxDataConc !== -1 ? String(row[idxDataConc] || "").trim() : null
+    });
+  }
+
+  const BATCH_SIZE = 200;
+  let totalSinc = 0;
+  for (let i = 0; i < concluintes.length; i += BATCH_SIZE) {
+    const lote = concluintes.slice(i, i + BATCH_SIZE);
+    const endpoint = VERCEL_URL.replace(/\/$/, '') + '/api/tidb';
+
+    const options = {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({
+        action: 'sync_concluintes_bulk',
+        concluintes: lote
+      }),
+      muteHttpExceptions: true
+    };
+
+    try {
+      const resp = UrlFetchApp.fetch(endpoint, options);
+      if (resp.getResponseCode() === 200) {
+        totalSinc += lote.length;
+      } else {
+        Logger.log('Aviso ao sincronizar concluintes: ' + resp.getContentText());
+      }
+    } catch (err) {
+      Logger.log('Erro ao sincronizar concluintes: ' + err.toString());
+    }
+  }
+
+  return { total: totalSinc };
+}
+
+/**
+ * -----------------------------------------------------------------------------------------
+ * 5. Sincroniza a aba EXONERADOS da Planilha Master
+ * -----------------------------------------------------------------------------------------
+ */
+function sincronizarAbaExoneradosParaTiDB() {
+  const ss = obterPlanilhaMestra();
+  const nomesPossiveis = ["EXONERADOS", "Exonerados", "exonerados", "DESLIGADOS", "Desligados"];
+  let aba = null;
+  for (let nome of nomesPossiveis) {
+    aba = ss.getSheetByName(nome);
+    if (aba) break;
+  }
+  if (!aba) return { status: 'nao_encontrada', mensagem: 'Aba EXONERADOS não encontrada.' };
+
+  const dados = aba.getDataRange().getValues();
+  if (dados.length < 2) return { status: 'vazio' };
+
+  const cabecalho = dados[0].map(c => String(c || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
+
+  function getIdx(keywords) {
+    for (let kw of keywords) {
+      let idx = cabecalho.indexOf(kw.toLowerCase());
+      if (idx !== -1) return idx;
+    }
+    for (let kw of keywords) {
+      let idx = cabecalho.findIndex(c => c.includes(kw.toLowerCase()));
+      if (idx !== -1) return idx;
+    }
+    return -1;
+  }
+
+  const idxNome = getIdx(["nome", "servidor", "cursista"]);
+  const idxCgm = getIdx(["cgm"]);
+  const idxCpf = getIdx(["cpf"]);
+  const idxRg = getIdx(["rg"]);
+  const idxEmail = getIdx(["e-mail", "email"]);
+  const idxMotivo = getIdx(["motivo", "tipo", "situacao"]);
+  const idxPortaria = getIdx(["portaria", "resolucao", "decreto", "termo"]);
+  const idxData = getIdx(["data", "data exoneracao", "data desligamento"]);
+  const idxNre = getIdx(["nre"]);
+  const idxMunic = getIdx(["municipio", "munic"]);
+  const idxEscola = getIdx(["escola", "colegio", "estabelecimento"]);
+  const idxComp = getIdx(["componente", "disciplina", "cargo"]);
+  const idxObs = getIdx(["observacao", "observacoes", "obs"]);
+
+  const exonerados = [];
+  const cpfsVistos = new Set();
+
+  for (let i = 1; i < dados.length; i++) {
+    const row = dados[i];
+    const nome = idxNome !== -1 ? String(row[idxNome] || "").trim() : "";
+    if (!nome) continue;
+
+    const cpf = idxCpf !== -1 ? String(row[idxCpf] || "").replace(/\D/g, "").trim() : "";
+    if (cpf && cpfsVistos.has(cpf)) continue;
+    if (cpf) cpfsVistos.add(cpf);
+
+    exonerados.push({
+      nome_cursista: nome,
+      cgm: idxCgm !== -1 ? String(row[idxCgm] || "").trim() : null,
+      cpf: cpf || null,
+      rg: idxRg !== -1 ? String(row[idxRg] || "").trim() : null,
+      email: idxEmail !== -1 ? String(row[idxEmail] || "").trim().toLowerCase() : null,
+      motivo: idxMotivo !== -1 ? String(row[idxMotivo] || "").trim() : null,
+      portaria: idxPortaria !== -1 ? String(row[idxPortaria] || "").trim() : null,
+      data_exoneracao: idxData !== -1 ? String(row[idxData] || "").trim() : null,
+      nre: idxNre !== -1 ? String(row[idxNre] || "").trim() : null,
+      municipio: idxMunic !== -1 ? String(row[idxMunic] || "").trim() : null,
+      escola: idxEscola !== -1 ? String(row[idxEscola] || "").trim() : null,
+      componente: idxComp !== -1 ? String(row[idxComp] || "").trim() : null,
+      observacoes: idxObs !== -1 ? String(row[idxObs] || "").trim() : null
+    });
+  }
+
+  const BATCH_SIZE = 200;
+  let totalSinc = 0;
+  for (let i = 0; i < exonerados.length; i += BATCH_SIZE) {
+    const lote = exonerados.slice(i, i + BATCH_SIZE);
+    const endpoint = VERCEL_URL.replace(/\/$/, '') + '/api/tidb';
+
+    const options = {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({
+        action: 'sync_exonerados_bulk',
+        exonerados: lote
+      }),
+      muteHttpExceptions: true
+    };
+
+    try {
+      const resp = UrlFetchApp.fetch(endpoint, options);
+      if (resp.getResponseCode() === 200) {
+        totalSinc += lote.length;
+      } else {
+        Logger.log('Aviso ao sincronizar exonerados: ' + resp.getContentText());
+      }
+    } catch (err) {
+      Logger.log('Erro ao sincronizar exonerados: ' + err.toString());
+    }
+  }
+
+  return { total: totalSinc };
+}
+
+/**
+ * -----------------------------------------------------------------------------------------
+ * 6. Sincroniza a aba Observações de Prática
+ * -----------------------------------------------------------------------------------------
  */
 function sincronizarAbaObservacoesParaTiDB() {
   const ss = obterPlanilhaMestra();
@@ -241,7 +466,6 @@ function sincronizarAbaObservacoesParaTiDB() {
     });
   }
 
-  // Envia em lotes de 200 para a API TiDB da Vercel
   const BATCH_SIZE = 200;
   let totalSinc = 0;
   for (let i = 0; i < observacoes.length; i += BATCH_SIZE) {

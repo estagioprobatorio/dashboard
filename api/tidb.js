@@ -89,11 +89,12 @@ export default async function handler(req, res) {
     }
 
     if (action === 'bundle' || action === 'get_all') {
-      const [cursistas, tutores, observacoes, concluintes, movimentacoes, diario, intencoes] = await Promise.all([
+      const [cursistas, tutores, observacoes, concluintes, exonerados, movimentacoes, diario, intencoes] = await Promise.all([
         executeSql('SELECT * FROM cursistas ORDER BY nome_cursista ASC').catch(() => []),
         executeSql('SELECT * FROM tutores ORDER BY tutor_responsavel ASC').catch(() => []),
         executeSql('SELECT * FROM observacoes_pratica ORDER BY id DESC').catch(() => []),
         executeSql('SELECT * FROM cursistas_concluintes ORDER BY nome_cursista ASC').catch(() => []),
+        executeSql('SELECT * FROM exonerados ORDER BY nome_cursista ASC').catch(() => []),
         executeSql('SELECT * FROM movimentacoes ORDER BY timestamp DESC LIMIT 500').catch(() => []),
         executeSql('SELECT * FROM diario_formativo ORDER BY data_registro DESC LIMIT 200').catch(() => []),
         executeSql('SELECT * FROM intencao_matricula_2027 ORDER BY created_at DESC').catch(() => [])
@@ -108,6 +109,7 @@ export default async function handler(req, res) {
         tutores,
         observacoes,
         concluintes,
+        exonerados,
         movimentacoes,
         diario,
         intencoes2027: intencoes
@@ -272,6 +274,121 @@ export default async function handler(req, res) {
         total += batch.length;
       }
       return res.status(200).json({ status: 'success', total_observacoes_sincronizadas: total });
+    }
+
+    if (action === 'sync_concluintes_bulk') {
+      const items = req.body.concluintes || req.body.data || [];
+      if (!Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ error: 'Nenhum concluinte fornecido.' });
+      }
+
+      await executeSql('TRUNCATE TABLE cursistas_concluintes');
+
+      const batchSize = 100;
+      let total = 0;
+      const seenCpf = new Set();
+
+      for (let i = 0; i < items.length; i += batchSize) {
+        const batch = items.slice(i, i + batchSize);
+        const placeholders = [];
+        const values = [];
+
+        for (let j = 0; j < batch.length; j++) {
+          const r = batch[j];
+          const cpf = (r.cpf || '').trim();
+          if (cpf && seenCpf.has(cpf)) continue;
+          if (cpf) seenCpf.add(cpf);
+
+          placeholders.push('(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+          values.push(
+            r.cod_cursista || (cpf ? `CONC_${cpf}` : `CONC_${Date.now()}_${i + j}`),
+            r.cgm ? String(r.cgm) : null,
+            r.nome_cursista || 'CONCLUINTE',
+            r.email || r['e-mail'] || null,
+            cpf || null,
+            r.rg || null,
+            r.chamamento || '1º Chamamento',
+            r.ano_formativo || '1º ANO',
+            r.modalidade || 'Docentes',
+            r.componente || null,
+            r.turmas || null,
+            r.nre_exe || null,
+            r.munic_exe || null,
+            r.situacao || 'CONCLUÍDO',
+            r.data_conclusao || null
+          );
+        }
+
+        if (placeholders.length > 0) {
+          const sql = `
+            INSERT INTO cursistas_concluintes (
+              cod_cursista, cgm, nome_cursista, email, cpf, rg, chamamento,
+              ano_formativo, modalidade, componente, turmas, nre_exe, munic_exe, situacao, data_conclusao
+            ) VALUES ${placeholders.join(', ')}
+            ON DUPLICATE KEY UPDATE
+              nome_cursista = VALUES(nome_cursista),
+              situacao = VALUES(situacao)
+          `;
+          await executeSql(sql, values);
+          total += placeholders.length;
+        }
+      }
+      return res.status(200).json({ status: 'success', total_concluintes_sincronizados: total });
+    }
+
+    if (action === 'sync_exonerados_bulk') {
+      const items = req.body.exonerados || req.body.data || [];
+      if (!Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ error: 'Nenhum exonerado fornecido.' });
+      }
+
+      await executeSql('TRUNCATE TABLE exonerados');
+
+      const batchSize = 100;
+      let total = 0;
+      const seenCpf = new Set();
+
+      for (let i = 0; i < items.length; i += batchSize) {
+        const batch = items.slice(i, i + batchSize);
+        const placeholders = [];
+        const values = [];
+
+        for (let j = 0; j < batch.length; j++) {
+          const r = batch[j];
+          const cpf = (r.cpf || '').trim();
+          if (cpf && seenCpf.has(cpf)) continue;
+          if (cpf) seenCpf.add(cpf);
+
+          placeholders.push('(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+          values.push(
+            r.cgm ? String(r.cgm) : null,
+            cpf || null,
+            r.rg || null,
+            r.nome_cursista || r.nome || 'EXONERADO',
+            r.email || r['e-mail'] || null,
+            r.motivo || null,
+            r.portaria || null,
+            r.data_exoneracao || r.data || null,
+            r.nre || null,
+            r.municipio || r.munic || null,
+            r.escola || null,
+            r.componente || null,
+            r.observacoes || null
+          );
+        }
+
+        if (placeholders.length > 0) {
+          const sql = `
+            INSERT INTO exonerados (
+              cgm, cpf, rg, nome_cursista, email, motivo, portaria,
+              data_exoneracao, nre, municipio, escola, componente, observacoes
+            ) VALUES ${placeholders.join(', ')}
+          `;
+          await executeSql(sql, values);
+          total += placeholders.length;
+        }
+      }
+      return res.status(200).json({ status: 'success', total_exonerados_sincronizados: total });
     }
 
     if (action === 'insert_observacao') {

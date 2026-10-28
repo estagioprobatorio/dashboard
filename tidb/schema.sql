@@ -206,3 +206,24 @@ CREATE TABLE IF NOT EXISTS intencao_matricula_2027 (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_intencao_cgm (cgm)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 8. TABELA: exonerados
+CREATE TABLE IF NOT EXISTS exonerados (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  cgm VARCHAR(50),
+  cpf VARCHAR(50),
+  rg VARCHAR(50),
+  nome_cursista VARCHAR(255) NOT NULL,
+  email VARCHAR(255),
+  motivo TEXT,
+  portaria VARCHAR(100),
+  data_exoneracao VARCHAR(50),
+  nre VARCHAR(100),
+  municipio VARCHAR(150),
+  escola VARCHAR(255),
+  componente VARCHAR(150),
+  observacoes TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_exon_cpf (cpf),
+  INDEX idx_exon_cgm (cgm)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

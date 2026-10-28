@@ -20,6 +20,7 @@ import ObservacaoPratica from './components/ObservacaoPratica';
 import ObservacoesOverview from './components/ObservacoesOverview';
 import AcompanhamentoObservacoesCards from './components/AcompanhamentoObservacoesCards';
 import Concluintes from './components/Concluintes';
+import Exonerados from './components/Exonerados';
 import Movimentacoes from './components/Movimentacoes';
 import TutorInsightsDashboard from './components/TutorInsightsDashboard';
 import DiarioFormativo from './components/DiarioFormativo';
@@ -52,6 +53,7 @@ export default function App() {
     return [...locais, ...observacoesFallback];
   });
   const [concluintesList, setConcluintesList] = useState(fallbackConcluintes);
+  const [exoneradosList, setExoneradosList] = useState([]);
   const [movimentacoesList, setMovimentacoesList] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [firebaseActive, setFirebaseActive] = useState(false);
@@ -270,6 +272,9 @@ export default function App() {
           }
           if (pacote.concluintes && Array.isArray(pacote.concluintes)) {
             setConcluintesList(pacote.concluintes);
+          }
+          if (pacote.exonerados && Array.isArray(pacote.exonerados)) {
+            setExoneradosList(pacote.exonerados);
           }
           if (pacote.intencoes2027 && Array.isArray(pacote.intencoes2027)) {
             setIntencoes2027List(pacote.intencoes2027);
@@ -767,6 +772,13 @@ export default function App() {
             userRole={userRole}
           />
         );
+      case 'exonerados':
+        return (
+          <Exonerados 
+            exonerados={exoneradosList} 
+            userRole={userRole} 
+          />
+        );
       case 'intencao_vagas_2027':
         return (userRole === 'admin' || userRole === 'tecnico' || isSuperAdminTutor) ? (
           <PainelIntencaoVagasAdmin 
@@ -1174,6 +1186,17 @@ export default function App() {
                   onClick={() => setActiveTab('concluintes')}
                 >
                   🎓 &nbsp; Concluintes (1º CH)
+                </button>
+              )}
+
+              {/* Aba de Servidores Exonerados */}
+              {(userRole === 'admin' || userRole === 'tecnico' || !simulatedRole) && (
+                <button 
+                  type="button"
+                  className={`item-submenu ${activeTab === 'exonerados' ? 'ativo' : ''}`}
+                  onClick={() => setActiveTab('exonerados')}
+                >
+                  🚪 &nbsp; Exonerados
                 </button>
               )}
 
