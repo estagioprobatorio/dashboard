@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   BarChart,
   Bar,
@@ -21,8 +21,11 @@ import {
   MOCK_TUTOR_OBSERVATIONS,
   getTutorObservacoesLocais,
   salvarNovaObservacaoTutoria,
+  fetchObservacoesTutor,
   CRITERIOS_POR_MODALIDADE,
-  MODALIDADES_TUTORIA
+  MODALIDADES_TUTORIA,
+  SPREADSHEET_ID,
+  SHEET_NAME
 } from '../data/tutorInsightsData';
 
 // Paleta Oficial Institucional
@@ -88,11 +91,14 @@ function formatRadarLabel(criterio) {
   return criterio && criterio.length > 16 ? criterio.substring(0, 14) + "…" : criterio;
 }
 
-export default function TutorInsightsDashboard({ userRole, userEmail, tutores = [] }) {
+export default function TutorInsightsDashboard({ userRole = 'admin', userEmail = '', userName = '', tutores = [] }) {
   const [observacoes, setObservacoes] = useState(() => getTutorObservacoesLocais());
   const [activeTab, setActiveTab] = useState('modalidade'); // 'modalidade' | 'tutor' | 'formador' | 'checklist' | 'coordenacao'
   const [selectedObs, setSelectedObs] = useState(null);
   const [modalNovaObs, setModalNovaObs] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState(null);
+  const [simulatedPersona, setSimulatedPersona] = useState('none');
 
   // Sub-abas de modalidade
   const [subModalidade, setSubModalidade] = useState("Diálogo Formativo");
@@ -106,6 +112,70 @@ export default function TutorInsightsDashboard({ userRole, userEmail, tutores = 
   const [filtroFormador, setFiltroFormador] = useState('todos');
   const [busca, setBusca] = useState('');
   const [ordemData, setOrdemData] = useState('recentes'); // 'recentes' | 'antigos'
+
+  // Sincronização inicial automática da planilha do Google Sheets
+  useEffect(() => {
+    let isMounted = true;
+    async function carregarObservacoesRemotas() {
+      try {
+        const data = await fetchObservacoesTutor();
+        if (isMounted && Array.isArray(data) && data.length > 0) {
+          setObservacoes(data);
+        }
+      } catch (err) {
+        console.warn("[TutorInsights] Erro ao sincronizar observações:", err);
+      }
+    }
+    carregarObservacoesRemotas();
+    return () => { isMounted = false; };
+  }, []);
+
+  const handleSyncSheets = async () => {
+    setIsSyncing(true);
+    setSyncStatus(null);
+    try {
+      const data = await fetchObservacoesTutor();
+      if (Array.isArray(data) && data.length > 0) {
+        setObservacoes(data);
+        setSyncStatus({
+          type: 'success',
+          text: `✓ Sincronização concluída com sucesso! ${data.length} observações consolidadas da planilha oficial.`
+        });
+      } else {
+        setSyncStatus({
+          type: 'info',
+          text: 'Base local já está atualizada com as observações mais recentes.'
+        });
+      }
+    } catch (err) {
+      setSyncStatus({
+        type: 'error',
+        text: 'Não foi possível conectar ao Google Sheets no momento. Mantendo base em cache local.'
+      });
+    } finally {
+      setIsSyncing(false);
+      setTimeout(() => setSyncStatus(null), 6000);
+    }
+  };
+
+  const handleSimulatePersona = (val) => {
+    setSimulatedPersona(val);
+    if (val.startsWith('tutor:')) {
+      const tutorName = val.replace('tutor:', '');
+      setActiveTab('tutor');
+      setFiltroTutor(tutorName);
+      setFiltroFormador('todos');
+    } else if (val.startsWith('formador:')) {
+      const formadorName = val.replace('formador:', '');
+      setActiveTab('formador');
+      setFiltroFormador(formadorName);
+      setFiltroTutor('todos');
+    } else {
+      setFiltroTutor('todos');
+      setFiltroFormador('todos');
+      setActiveTab('modalidade');
+    }
+  };
 
   // Listas únicas para dropdowns de filtros
   const temasDisponiveis = useMemo(() => {
@@ -233,7 +303,7 @@ export default function TutorInsightsDashboard({ userRole, userEmail, tutores = 
         borderRadius: '16px',
         padding: '1.75rem 2rem',
         color: 'white',
-        marginBottom: '1.5rem',
+        marginBottom: '1rem',
         boxShadow: '0 8px 24px rgba(0, 29, 61, 0.2)',
         display: 'flex',
         flexWrap: 'wrap',
@@ -241,7 +311,7 @@ export default function TutorInsightsDashboard({ userRole, userEmail, tutores = 
         justifyContent: 'space-between',
         gap: '1rem'
       }}>
-        <div style={{ flex: '1 1 300px' }}>
+        <div style={{ flex: '1 1 320px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.4rem' }}>
             <span style={{ fontSize: '1.6rem' }}>◈</span>
             <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, letterSpacing: '-0.02em' }}>
@@ -256,15 +326,77 @@ export default function TutorInsightsDashboard({ userRole, userEmail, tutores = 
               letterSpacing: '0.04em',
               textTransform: 'uppercase'
             }}>
-              Superadmin
+              {userRole === 'admin' || userRole === 'superadmin' ? 'Superadmin' : userRole === 'tecnico' ? 'Técnico' : userRole === 'tutor' ? 'Tutor' : 'Visualizador'}
             </span>
           </div>
-          <p style={{ margin: 0, fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.85)', lineHeight: 1.4 }}>
-            Monitoramento analítico de sessões formativas: Técnicos da Coordenação acompanhando Tutores e Tutores acompanhando Formadores.
+          <p style={{ margin: 0, fontSize: '0.88rem', color: 'rgba(255, 255, 255, 0.85)', lineHeight: 1.4 }}>
+            Monitoramento analítico de sessões formativas: Técnicos acompanhando Tutores e Tutores acompanhando Formadores.
           </p>
+          <div style={{ marginTop: '0.5rem', fontSize: '0.74rem', color: 'rgba(255, 255, 255, 0.7)', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.4rem' }}>
+            <span>📄 Planilha Oficial:</span>
+            <code style={{ background: 'rgba(0,0,0,0.25)', padding: '0.1rem 0.4rem', borderRadius: '4px', fontSize: '0.72rem' }}>{SPREADSHEET_ID}</code>
+            <span>· Aba: <strong>{SHEET_NAME}</strong> (41 colunas estruturadas)</span>
+          </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          {/* Seletor de Simulação de Papéis (Impersonation) */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', backgroundColor: 'rgba(255,255,255,0.14)', padding: '0.4rem 0.75rem', borderRadius: '8px' }}>
+            <span style={{ fontSize: '0.78rem', fontWeight: 600 }}>👁️ Simular Perfil:</span>
+            <select
+              value={simulatedPersona}
+              onChange={e => handleSimulatePersona(e.target.value)}
+              style={{
+                backgroundColor: 'white',
+                color: BRAND.primaryDark,
+                border: 'none',
+                borderRadius: '6px',
+                padding: '0.35rem 0.6rem',
+                fontSize: '0.8rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                outline: 'none'
+              }}
+            >
+              <option value="none">👑 Visão Coordenação (Todas)</option>
+              <optgroup label="Tutores">
+                {tutoresDisponiveis.map(t => (
+                  <option key={t} value={`tutor:${t}`}>👨‍🏫 Tutor: {t}</option>
+                ))}
+              </optgroup>
+              <optgroup label="Formadores">
+                {formadoresDisponiveis.map(f => (
+                  <option key={f} value={`formador:${f}`}>🧑‍🏫 Formador: {f}</option>
+                ))}
+              </optgroup>
+            </select>
+          </div>
+
+          {/* Botão Sincronizar Google Sheets */}
+          <button
+            onClick={handleSyncSheets}
+            disabled={isSyncing}
+            style={{
+              backgroundColor: 'rgba(255,255,255,0.18)',
+              color: 'white',
+              border: '1px solid rgba(255,255,255,0.3)',
+              borderRadius: '8px',
+              padding: '0.65rem 1rem',
+              fontSize: '0.85rem',
+              fontWeight: 700,
+              cursor: isSyncing ? 'wait' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.45rem',
+              transition: 'all 0.2s'
+            }}
+            title="Atualizar dados diretamente da planilha do Google Sheets"
+          >
+            <span>{isSyncing ? '⏳' : '🔄'}</span>
+            {isSyncing ? 'Sincronizando...' : 'Sincronizar Google Sheets'}
+          </button>
+
+          {/* Botão Nova Observação */}
           <button
             onClick={() => setModalNovaObs(true)}
             style={{
@@ -283,10 +415,31 @@ export default function TutorInsightsDashboard({ userRole, userEmail, tutores = 
               transition: 'all 0.2s'
             }}
           >
-            <span>+</span> Nova Observação de Tutoria
+            <span>+</span> Nova Observação
           </button>
         </div>
       </div>
+
+      {/* Banner de Status de Sincronização */}
+      {syncStatus && (
+        <div style={{
+          backgroundColor: syncStatus.type === 'success' ? '#ecfdf5' : syncStatus.type === 'error' ? '#fef2f2' : '#eff6ff',
+          border: `1px solid ${syncStatus.type === 'success' ? '#10b981' : syncStatus.type === 'error' ? '#ef4444' : '#3b82f6'}`,
+          color: syncStatus.type === 'success' ? '#065f46' : syncStatus.type === 'error' ? '#991b1b' : '#1e40af',
+          padding: '0.75rem 1.25rem',
+          borderRadius: '8px',
+          fontSize: '0.88rem',
+          fontWeight: 600,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: '1.25rem',
+          boxShadow: '0 2px 6px rgba(0,0,0,0.05)'
+        }}>
+          <span>{syncStatus.text}</span>
+          <button onClick={() => setSyncStatus(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontWeight: 800, color: 'inherit' }}>✕</button>
+        </div>
+      )}
 
       {/* ── Barra de Filtros Globais Responsiva ───────────────────── */}
       <div style={{

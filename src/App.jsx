@@ -693,21 +693,11 @@ export default function App() {
           />
         );
       case 'tutor_insights':
-        if (!isSuperAdminTutor) {
-          return (
-            <div className="glass-panel" style={{ padding: '3rem 2rem', textAlign: 'center', maxWidth: '600px', margin: '2rem auto' }}>
-              <div style={{ fontSize: '3rem', marginBottom: '0.75rem' }}>🔒</div>
-              <h3 style={{ color: 'var(--color-primary-dark)', marginBottom: '0.5rem' }}>Acesso Restrito aos Superadministradores</h3>
-              <p style={{ color: 'var(--color-text-muted)', fontSize: '0.92rem', lineHeight: '1.5' }}>
-                O módulo <strong>Observação do Tutor</strong> (Acompanhamento de Tutores e Formadores) é de acesso exclusivo da coordenação geral do programa.
-              </p>
-            </div>
-          );
-        }
         return (
           <TutorInsightsDashboard 
             userRole={effectiveRole}
             userEmail={effectiveEmail}
+            userName={user?.displayName || user?.name || ''}
             tutores={tutoresList}
           />
         );
@@ -990,12 +980,12 @@ export default function App() {
                     {!isSidebarCollapsed && <span className="console-nav-text">Acompanhamento Cursista</span>}
                   </button>
 
-                  {isSuperAdminTutor && (
+                  {(isSuperAdminTutor || userRole === 'admin' || userRole === 'tecnico') && (
                     <button
                       type="button"
                       className={`console-nav-item ${activeTab === 'tutor_insights' ? 'active' : ''}`}
                       onClick={() => { setMacroPilar('pedagogica'); setActiveTab('tutor_insights'); }}
-                      title="Observação do Tutor (Superadmin)"
+                      title="Observação do Tutor (Acompanhamento Pedagógico)"
                     >
                       <span className="console-nav-icon">🔭</span>
                       {!isSidebarCollapsed && <span className="console-nav-text">Observação do Tutor</span>}
