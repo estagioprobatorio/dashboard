@@ -38,23 +38,9 @@ function obterPlanilhaMestra() {
 
 /**
  * -----------------------------------------------------------------------------------------
- * MENU PERSONALIZADO NO GOOGLE SHEETS
- * Aparece automaticamente na barra superior da planilha para qualquer usuário autorizado
+ * NOTA: O menu superior unificado (onOpen) está configurado no arquivo menu.gs
  * -----------------------------------------------------------------------------------------
  */
-function onOpen() {
-  try {
-    SpreadsheetApp.getUi()
-      .createMenu('⚡ TiDB Cloud')
-      .addItem('🔄 Sincronizar Tudo com TiDB Agora (Manual)', 'sincronizarManualComAlerta')
-      .addSeparator()
-      .addItem('⏰ Ativar Atualização Automática Diária (07:00)', 'configurarGatilhoDiario7h')
-      .addItem('🔍 Testar Conexão com TiDB', 'testarConexaoTiDB')
-      .addToUi();
-  } catch (e) {
-    Logger.log('Interface de planilha indisponível (modo headless): ' + e.toString());
-  }
-}
 
 /**
  * -----------------------------------------------------------------------------------------
