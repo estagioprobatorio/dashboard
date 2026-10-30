@@ -97,8 +97,8 @@ function resolverDadosTurma(turmaNome, movContext = {}, records = [], tutoresLis
   };
 }
 
-export default function Movimentacoes({ userEmail, userRole, tutorData, records = fallbackData, tutoresList = tutoresFallback }) {
-  const [movements, setMovements] = useState([]);
+export default function Movimentacoes({ userEmail, userRole, tutorData, records = fallbackData, tutoresList = tutoresFallback, initialMovements = [] }) {
+  const [movements, setMovements] = useState(initialMovements.length > 0 ? initialMovements : []);
   const [loading, setLoading] = useState(false);
   const [isSyncingSheet, setIsSyncingSheet] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -218,7 +218,12 @@ export default function Movimentacoes({ userEmail, userRole, tutorData, records 
   };
 
   useEffect(() => {
-    // Sincroniza dados da planilha pública ao montar o componente
+    if (initialMovements && initialMovements.length > 0) {
+      setMovements(initialMovements);
+      return;
+    }
+
+    // Sincroniza dados da planilha pública ao montar o componente se não houver dados iniciais
     syncGoogleSheets();
 
     if (isSupabaseConfigured && supabase) {

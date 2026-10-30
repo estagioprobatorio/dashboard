@@ -44,6 +44,7 @@ import fallbackConcluintes from './concluintes_fallback.json';
 export default function App() {
   const [macroPilar, setMacroPilar] = useState('pedagogica'); // 'pedagogica' | 'administrativa'
   const [activeTab, setActiveTab] = useState('observacoes');
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [showBuscaGlobal, setShowBuscaGlobal] = useState(false);
   const [cursistaDossieModal, setCursistaDossieModal] = useState(null);
   const [records, setRecords] = useState(fallbackData);
@@ -760,6 +761,7 @@ export default function App() {
             tutorData={tutoresList} 
             records={enrichedRecords}
             tutoresList={tutoresList}
+            initialMovements={movimentacoesList}
           />
         );
       case 'formadores':
@@ -813,43 +815,52 @@ export default function App() {
   };
 
   return (
-    <div className="app-container">
-      {/* CABEÇALHO INSTITUCIONAL */}
-      <header className="cabecalho">
-        <div className="cabecalho-conteudo">
+    <div className="app-container console-theme">
+      {/* CABEÇALHO CONSOLE GOOGLE (SLIM & MODERNO) */}
+      <header className="cabecalho-console">
+        <div className="cabecalho-conteudo-console">
 
-          <div className="identidade">
-            <div className="logo" aria-hidden="true">
-              <img 
-                src="/brasao_parana.svg" 
-                alt="Brasão do Paraná" 
-                style={{ width: '42px', height: 'auto', objectFit: 'contain' }} 
-              />
-            </div>
+          <div className="identidade-console">
+            <button
+              type="button"
+              className="btn-hamburger-header"
+              onClick={() => setIsSidebarCollapsed(prev => !prev)}
+              title={isSidebarCollapsed ? "Expandir menu lateral" : "Recolher menu lateral"}
+              aria-label="Alternar menu lateral"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="18" x2="21" y2="18"></line>
+              </svg>
+            </button>
 
-            <div className="identidade-texto">
-              <div className="secretaria">
-                SECRETARIA DA EDUCAÇÃO DO PARANÁ · SEED/PR
-              </div>
+            <img 
+              src="/brasao_parana.svg" 
+              alt="Brasão do Paraná" 
+              style={{ width: '32px', height: 'auto', objectFit: 'contain' }} 
+            />
 
-              <h1>ESTÁGIO PROBATÓRIO</h1>
-
-              <p>Gestão de turmas e acompanhamento da formação docente</p>
+            <div className="identidade-titulos">
+              <span className="subtitulo-governo">SEED-PR · ESTADO DO PARANÁ</span>
+              <span className="titulo-plataforma">ESTÁGIO PROBATÓRIO DOCENTE</span>
             </div>
           </div>
 
-          <div className="acoes-usuario">
+          <div className="acoes-usuario-console">
             <button 
-              className="botao-busca" 
+              className="botao-busca-console" 
               type="button"
               onClick={() => setShowBuscaGlobal(true)}
+              title="Buscar pessoas no sistema (Ctrl+K)"
             >
-              <span aria-hidden="true">⌕</span>
-              Buscar pessoas
+              <span aria-hidden="true">🔍</span>
+              <span>Buscar pessoas</span>
+              <kbd className="atalho-busca">Ctrl+K</kbd>
             </button>
 
-            <div className="perfil">
-              <div className="avatar" aria-hidden="true">
+            <div className="perfil-console">
+              <div className="avatar-console" aria-hidden="true">
                 {user.photoURL ? (
                   <img src={user.photoURL} alt="Avatar" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
                 ) : (
@@ -857,12 +868,12 @@ export default function App() {
                 )}
               </div>
 
-              <div className="perfil-dados">
+              <div className="perfil-dados-console">
                 <strong>{user.displayName || 'Usuário'}</strong>
                 <small>{userRole ? userRole.toUpperCase() : 'ACESSO'}</small>
               </div>
 
-              <button className="sair" type="button" onClick={handleLogout}>
+              <button className="sair-console" type="button" onClick={handleLogout} title="Sair da Plataforma">
                 ↪ Sair
               </button>
             </div>
@@ -871,373 +882,273 @@ export default function App() {
         </div>
       </header>
 
-      {/* MENU DE DIVISÕES (ÁREA DE GESTÃO) */}
-      {effectiveRole !== 'cursista' && (
-        <nav className="menu-principal" aria-label="Divisão de gestão">
-          <div className="menu-conteudo">
+      {/* CORPO PRINCIPAL COM SIDEBAR ESTILO GOOGLE CLOUD CONSOLE */}
+      <div className="console-layout-wrapper">
+        <aside className={`console-sidebar ${isSidebarCollapsed ? 'collapsed' : ''}`} aria-label="Navegação Lateral">
+          
+          <div className="console-sidebar-nav">
+            {effectiveRole === 'cursista' ? (
+              <div className="console-nav-group">
+                {!isSidebarCollapsed && <div className="console-nav-label">Espaço Cursista</div>}
+                
+                <button
+                  type="button"
+                  className={`console-nav-item ${activeTab === 'cursista_turma' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('cursista_turma')}
+                  title="Minha Turma"
+                >
+                  <span className="console-nav-icon">🏫</span>
+                  {!isSidebarCollapsed && <span className="console-nav-text">Minha Turma</span>}
+                </button>
 
-            <div className="menu-divisao">
-              <span className="menu-legenda">Área de gestão</span>
+                <button
+                  type="button"
+                  className={`console-nav-item ${activeTab === 'cursista_observacoes' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('cursista_observacoes')}
+                  title="Meu Acompanhamento & Medalhas"
+                >
+                  <span className="console-nav-icon">🏅</span>
+                  {!isSidebarCollapsed && <span className="console-nav-text">Meu Acompanhamento</span>}
+                </button>
 
-              <button
-                type="button"
-                className={`item-divisao ${macroPilar === 'pedagogica' ? 'ativo' : ''}`}
-                data-divisao="pedagogica"
-                aria-current={macroPilar === 'pedagogica' ? 'page' : undefined}
-                onClick={() => {
-                  setMacroPilar('pedagogica');
-                  setActiveTab('observacoes');
-                }}
-              >
-                <span aria-hidden="true">▤</span>
-                Gestão Pedagógica
-              </button>
+                <button
+                  type="button"
+                  className={`console-nav-item ${activeTab === 'cursista_diario' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('cursista_diario')}
+                  title="Meu Diário Formativo"
+                >
+                  <span className="console-nav-icon">📖</span>
+                  {!isSidebarCollapsed && <span className="console-nav-text">Diário Formativo</span>}
+                </button>
 
-              <button
-                type="button"
-                className={`item-divisao ${macroPilar === 'administrativa' ? 'ativo' : ''}`}
-                data-divisao="administrativa"
-                aria-current={macroPilar === 'administrativa' ? 'page' : undefined}
-                onClick={() => {
-                  setMacroPilar('administrativa');
-                  setActiveTab('panorama');
-                }}
-              >
-                <span aria-hidden="true">▥</span>
-                Gestão Administrativa
-              </button>
-            </div>
+                <button
+                  type="button"
+                  className={`console-nav-item ${activeTab === 'cursista_solicitacoes' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('cursista_solicitacoes')}
+                  title="Minhas Solicitações"
+                >
+                  <span className="console-nav-icon">🔄</span>
+                  {!isSidebarCollapsed && <span className="console-nav-text">Minhas Solicitações</span>}
+                </button>
 
-            <div className="contexto">
-              {macroPilar === 'pedagogica'
-                ? 'Acompanhamento formativo em 3 níveis · Rubricas · Diário Formativo · PDP'
-                : 'Matriz de turmas · Remanejamentos · Ensalamento · Concluintes · Auditoria'}
-            </div>
+                <button
+                  type="button"
+                  className={`console-nav-item ${activeTab === 'cursista_documentos' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('cursista_documentos')}
+                  title="Documentos Formativos"
+                >
+                  <span className="console-nav-icon">📄</span>
+                  {!isSidebarCollapsed && <span className="console-nav-text">Documentos Formativos</span>}
+                </button>
 
+                {isCursistaElegivel2027 && (
+                  <button
+                    type="button"
+                    className={`console-nav-item ${activeTab === 'cursista_matricula_2027' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('cursista_matricula_2027')}
+                    title="Intenção Matrícula 2027"
+                  >
+                    <span className="console-nav-icon">📅</span>
+                    {!isSidebarCollapsed && <span className="console-nav-text">Intenção Matrícula 2027</span>}
+                  </button>
+                )}
+              </div>
+            ) : (
+              <>
+                {/* GESTÃO PEDAGÓGICA */}
+                <div className="console-nav-group">
+                  {!isSidebarCollapsed && <div className="console-nav-label">Gestão Pedagógica</div>}
+
+                  <button
+                    type="button"
+                    className={`console-nav-item ${activeTab === 'observacoes' ? 'active' : ''}`}
+                    onClick={() => { setMacroPilar('pedagogica'); setActiveTab('observacoes'); }}
+                    title="Observação do Cursista"
+                  >
+                    <span className="console-nav-icon">🎯</span>
+                    {!isSidebarCollapsed && <span className="console-nav-text">Observação do Cursista</span>}
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`console-nav-item ${activeTab === 'observacoes_overview' ? 'active' : ''}`}
+                    onClick={() => { setMacroPilar('pedagogica'); setActiveTab('observacoes_overview'); }}
+                    title="Overview das Observações"
+                  >
+                    <span className="console-nav-icon">📊</span>
+                    {!isSidebarCollapsed && <span className="console-nav-text">Overview Observações</span>}
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`console-nav-item ${activeTab === 'acompanhamento_cards' ? 'active' : ''}`}
+                    onClick={() => { setMacroPilar('pedagogica'); setActiveTab('acompanhamento_cards'); }}
+                    title="Acompanhamento por Cursista"
+                  >
+                    <span className="console-nav-icon">👤</span>
+                    {!isSidebarCollapsed && <span className="console-nav-text">Acompanhamento Cursista</span>}
+                  </button>
+
+                  {isSuperAdminTutor && (
+                    <button
+                      type="button"
+                      className={`console-nav-item ${activeTab === 'tutor_insights' ? 'active' : ''}`}
+                      onClick={() => { setMacroPilar('pedagogica'); setActiveTab('tutor_insights'); }}
+                      title="Observação do Tutor (Superadmin)"
+                    >
+                      <span className="console-nav-icon">🔭</span>
+                      {!isSidebarCollapsed && <span className="console-nav-text">Observação do Tutor</span>}
+                    </button>
+                  )}
+                </div>
+
+                {/* GESTÃO ADMINISTRATIVA */}
+                <div className="console-nav-group">
+                  {!isSidebarCollapsed && <div className="console-nav-label">Gestão Administrativa</div>}
+
+                  <button
+                    type="button"
+                    className={`console-nav-item ${activeTab === 'panorama' ? 'active' : ''}`}
+                    onClick={() => { setMacroPilar('administrativa'); setActiveTab('panorama'); }}
+                    title="Panorama Geral"
+                  >
+                    <span className="console-nav-icon">🌐</span>
+                    {!isSidebarCollapsed && <span className="console-nav-text">Panorama Geral</span>}
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`console-nav-item ${activeTab === 'turmas' ? 'active' : ''}`}
+                    onClick={() => { setMacroPilar('administrativa'); setActiveTab('turmas'); }}
+                    title="Gestão de Turmas"
+                  >
+                    <span className="console-nav-icon">🏫</span>
+                    {!isSidebarCollapsed && <span className="console-nav-text">Gestão de Turmas</span>}
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`console-nav-item ${activeTab === 'remanejamentos' ? 'active' : ''}`}
+                    onClick={() => { setMacroPilar('administrativa'); setActiveTab('remanejamentos'); }}
+                    title="Remanejamentos & Modalidades"
+                  >
+                    <span className="console-nav-icon">⚖️</span>
+                    {!isSidebarCollapsed && (
+                      <span className="console-nav-text">
+                        Remanejamentos & Trocas
+                        {movimentacoesList.filter(m => m.status === 'Pendente').length > 0 && (
+                          <span className="console-badge-pending">
+                            {movimentacoesList.filter(m => m.status === 'Pendente').length}
+                          </span>
+                        )}
+                      </span>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`console-nav-item ${activeTab === 'cursistas' ? 'active' : ''}`}
+                    onClick={() => { setMacroPilar('administrativa'); setActiveTab('cursistas'); }}
+                    title="Contato Cursistas"
+                  >
+                    <span className="console-nav-icon">📱</span>
+                    {!isSidebarCollapsed && <span className="console-nav-text">Contato Cursistas</span>}
+                  </button>
+
+                  {effectiveRole !== 'formador' && (
+                    <button
+                      type="button"
+                      className={`console-nav-item ${activeTab === 'formadores' ? 'active' : ''}`}
+                      onClick={() => { setMacroPilar('administrativa'); setActiveTab('formadores'); }}
+                      title="Contato Formadores"
+                    >
+                      <span className="console-nav-icon">🎓</span>
+                      {!isSidebarCollapsed && <span className="console-nav-text">Contato Formadores</span>}
+                    </button>
+                  )}
+
+                  {effectiveRole !== 'formador' && (
+                    <button
+                      type="button"
+                      className={`console-nav-item ${activeTab === 'tutoria' ? 'active' : ''}`}
+                      onClick={() => { setMacroPilar('administrativa'); setActiveTab('tutoria'); }}
+                      title="Dados Tutoria"
+                    >
+                      <span className="console-nav-icon">🤝</span>
+                      {!isSidebarCollapsed && <span className="console-nav-text">Dados Tutoria</span>}
+                    </button>
+                  )}
+
+                  {(userRole === 'admin' || userRole === 'tecnico' || !simulatedRole) && (
+                    <button
+                      type="button"
+                      className={`console-nav-item ${activeTab === 'concluintes' ? 'active' : ''}`}
+                      onClick={() => { setMacroPilar('administrativa'); setActiveTab('concluintes'); }}
+                      title="Concluintes (1º Chamamento)"
+                    >
+                      <span className="console-nav-icon">📜</span>
+                      {!isSidebarCollapsed && <span className="console-nav-text">Concluintes (1º CH)</span>}
+                    </button>
+                  )}
+
+                  {(userRole === 'admin' || userRole === 'tecnico' || !simulatedRole) && (
+                    <button
+                      type="button"
+                      className={`console-nav-item ${activeTab === 'exonerados' ? 'active' : ''}`}
+                      onClick={() => { setMacroPilar('administrativa'); setActiveTab('exonerados'); }}
+                      title="Servidores Exonerados"
+                    >
+                      <span className="console-nav-icon">🚪</span>
+                      {!isSidebarCollapsed && <span className="console-nav-text">Exonerados</span>}
+                    </button>
+                  )}
+
+                  {(userRole === 'admin' || isSuperAdminTutor) && (
+                    <button
+                      type="button"
+                      className={`console-nav-item ${activeTab === 'intencao_vagas_2027' ? 'active' : ''}`}
+                      onClick={() => { setMacroPilar('administrativa'); setActiveTab('intencao_vagas_2027'); }}
+                      title="Intenção de Vagas 2027"
+                    >
+                      <span className="console-nav-icon">📑</span>
+                      {!isSidebarCollapsed && <span className="console-nav-text">Intenção Vagas 2027</span>}
+                    </button>
+                  )}
+
+                  {userRole === 'admin' && !simulatedRole && (
+                    <button
+                      type="button"
+                      className={`console-nav-item ${activeTab === 'admin' ? 'active' : ''}`}
+                      onClick={() => { setMacroPilar('administrativa'); setActiveTab('admin'); }}
+                      title="Painel Admin ('Modo Deus')"
+                    >
+                      <span className="console-nav-icon">⚙️</span>
+                      {!isSidebarCollapsed && <span className="console-nav-text">Painel Admin</span>}
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
           </div>
-        </nav>
-      )}
 
-      {/* BARRA DE SIMULAÇÃO DE PERFIL (Desativada na versão oficial do Git) */}
-      {false && userRole === 'admin' && (
-        <section className="barra-admin" id="barraAdmin">
-          <label htmlFor="perfilVisualizacao">
-            🎭 Simular visualização:
-          </label>
+          {/* Footer da Sidebar */}
+          <div className="console-sidebar-footer">
+            {!isSidebarCollapsed && (
+              <div style={{ fontSize: '0.72rem', color: '#64748b', lineHeight: 1.35 }}>
+                <div><strong>TiDB Cloud</strong> Serverless</div>
+                <div style={{ opacity: 0.8 }}>SEED-PR · DAP/CFDEG</div>
+              </div>
+            )}
+          </div>
+        </aside>
 
-          <select
-            id="perfilVisualizacao"
-            value={simulatedRole || ''}
-            onChange={e => {
-              const role = e.target.value;
-              setSimulatedRole(role || null);
-              if (role === 'formador' && formadoresExemplo.length > 0) {
-                setSimulatedEmail(formadoresExemplo[0].email);
-                setActiveTab('panorama');
-              } else if (role === 'tutor' && tutoresExemplo.length > 0) {
-                setSimulatedEmail(tutoresExemplo[0].email);
-                setActiveTab('panorama');
-              } else if (role === 'cursista' && cursistasExemplo.length > 0) {
-                setSimulatedEmail(cursistasExemplo[0].email);
-                setActiveTab('cursista_turma');
-              } else {
-                setSimulatedEmail('');
-                setActiveTab('panorama');
-              }
-            }}
-          >
-            <option value="">Visão Admin Real (Painel Completo)</option>
-            <option value="cursista">Visão Cursista</option>
-            <option value="tutor">Visão Tutoria</option>
-            <option value="formador">Visão Formador</option>
-          </select>
-
-          {/* Seletores de exemplo específico */}
-          {simulatedRole === 'formador' && formadoresExemplo.length > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '0.8rem', color: '#855019', fontWeight: 700 }}>Exemplo:</span>
-              <select
-                value={effectiveEmail}
-                onChange={e => setSimulatedEmail(e.target.value)}
-                style={{ padding: '0.4rem 0.6rem', borderRadius: '7px', border: '1px solid #d49a47', fontSize: '0.8rem', color: '#654019' }}
-              >
-                {formadoresExemplo.map(f => (
-                  <option key={f.email} value={f.email}>{f.nome} ({f.email})</option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {simulatedRole === 'tutor' && tutoresExemplo.length > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '0.8rem', color: '#855019', fontWeight: 700 }}>Exemplo:</span>
-              <select
-                value={effectiveEmail}
-                onChange={e => setSimulatedEmail(e.target.value)}
-                style={{ padding: '0.4rem 0.6rem', borderRadius: '7px', border: '1px solid #d49a47', fontSize: '0.8rem', color: '#654019' }}
-              >
-                {tutoresExemplo.map(t => (
-                  <option key={t.email} value={t.email}>{t.nome} ({t.email})</option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {simulatedRole === 'cursista' && cursistasExemplo.length > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '0.8rem', color: '#855019', fontWeight: 700 }}>Exemplo ({cursistasExemplo.length} disp.):</span>
-              <select
-                value={effectiveEmail}
-                onChange={e => setSimulatedEmail(e.target.value)}
-                style={{ padding: '0.4rem 0.6rem', borderRadius: '7px', border: '1px solid #d49a47', fontSize: '0.8rem', color: '#654019', maxWidth: '300px' }}
-              >
-                {cursistasExemplo.slice(0, 30).map((c, idx) => (
-                  <option key={c.email} value={c.email}>
-                    {idx + 1}. {c.nome} {c.totalObs > 0 ? `(${c.totalObs} obs • ${c.ano})` : `(${c.turma})`}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {simulatedRole && (
-            <button
-              type="button"
-              onClick={() => { setSimulatedRole(null); setSimulatedEmail(''); setActiveTab('panorama'); }}
-              style={{
-                backgroundColor: '#92400e',
-                color: 'white',
-                border: 'none',
-                padding: '0.4rem 0.85rem',
-                borderRadius: '7px',
-                cursor: 'pointer',
-                fontSize: '0.78rem',
-                fontWeight: 700
-              }}
-            >
-              Voltar à Visão Admin Real
-            </button>
-          )}
-        </section>
-      )}
-
-      {/* SUBMENU DE FERRAMENTAS */}
-      <nav className="submenu" aria-label="Ferramentas de gestão">
-        <div className="submenu-conteudo">
-          {effectiveRole === 'cursista' ? (
-            <>
-              <button 
-                type="button"
-                className={`item-submenu ${activeTab === 'cursista_turma' ? 'ativo' : ''}`}
-                onClick={() => setActiveTab('cursista_turma')}
-              >
-                🏫 &nbsp; Minha Turma
-              </button>
-              <button 
-                type="button"
-                className={`item-submenu ${activeTab === 'cursista_observacoes' ? 'ativo' : ''}`}
-                onClick={() => setActiveTab('cursista_observacoes')}
-              >
-                👁️ &nbsp; Meu Acompanhamento & Medalhas
-              </button>
-              <button 
-                type="button"
-                className={`item-submenu ${activeTab === 'cursista_diario' ? 'ativo' : ''}`}
-                onClick={() => setActiveTab('cursista_diario')}
-              >
-                📖 &nbsp; Meu Diário Formativo
-              </button>
-              <button 
-                type="button"
-                className={`item-submenu ${activeTab === 'cursista_solicitacoes' ? 'ativo' : ''}`}
-                onClick={() => setActiveTab('cursista_solicitacoes')}
-              >
-                🔄 &nbsp; Minhas Solicitações
-              </button>
-              <button 
-                type="button"
-                className={`item-submenu ${activeTab === 'cursista_documentos' ? 'ativo' : ''}`}
-                onClick={() => setActiveTab('cursista_documentos')}
-              >
-                📚 &nbsp; Documentos Formativos
-              </button>
-              {isCursistaElegivel2027 && (
-                <button 
-                  type="button"
-                  className={`item-submenu ${activeTab === 'cursista_matricula_2027' ? 'ativo' : ''}`}
-                  onClick={() => setActiveTab('cursista_matricula_2027')}
-                >
-                  📅 &nbsp; Intenção Matrícula 2027
-                </button>
-              )}
-            </>
-          ) : macroPilar === 'pedagogica' ? (
-            <>
-              {/* FERRAMENTAS DA GESTÃO PEDAGÓGICA */}
-              <button 
-                type="button"
-                className={`item-submenu ${activeTab === 'observacoes' ? 'ativo' : ''}`}
-                onClick={() => setActiveTab('observacoes')}
-              >
-                ◉ &nbsp; Observação do Cursista
-              </button>
-
-              {/* Observações de Tutoria: EXCLUSIVO SUPERADMIN */}
-              {isSuperAdminTutor && (
-                <button 
-                  type="button"
-                  className={`item-submenu ${activeTab === 'tutor_insights' ? 'ativo' : ''}`}
-                  onClick={() => setActiveTab('tutor_insights')}
-                >
-                  ◈ &nbsp; Observação do Tutor
-                </button>
-              )}
-
-              {/* Diário Formativo e Central de Documentos (Ocultados temporariamente para publicação futura) */}
-              {/*
-              <button 
-                type="button"
-                className={`item-submenu ${activeTab === 'diario_formativo' ? 'ativo' : ''}`}
-                onClick={() => setActiveTab('diario_formativo')}
-              >
-                ▤ &nbsp; Diário Formativo
-              </button>
-
-              <button 
-                type="button"
-                className={`item-submenu ${activeTab === 'documentos_pedagogicos' ? 'ativo' : ''}`}
-                onClick={() => setActiveTab('documentos_pedagogicos')}
-              >
-                ▧ &nbsp; Central de Documentos (PDP e Rubricas)
-              </button>
-              */}
-
-              <button 
-                type="button"
-                className={`item-submenu ${activeTab === 'observacoes_overview' ? 'ativo' : ''}`}
-                onClick={() => setActiveTab('observacoes_overview')}
-              >
-                ▥ &nbsp; Overview das Observações
-              </button>
-
-              <button 
-                type="button"
-                className={`item-submenu ${activeTab === 'acompanhamento_cards' ? 'ativo' : ''}`}
-                onClick={() => setActiveTab('acompanhamento_cards')}
-              >
-                ▣ &nbsp; Acompanhamento por Cursista
-              </button>
-            </>
-          ) : (
-            <>
-              {/* FERRAMENTAS DA GESTÃO ADMINISTRATIVA */}
-              <button 
-                type="button"
-                className={`item-submenu ${activeTab === 'panorama' ? 'ativo' : ''}`}
-                onClick={() => setActiveTab('panorama')}
-              >
-                📊 &nbsp; Panorama Geral
-              </button>
-
-              <button 
-                type="button"
-                className={`item-submenu ${activeTab === 'turmas' ? 'ativo' : ''}`}
-                onClick={() => setActiveTab('turmas')}
-              >
-                ▦ &nbsp; Gestão de Turmas
-              </button>
-
-              <button 
-                type="button"
-                className={`item-submenu ${activeTab === 'remanejamentos' ? 'ativo' : ''}`}
-                onClick={() => setActiveTab('remanejamentos')}
-              >
-                🔄 &nbsp; Remanejamentos & Modalidades
-              </button>
-
-              <button 
-                type="button"
-                className={`item-submenu ${activeTab === 'cursistas' ? 'ativo' : ''}`}
-                onClick={() => setActiveTab('cursistas')}
-              >
-                👥 &nbsp; Contato Cursistas
-              </button>
-              
-              {effectiveRole !== 'formador' && (
-                <button 
-                  type="button"
-                  className={`item-submenu ${activeTab === 'formadores' ? 'ativo' : ''}`}
-                  onClick={() => setActiveTab('formadores')}
-                >
-                  🎓 &nbsp; Contato Formadores
-                </button>
-              )}
-              
-              {effectiveRole !== 'formador' && (
-                <button 
-                  type="button"
-                  className={`item-submenu ${activeTab === 'tutoria' ? 'ativo' : ''}`}
-                  onClick={() => setActiveTab('tutoria')}
-                >
-                  🤝 &nbsp; Dados Tutoria
-                </button>
-              )}
-
-              {/* Aba de Concluintes do 1º Chamamento */}
-              {(userRole === 'admin' || userRole === 'tecnico' || !simulatedRole) && (
-                <button 
-                  type="button"
-                  className={`item-submenu ${activeTab === 'concluintes' ? 'ativo' : ''}`}
-                  onClick={() => setActiveTab('concluintes')}
-                >
-                  🎓 &nbsp; Concluintes (1º CH)
-                </button>
-              )}
-
-              {/* Aba de Servidores Exonerados */}
-              {(userRole === 'admin' || userRole === 'tecnico' || !simulatedRole) && (
-                <button 
-                  type="button"
-                  className={`item-submenu ${activeTab === 'exonerados' ? 'ativo' : ''}`}
-                  onClick={() => setActiveTab('exonerados')}
-                >
-                  🚪 &nbsp; Exonerados
-                </button>
-              )}
-
-              {/* Aba de Intencao de Vagas 2027: Admin e Superadmin */}
-              {(userRole === 'admin' || isSuperAdminTutor) && (
-                <button 
-                  type="button"
-                  className={`item-submenu ${activeTab === 'intencao_vagas_2027' ? 'ativo' : ''}`}
-                  onClick={() => setActiveTab('intencao_vagas_2027')}
-                  style={{ borderLeft: '1px solid var(--borda)', backgroundColor: 'rgba(0, 114, 188, 0.08)' }}
-                >
-                  📋 &nbsp; Intenção de Vagas 2027 (Admin)
-                </button>
-              )}
-
-              {/* Aba de Admin: Apenas para Admin Real */}
-              {userRole === 'admin' && !simulatedRole && (
-                <button 
-                  type="button"
-                  className={`item-submenu ${activeTab === 'admin' ? 'ativo' : ''}`}
-                  onClick={() => setActiveTab('admin')}
-                  style={{ borderLeft: '1px solid var(--borda)', backgroundColor: 'rgba(229, 62, 62, 0.05)' }}
-                >
-                  🛡️ &nbsp; Painel Admin ("Modo Deus")
-                </button>
-              )}
-            </>
-          )}
-        </div>
-      </nav>
-
-      {/* Área Principal de Conteúdo com transição fluida */}
-      <HistoricoTurmasContext.Provider value={historicoTurmasCtx}>
-      <main className="main-content page-transition-enter" key={activeTab}>
-        {renderTabContent()}
-      </main>
+        {/* Área Principal de Conteúdo */}
+        <HistoricoTurmasContext.Provider value={historicoTurmasCtx}>
+          <main className="console-main-content page-transition-enter" key={activeTab}>
+            {renderTabContent()}
+          </main>
+        </HistoricoTurmasContext.Provider>
+      </div>
 
       {/* Modal de Busca Global de Pessoas (Cursista, Formador, Tutor) */}
       <BuscaGlobalPessoasModal
@@ -1258,7 +1169,6 @@ export default function App() {
       )}
 
       {/* Rodapé com o Brasão do Paraná */}
-      </HistoricoTurmasContext.Provider>
       <footer style={{ backgroundColor: 'var(--color-primary-dark)', color: 'rgba(255,255,255,0.7)', padding: '1.5rem', textAlign: 'center', fontSize: '0.8rem', marginTop: 'auto', borderTop: '4px solid var(--color-accent-green)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
         <img src="/brasao_parana.svg" alt="Brasão do Paraná" style={{ height: '36px', width: 'auto', opacity: 0.9 }} />
         <p>© 2026 Estágio Probatório - Secretaria da Educação do Estado do Paraná (SEED-PR)</p>

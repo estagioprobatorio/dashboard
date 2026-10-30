@@ -95,8 +95,8 @@ export default async function handler(req, res) {
         executeSql('SELECT * FROM observacoes_pratica ORDER BY id DESC').catch(() => []),
         executeSql('SELECT * FROM cursistas_concluintes ORDER BY nome_cursista ASC').catch(() => []),
         executeSql('SELECT * FROM exonerados ORDER BY nome_cursista ASC').catch(() => []),
-        executeSql('SELECT * FROM movimentacoes ORDER BY timestamp DESC LIMIT 500').catch(() => []),
-        executeSql('SELECT * FROM diario_formativo ORDER BY data_registro DESC LIMIT 200').catch(() => []),
+        executeSql('SELECT * FROM movimentacoes ORDER BY timestamp DESC LIMIT 5000').catch(() => []),
+        executeSql('SELECT * FROM diario_formativo ORDER BY data_registro DESC LIMIT 500').catch(() => []),
         executeSql('SELECT * FROM intencao_matricula_2027 ORDER BY created_at DESC').catch(() => [])
       ]);
 
@@ -282,7 +282,11 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Nenhum concluinte fornecido.' });
       }
 
-      await executeSql('TRUNCATE TABLE cursistas_concluintes');
+      // Trunca apenas se for explicitamente solicitado ou se for o primeiro lote
+      const shouldTruncate = req.body.truncate === true || req.body.batch_index === 0;
+      if (shouldTruncate) {
+        await executeSql('TRUNCATE TABLE cursistas_concluintes');
+      }
 
       const batchSize = 100;
       let total = 0;
@@ -342,7 +346,10 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Nenhum exonerado fornecido.' });
       }
 
-      await executeSql('TRUNCATE TABLE exonerados');
+      const shouldTruncate = req.body.truncate === true || req.body.batch_index === 0;
+      if (shouldTruncate) {
+        await executeSql('TRUNCATE TABLE exonerados');
+      }
 
       const batchSize = 100;
       let total = 0;
@@ -391,13 +398,148 @@ export default async function handler(req, res) {
       return res.status(200).json({ status: 'success', total_exonerados_sincronizados: total });
     }
 
+    if (action === 'sync_nao_concluintes_bulk') {
+      const items = req.body.nao_concluintes || req.body.data || [];
+      if (!Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ error: 'Nenhum cursista não concluinte fornecido.' });
+      }
+
+      await executeSql(`
+        CREATE TABLE IF NOT EXISTS cursistas_nao_concluintes (
+          id BIGINT AUTO_INCREMENT PRIMARY KEY,
+          nome_cursista VARCHAR(255),
+          email VARCHAR(255),
+          modalidade VARCHAR(100),
+          componente VARCHAR(150),
+          chamamento VARCHAR(100),
+          motivo TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          INDEX idx_nc_email (email)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+      `).catch(() => {});
+
+      const shouldTruncate = req.body.truncate === true || req.body.batch_index === 0;
+      if (shouldTruncate) {
+        await executeSql('TRUNCATE TABLE cursistas_nao_concluintes').catch(() => {});
+      }
+
+      const batchSize = 100;
+      let total = 0;
+      for (let i = 0; i < items.length; i += batchSize) {
+        const batch = items.slice(i, i + batchSize);
+        const placeholders = [];
+        const values = [];
+
+        for (let j = 0; j < batch.length; j++) {
+          const r = batch[j];
+          placeholders.push('(?, ?, ?, ?, ?, ?)');
+          values.push(
+            r.nome_cursista || r.nome || '',
+            r.email || r['e-mail'] || null,
+            r.modalidade || null,
+            r.componente || null,
+            r.chamamento || null,
+            r.motivo || null
+          );
+        }
+
+        if (placeholders.length > 0) {
+          const sql = `
+            INSERT INTO cursistas_nao_concluintes (
+              nome_cursista, email, modalidade, componente, chamamento, motivo
+            ) VALUES ${placeholders.join(', ')}
+          `;
+          await executeSql(sql, values);
+          total += placeholders.length;
+        }
+      }
+      return res.status(200).json({ status: 'success', total_nao_concluintes_sincronizados: total });
+    }
+
+    if (action === 'sync_movimentacoes_bulk') {
+      const items = req.body.movimentacoes || req.body.data || [];
+      if (!Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ error: 'Nenhuma movimentação fornecida.' });
+      }
+
+      const shouldTruncate = req.body.truncate === true;
+      if (shouldTruncate) {
+        await executeSql('TRUNCATE TABLE movimentacoes');
+      }
+
+      const batchSize = 100;
+      let total = 0;
+
+      for (let i = 0; i < items.length; i += batchSize) {
+        const batch = items.slice(i, i + batchSize);
+        const placeholders = [];
+        const values = [];
+
+        for (let j = 0; j < batch.length; j++) {
+          const m = batch[j];
+          const movId = m.id || `MOV_${Date.now()}_${i + j}`;
+
+          placeholders.push('(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+          values.push(
+            movId,
+            m.timestamp || new Date().toISOString(),
+            m.cgm ? String(m.cgm) : null,
+            m.nome_cursista || '',
+            m.email || m.emailCursista || null,
+            m.nre || null,
+            m.tutor || null,
+            m.tutor_responsavel || null,
+            m.email_tutor_responsavel || null,
+            m.turma_anterior || null,
+            m.turma_nova || null,
+            m.tipo_acao || 'Solicitação',
+            m.motivo || null,
+            m.situacao_relacionada || null,
+            m.ano_formacao || null,
+            m.chamamento || null,
+            m.modalidade_detalhes || null,
+            m.turma_detalhes || null,
+            m.justificativa || null,
+            m.descricao || null,
+            m.comprovante || null,
+            m.status || 'Pendente',
+            m.nota_resolucao || null,
+            m.solicitadoPor || 'Google Forms'
+          );
+        }
+
+        if (placeholders.length > 0) {
+          const sql = `
+            INSERT INTO movimentacoes (
+              id, timestamp, cgm, nome_cursista, email, nre, tutor, tutor_responsavel,
+              email_tutor_responsavel, turma_anterior, turma_nova, tipo_acao, motivo,
+              situacao_relacionada, ano_formacao, chamamento, modalidade_detalhes,
+              turma_detalhes, justificativa, descricao, comprovante, status, nota_resolucao, solicitadoPor
+            ) VALUES ${placeholders.join(', ')}
+            ON DUPLICATE KEY UPDATE
+              status = VALUES(status),
+              turma_anterior = VALUES(turma_anterior),
+              turma_nova = VALUES(turma_nova),
+              nota_resolucao = VALUES(nota_resolucao),
+              justificativa = VALUES(justificativa)
+          `;
+          await executeSql(sql, values);
+          total += placeholders.length;
+        }
+      }
+      return res.status(200).json({ status: 'success', total_movimentacoes_sincronizadas: total });
+    }
+
     if (action === 'sync_tutores_bulk') {
       const items = req.body.tutores || req.body.data || [];
       if (!Array.isArray(items) || items.length === 0) {
         return res.status(400).json({ error: 'Nenhum tutor fornecido.' });
       }
 
-      await executeSql('TRUNCATE TABLE tutores');
+      const shouldTruncate = req.body.truncate === true || req.body.batch_index === 0;
+      if (shouldTruncate) {
+        await executeSql('TRUNCATE TABLE tutores');
+      }
 
       const batchSize = 100;
       let total = 0;

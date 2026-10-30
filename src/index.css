@@ -1932,3 +1932,342 @@ button, input, select, textarea {
     padding: 0.75rem 0.5rem !important;
   }
 }
+
+/* =========================================================================================
+   ESTILO CONSOLE GOOGLE (SIDEBAR LATERAL & CABEÇALHO MODERNO SLIM)
+   ========================================================================================= */
+.console-theme {
+  background-color: #f8fafc;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.cabecalho-console {
+  background: linear-gradient(115deg, #001d3d 0%, #002d5c 60%, #0072bc 100%);
+  border-bottom: 3px solid #00984a;
+  height: 56px;
+  width: 100%;
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  box-shadow: 0 2px 10px rgba(0, 29, 61, 0.15);
+}
+
+.cabecalho-conteudo-console {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1.25rem;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.identidade-console {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.btn-hamburger-header {
+  background: transparent;
+  border: none;
+  color: #ffffff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border-radius: 6px;
+  transition: background 0.15s ease-in-out;
+}
+
+.btn-hamburger-header:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.identidade-titulos {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.subtitulo-governo {
+  font-size: 0.64rem;
+  font-weight: 700;
+  color: #4ade80;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.titulo-plataforma {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: 0.02em;
+}
+
+.acoes-usuario-console {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.botao-busca-console {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 8px;
+  color: #ffffff;
+  padding: 0.35rem 0.8rem;
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+}
+
+.botao-busca-console:hover {
+  background: rgba(255, 255, 255, 0.22);
+  border-color: rgba(255, 255, 255, 0.35);
+  transform: translateY(-1px);
+}
+
+.atalho-busca {
+  background: rgba(0, 0, 0, 0.28);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 0.67rem;
+  font-family: monospace;
+  color: rgba(255, 255, 255, 0.85);
+  margin-left: 0.25rem;
+}
+
+.perfil-console {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-left: 0.5rem;
+}
+
+.avatar-console {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #0072bc;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.82rem;
+  border: 1.5px solid rgba(255, 255, 255, 0.4);
+  overflow: hidden;
+}
+
+.perfil-dados-console {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.76rem;
+  color: #ffffff;
+  line-height: 1.2;
+}
+
+.perfil-dados-console strong {
+  font-weight: 700;
+  max-width: 130px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.perfil-dados-console small {
+  color: #cbd5e1;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.sair-console {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  border-radius: 6px;
+  padding: 0.32rem 0.65rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+}
+
+.sair-console:hover {
+  background: #dc2626;
+  border-color: #dc2626;
+  color: #ffffff;
+}
+
+/* SIDEBAR LATERAL ESTILO GOOGLE CONSOLE */
+.console-layout-wrapper {
+  display: flex;
+  flex: 1;
+  width: 100%;
+  min-height: calc(100vh - 56px);
+  position: relative;
+}
+
+.console-sidebar {
+  width: 250px;
+  flex: 0 0 250px;
+  background: #ffffff;
+  border-right: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: width 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  position: sticky;
+  top: 56px;
+  height: calc(100vh - 56px);
+  z-index: 100;
+  overflow-y: auto;
+  overflow-x: hidden;
+  box-shadow: 2px 0 6px rgba(0, 0, 0, 0.02);
+}
+
+.console-sidebar.collapsed {
+  width: 64px;
+  flex: 0 0 64px;
+}
+
+.console-sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  padding-top: 0.5rem;
+}
+
+.console-nav-group {
+  padding: 0.5rem 0.45rem;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.console-nav-label {
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #94a3b8;
+  padding: 0.3rem 0.6rem 0.25rem;
+}
+
+.console-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: #334155;
+  font-size: 0.83rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease-in-out;
+  position: relative;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.console-nav-item:hover {
+  background-color: #f1f5f9;
+  color: #002d5c;
+}
+
+.console-nav-item.active {
+  background-color: #e8f0fe !important;
+  color: #0072bc !important;
+  font-weight: 700 !important;
+}
+
+.console-nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 14%;
+  bottom: 14%;
+  width: 3.5px;
+  background: #0072bc;
+  border-radius: 0 4px 4px 0;
+}
+
+.console-nav-icon {
+  font-size: 1.15rem;
+  min-width: 24px;
+  text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.console-nav-text {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.console-badge-pending {
+  margin-left: auto;
+  background: #ef4444;
+  color: #ffffff;
+  font-size: 0.68rem;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 10px;
+  line-height: 1.3;
+}
+
+.console-sidebar-footer {
+  padding: 0.85rem 1rem;
+  border-top: 1px solid #f1f5f9;
+  background: #fafbfc;
+}
+
+.console-main-content {
+  flex: 1;
+  min-width: 0;
+  padding: 1.75rem 2.25rem;
+  background-color: #f8fafc;
+  overflow-y: auto;
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+  .console-sidebar {
+    position: fixed;
+    left: 0;
+    top: 56px;
+    bottom: 0;
+    z-index: 1050;
+    box-shadow: 4px 0 16px rgba(0, 0, 0, 0.15);
+  }
+  .console-sidebar.collapsed {
+    transform: translateX(-100%);
+    width: 250px;
+    flex: 0 0 250px;
+  }
+  .console-main-content {
+    padding: 1rem 0.75rem !important;
+  }
+  .perfil-dados-console {
+    display: none;
+  }
+}
+
