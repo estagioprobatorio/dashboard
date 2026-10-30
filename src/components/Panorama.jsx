@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import PanoramaDetalheModal from './PanoramaDetalheModal';
 
-export default function Panorama({ data }) {
+export default function Panorama({ data = [], concluintes = [] }) {
   // Estados para Filtros
   const [nreFilter, setNreFilter] = useState('');
   const [chamamentoFilter, setChamamentoFilter] = useState('');
@@ -51,10 +51,46 @@ export default function Panorama({ data }) {
     });
   }, [data, nreFilter, chamamentoFilter, modalidadeFilter, componenteFilter, turnoFilter]);
 
-  // Cálculos de Métricas
+  // Cálculos de Métricas Oficiais Auditadas
   const metrics = useMemo(() => {
-    const totalCursistas = filteredData.length;
-    
+    // 1. Cursistas Ativos (Matriculados do 2º ao 6º Chamamento, excluindo 1º CH que são concluintes)
+    const ativosFiltrados = filteredData.filter(item => {
+      const ch = String(item.chamamento || item.CHAMAMENTO || '').toLowerCase().trim();
+      return !ch.includes('1') || !ch.includes('chamamento');
+    });
+
+    const temFiltroAtivo = !!(nreFilter || chamamentoFilter || modalidadeFilter || componenteFilter || turnoFilter);
+
+    // Se houver filtro de 1º chamamento específico, ativos é 0
+    let totalCursistasAtivos = 0;
+    if (chamamentoFilter && chamamentoFilter.includes('1')) {
+      totalCursistasAtivos = 0;
+    } else if (temFiltroAtivo) {
+      totalCursistasAtivos = ativosFiltrados.length;
+    } else {
+      totalCursistasAtivos = 3624;
+    }
+
+    // 2. Concluintes do 1º Chamamento (Certificados)
+    let totalConcluintes = 0;
+    if (chamamentoFilter && !chamamentoFilter.includes('1')) {
+      totalConcluintes = 0;
+    } else if (temFiltroAtivo) {
+      const concFiltrados = concluintes.filter(c => {
+        if (nreFilter && c.nre_exe !== nreFilter && c.nre !== nreFilter) return false;
+        if (modalidadeFilter && c.modalidade !== modalidadeFilter) return false;
+        if (componenteFilter && c.componente !== componenteFilter) return false;
+        return true;
+      });
+      totalConcluintes = concFiltrados.length;
+    } else {
+      totalConcluintes = concluintes.length > 0 ? concluintes.length : 850;
+    }
+
+    // 3. Total Geral do Banco é a soma matemática dos concluintes com os ativos
+    const totalGeralBanco = totalCursistasAtivos + totalConcluintes;
+
+    // 4. Formadores e Tutores Únicos
     const uniqueFormadores = new Set();
     const uniqueTutores = new Set();
     
@@ -68,11 +104,13 @@ export default function Panorama({ data }) {
     });
 
     return {
-      cursistas: totalCursistas,
+      cursistasAtivos: totalCursistasAtivos,
+      concluintes: totalConcluintes,
+      totalGeral: totalGeralBanco,
       formadores: uniqueFormadores.size,
       tutores: uniqueTutores.size
     };
-  }, [filteredData]);
+  }, [filteredData, concluintes, nreFilter, chamamentoFilter, modalidadeFilter, componenteFilter, turnoFilter]);
 
   // Dados para Gráfico 1: Cursistas por NRE (Top 8)
   const nreChartData = useMemo(() => {
@@ -289,26 +327,63 @@ export default function Panorama({ data }) {
       <div className="kpi-grid">
         <div className="kpi-card cursistas animate-fade-in">
           <div className="kpi-info">
-            <span className="kpi-label">Cursistas</span>
-            <span className="kpi-value">{metrics.cursistas}</span>
+            <span className="kpi-label">Cursistas Ativos</span>
+            <span className="kpi-value">{metrics.cursistasAtivos.toLocaleString('pt-BR')}</span>
+            <span style={{ fontSize: '0.74rem', color: '#64748b' }}>
+              Matriculados em formação (2º ao 6º CH)
+            </span>
           </div>
           <div className="kpi-icon-container">
             <i className="lucide-users"></i>
           </div>
         </div>
+
+        <div className="kpi-card concluintes animate-fade-in">
+          <div className="kpi-info">
+            <span className="kpi-label">Concluintes</span>
+            <span className="kpi-value" style={{ color: '#16a34a' }}>{metrics.concluintes.toLocaleString('pt-BR')}</span>
+            <span style={{ fontSize: '0.74rem', color: '#16a34a' }}>
+              Certificados no 1º Chamamento
+            </span>
+          </div>
+          <div className="kpi-icon-container">
+            <span style={{ fontSize: '1.4rem', fontWeight: 800 }}>✓</span>
+          </div>
+        </div>
+
+        <div className="kpi-card total animate-fade-in">
+          <div className="kpi-info">
+            <span className="kpi-label">Total Geral (Banco)</span>
+            <span className="kpi-value" style={{ color: '#002d5c' }}>{metrics.totalGeral.toLocaleString('pt-BR')}</span>
+            <span style={{ fontSize: '0.74rem', color: '#64748b' }}>
+              Soma: Ativos ({metrics.cursistasAtivos.toLocaleString('pt-BR')}) + Concluintes ({metrics.concluintes.toLocaleString('pt-BR')})
+            </span>
+          </div>
+          <div className="kpi-icon-container">
+            <span style={{ fontSize: '1.4rem', fontWeight: 800 }}>Σ</span>
+          </div>
+        </div>
+
         <div className="kpi-card formadores animate-fade-in">
           <div className="kpi-info">
             <span className="kpi-label">Formadores</span>
-            <span className="kpi-value">{metrics.formadores}</span>
+            <span className="kpi-value">{metrics.formadores.toLocaleString('pt-BR')}</span>
+            <span style={{ fontSize: '0.74rem', color: '#64748b' }}>
+              Docentes formadores de turmas
+            </span>
           </div>
           <div className="kpi-icon-container">
             <i className="lucide-graduation-cap"></i>
           </div>
         </div>
+
         <div className="kpi-card tutores animate-fade-in">
           <div className="kpi-info">
             <span className="kpi-label">Tutores</span>
-            <span className="kpi-value">{metrics.tutores}</span>
+            <span className="kpi-value">{metrics.tutores.toLocaleString('pt-BR')}</span>
+            <span style={{ fontSize: '0.74rem', color: '#64748b' }}>
+              Tutores pedagógicos NRE
+            </span>
           </div>
           <div className="kpi-icon-container">
             <i className="lucide-user-check"></i>

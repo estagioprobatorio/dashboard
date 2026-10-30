@@ -959,8 +959,8 @@ button, input, select, textarea {
 /* KPI Dashboard Cards */
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 1.25rem;
   margin-bottom: 1rem;
 }
 
@@ -968,7 +968,7 @@ button, input, select, textarea {
   background: linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.7) 100%);
   border: 1px solid var(--color-card-border);
   border-radius: var(--radius-md);
-  padding: 1.5rem 2rem;
+  padding: 1.2rem 1.4rem;
   box-shadow: var(--shadow-md);
   display: flex;
   align-items: center;
@@ -994,6 +994,8 @@ button, input, select, textarea {
 }
 
 .kpi-card.cursistas::before { background-color: var(--color-accent-blue); }
+.kpi-card.concluintes::before { background-color: #16a34a; }
+.kpi-card.total::before { background-color: #002d5c; }
 .kpi-card.formadores::before { background-color: var(--color-accent-green); }
 .kpi-card.tutores::before { background-color: #f7b731; }
 
@@ -1004,31 +1006,36 @@ button, input, select, textarea {
 }
 
 .kpi-label {
-  font-size: 0.9rem;
-  font-weight: 600;
+  font-size: 0.82rem;
+  font-weight: 700;
   color: var(--color-text-muted);
   text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 .kpi-value {
-  font-size: 2.5rem;
+  font-size: 2.2rem;
   font-weight: 800;
   color: var(--color-primary-dark);
   font-family: var(--font-header);
+  line-height: 1.1;
 }
 
 .kpi-icon-container {
-  width: 60px;
-  height: 60px;
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
   background-color: rgba(11, 60, 93, 0.05);
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--color-primary-mid);
+  flex-shrink: 0;
 }
 
 .kpi-card.cursistas .kpi-icon-container { background-color: rgba(50, 130, 184, 0.1); color: var(--color-accent-blue); }
+.kpi-card.concluintes .kpi-icon-container { background-color: rgba(22, 163, 74, 0.1); color: #16a34a; }
+.kpi-card.total .kpi-icon-container { background-color: rgba(0, 45, 92, 0.08); color: #002d5c; }
 .kpi-card.formadores .kpi-icon-container { background-color: rgba(15, 155, 15, 0.1); color: var(--color-accent-green); }
 .kpi-card.tutores .kpi-icon-container { background-color: rgba(247, 183, 49, 0.1); color: #f7b731; }
 
