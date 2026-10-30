@@ -391,6 +391,45 @@ export default async function handler(req, res) {
       return res.status(200).json({ status: 'success', total_exonerados_sincronizados: total });
     }
 
+    if (action === 'sync_tutores_bulk') {
+      const items = req.body.tutores || req.body.data || [];
+      if (!Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ error: 'Nenhum tutor fornecido.' });
+      }
+
+      await executeSql('TRUNCATE TABLE tutores');
+
+      const batchSize = 100;
+      let total = 0;
+      for (let i = 0; i < items.length; i += batchSize) {
+        const batch = items.slice(i, i + batchSize);
+        const placeholders = [];
+        const values = [];
+
+        for (const t of batch) {
+          placeholders.push('(?, ?, ?, ?, ?, ?)');
+          values.push(
+            t.tutor_responsavel || null,
+            t.email_educ || null,
+            t.email_adm || null,
+            t.telefone || null,
+            t.nre_tutor || null,
+            t.email_nre || null
+          );
+        }
+
+        if (placeholders.length > 0) {
+          const sql = `
+            INSERT INTO tutores (tutor_responsavel, email_educ, email_adm, telefone, nre_tutor, email_nre)
+            VALUES ${placeholders.join(', ')}
+          `;
+          await executeSql(sql, values);
+          total += placeholders.length;
+        }
+      }
+      return res.status(200).json({ status: 'success', total_tutores_sincronizados: total });
+    }
+
     if (action === 'insert_observacao') {
       const d = req.body.data;
       if (!d || !d.email_cursista) {
@@ -609,6 +648,14 @@ export default async function handler(req, res) {
         'UPDATE movimentacoes SET status = ?, nota_resolucao = ? WHERE id = ?',
         [status || 'Resolvido', nota_resolucao || '', id]
       );
+      return res.status(200).json({ status: 'success' });
+    }
+
+    if (action === 'delete_movimentacao') {
+      const { id } = req.body;
+      if (!id) return res.status(400).json({ error: 'ID da movimentação obrigatório.' });
+
+      await executeSql('DELETE FROM movimentacoes WHERE id = ?', [id]);
       return res.status(200).json({ status: 'success' });
     }
 

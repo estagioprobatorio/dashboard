@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase, isConfigured as isSupabaseConfigured } from '../supabase';
 import { driveDataService } from '../services/driveDataService';
+import { tidbService } from '../services/tidbService';
 
 /**
  * MAPEAMENTO DE DIAS DA SEMANA POR COMPONENTE CURRICULAR (BASE OFICIAL 2026)
@@ -285,7 +286,32 @@ export default function IntencaoMatricula2027({ cursista, records = [], userEmai
       const cgm = String(cursista?.cgm || '').trim();
       if (!email && !cgm) return;
 
-      // 1. Tenta Supabase
+      // 1. Tenta carregar do TiDB Cloud Serverless
+      try {
+        const cached = localStorage.getItem('ep_tidb_cached_bundle');
+        let listaIntencoes = [];
+        if (cached) {
+          const pacote = JSON.parse(cached);
+          if (pacote.intencoes2027 && Array.isArray(pacote.intencoes2027)) {
+            listaIntencoes = pacote.intencoes2027;
+          }
+        }
+        const achado = listaIntencoes.find(i => (cgm && String(i.cgm) === cgm) || (email && String(i.email || '').trim().toLowerCase() === email));
+        if (achado) {
+          setRegistroExistente(achado);
+          setForm(prev => ({
+            ...prev,
+            turnoPretendido: achado.opcao_turno || prev.turnoPretendido,
+            modalidadePretendida: achado.opcao_modalidade || prev.modalidadePretendida,
+            descricaoAtendimentoEspecializado: achado.observacao || ''
+          }));
+          return;
+        }
+      } catch (e) {
+        console.warn('[Intencao 2027] Falha ao verificar TiDB:', e);
+      }
+
+      // 2. Tenta Supabase
       if (isSupabaseConfigured && supabase) {
         try {
           let query = supabase.from('intencao_matricula_2027').select('*');
@@ -360,7 +386,14 @@ export default function IntencaoMatricula2027({ cursista, records = [], userEmai
       created_at: new Date().toISOString()
     };
 
-    // 1. Salva via Drive Service (Google Sheets / Drive)
+    // 1. Salva no TiDB Cloud Serverless
+    try {
+      await tidbService.salvarIntencao2027(dadosRegistro);
+    } catch (err) {
+      console.warn('[TiDB] Erro ao salvar intenção via tidbService:', err);
+    }
+
+    // 2. Salva via Drive Service (Google Sheets / Drive)
     try {
       await driveDataService.salvarIntencao2027(dadosRegistro);
     } catch (err) {

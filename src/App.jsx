@@ -56,6 +56,7 @@ export default function App() {
   const [exoneradosList, setExoneradosList] = useState([]);
   const [movimentacoesList, setMovimentacoesList] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [sincronizandoTiDB, setSincronizandoTiDB] = useState(false);
   const [firebaseActive, setFirebaseActive] = useState(false);
 
   // Estados de Autenticação, RBAC e Simulação
@@ -292,6 +293,48 @@ export default function App() {
     carregarDadosBanco();
     return () => { isMounted = false; };
   }, []);
+
+  // Sincronização Manual sob demanda com TiDB Cloud
+  const handleSincronizarTiDBManual = async () => {
+    if (sincronizandoTiDB) return;
+    setSincronizandoTiDB(true);
+    try {
+      localStorage.removeItem('ep_tidb_cached_bundle');
+      const pacote = await tidbService.carregarPacoteGeral();
+      if (pacote) {
+        if (pacote.baseCursistas && Array.isArray(pacote.baseCursistas)) {
+          setRecords(pacote.baseCursistas);
+        }
+        if (pacote.tutores && Array.isArray(pacote.tutores)) {
+          setTutoresList(pacote.tutores);
+        }
+        if (pacote.observacoes && Array.isArray(pacote.observacoes)) {
+          const locais = getObservacoesLocaisNovas();
+          const dbIds = new Set(pacote.observacoes.map(o => o.id_origem || o.id));
+          const pendentesLocais = locais.filter(l => !dbIds.has(l.id_origem || l.id));
+          setObservacoesList([...pendentesLocais, ...pacote.observacoes]);
+        }
+        if (pacote.movimentacoes && Array.isArray(pacote.movimentacoes)) {
+          setMovimentacoesList(pacote.movimentacoes);
+        }
+        if (pacote.concluintes && Array.isArray(pacote.concluintes)) {
+          setConcluintesList(pacote.concluintes);
+        }
+        if (pacote.exonerados && Array.isArray(pacote.exonerados)) {
+          setExoneradosList(pacote.exonerados);
+        }
+        if (pacote.intencoes2027 && Array.isArray(pacote.intencoes2027)) {
+          setIntencoes2027List(pacote.intencoes2027);
+        }
+        alert('✓ Dados sincronizados com o TiDB Cloud com sucesso!');
+      }
+    } catch (err) {
+      console.error('[App] Erro na sincronização manual:', err);
+      alert('Erro ao atualizar dados do TiDB Cloud: ' + (err.message || 'Verifique a conexão'));
+    } finally {
+      setSincronizandoTiDB(false);
+    }
+  };
 
   const handleLoginSuccess = (authenticatedUser) => {
     try {
@@ -590,6 +633,11 @@ export default function App() {
   const handleNovaMovimentacao = async (novaSolicitacao) => {
     setMovimentacoesList(prev => [novaSolicitacao, ...prev]);
     try {
+      await tidbService.salvarMovimentacao(novaSolicitacao);
+    } catch (err) {
+      console.warn('[TiDB] Erro ao salvar movimentação via tidbService:', err);
+    }
+    try {
       await driveDataService.salvarRemanejamento(novaSolicitacao);
     } catch (err) {
       console.error('Erro ao salvar movimentação via DriveService:', err);
@@ -834,6 +882,27 @@ export default function App() {
           </div>
 
           <div className="acoes-usuario">
+            <button 
+              className="botao-busca" 
+              type="button"
+              style={{
+                backgroundColor: sincronizandoTiDB ? '#f1f5f9' : '#f0fdf4',
+                color: '#166534',
+                border: '1px solid #bbf7d0',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.45rem',
+                fontWeight: 600,
+                cursor: sincronizandoTiDB ? 'wait' : 'pointer'
+              }}
+              onClick={handleSincronizarTiDBManual}
+              disabled={sincronizandoTiDB}
+              title="Atualiza imediatamente as informações conectadas ao TiDB Cloud Serverless"
+            >
+              <span aria-hidden="true" style={{ display: 'inline-block', transform: sincronizandoTiDB ? 'rotate(180deg)' : 'none', transition: 'transform 0.4s' }}>🔄</span>
+              {sincronizandoTiDB ? 'Sincronizando...' : 'Atualizar TiDB'}
+            </button>
+
             <button 
               className="botao-busca" 
               type="button"

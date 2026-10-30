@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { database, isConfigured as isFirebaseConfigured } from '../firebase';
 import { supabase, isConfigured as isSupabaseConfigured } from '../supabase';
+import { tidbService } from '../services/tidbService';
 import { ref, set, push } from 'firebase/database';
 
 export default function AdminPanel({ data, onLocalUpdate, onMovimentacao, userRole }) {
@@ -370,7 +371,27 @@ export default function AdminPanel({ data, onLocalUpdate, onMovimentacao, userRo
         };
       }
 
-      // 1. Gravar no Supabase
+      // 1. Gravar no TiDB Cloud Serverless
+      try {
+        await tidbService.atualizarCursista(selectedRecord);
+        if (movementLog) {
+          await tidbService.salvarMovimentacao(movementLog);
+        }
+        console.log("✓ Alterações salvas no TiDB Cloud com sucesso!");
+      } catch (tidbErr) {
+        console.warn("Aviso ao salvar no TiDB:", tidbErr);
+      }
+
+      // 1.1 Gravar no Supabase (se configurado)
+      // 1. Gravar remoção no TiDB Cloud Serverless
+      try {
+        await tidbService.deletarCursista(record);
+        await tidbService.salvarMovimentacao(movementLog);
+        console.log("✓ Cursista removido do TiDB Cloud com sucesso!");
+      } catch (tidbErr) {
+        console.warn("Aviso ao deletar cursista no TiDB:", tidbErr);
+      }
+
       if (isSupabaseConfigured && supabase) {
         const supabasePayload = {
           cod_cursista: selectedRecord.cod_cursista || null,
@@ -522,6 +543,15 @@ export default function AdminPanel({ data, onLocalUpdate, onMovimentacao, userRo
         nota_resolucao: `Saída da turma ${record.turmas || ''}`,
         data_atendimento: new Date().toISOString()
       };
+
+      // 1. Gravar remoção no TiDB Cloud Serverless
+      try {
+        await tidbService.deletarCursista(record);
+        await tidbService.salvarMovimentacao(movementLog);
+        console.log("✓ Cursista removido do TiDB Cloud com sucesso!");
+      } catch (tidbErr) {
+        console.warn("Aviso ao deletar cursista no TiDB:", tidbErr);
+      }
 
       if (isSupabaseConfigured && supabase) {
         if (record.cgm) {

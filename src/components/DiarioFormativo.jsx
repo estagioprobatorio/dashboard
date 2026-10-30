@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase, isConfigured as isSupabaseConfigured } from '../supabase';
+import { tidbService } from '../services/tidbService';
 
 export default function DiarioFormativo({ 
   userRole, 
@@ -39,12 +40,50 @@ export default function DiarioFormativo({
     }) || null;
   }, [isCursista, userEmail, cursistas]);
 
-  // Carrega apontamentos do Supabase ou localStorage
+  // Carrega apontamentos do TiDB Cloud, Supabase ou localStorage
   const carregarApontamentos = async () => {
     setLoading(true);
     let dadosCarregados = [];
 
-    if (isSupabaseConfigured && supabase) {
+    // 1. Prioridade: TiDB Cloud Serverless (Cache ou API)
+    try {
+      const cached = localStorage.getItem('ep_tidb_cached_bundle');
+      let diarioTiDB = [];
+      if (cached) {
+        const pacote = JSON.parse(cached);
+        if (pacote.diario && Array.isArray(pacote.diario) && pacote.diario.length > 0) {
+          diarioTiDB = pacote.diario;
+        }
+      }
+      if (diarioTiDB.length === 0) {
+        const res = await fetch('/api/tidb?action=bundle');
+        if (res.ok) {
+          const pacote = await res.json();
+          if (pacote.diario && Array.isArray(pacote.diario) && pacote.diario.length > 0) {
+            diarioTiDB = pacote.diario;
+          }
+        }
+      }
+      if (diarioTiDB.length > 0) {
+        dadosCarregados = diarioTiDB.map(d => ({
+          id: d.id,
+          created_at: d.data_registro || d.created_at || new Date().toISOString(),
+          nome_cursista: d.nome_cursista || d.nome_autor || 'Docente Cursista',
+          email_cursista: d.email_autor || '',
+          cgm_cursista: d.cgm_cursista || '',
+          turma: d.turma || '',
+          categoria: d.categoria || 'Geral',
+          titulo: d.titulo || 'Registro Formativo',
+          descricao: d.conteudo || '',
+          nivelApoio: 'Moderado',
+          respostas: []
+        }));
+      }
+    } catch (e) {
+      console.warn('[Diário Formativo] Falha ao consultar TiDB Cloud:', e);
+    }
+
+    if (dadosCarregados.length === 0 && isSupabaseConfigured && supabase) {
       try {
         const { data, error } = await supabase
           .from('diario_formativo')
@@ -155,7 +194,25 @@ export default function DiarioFormativo({
       respostas: []
     };
 
-    // Salva no Supabase se disponível
+    // 1. Salva prioritariamente no TiDB Serverless Cloud
+    try {
+      await tidbService.salvarDiario({
+        email_autor: userEmail,
+        nome_autor: meuPerfilCursista?.nome_cursista || 'Docente Cursista',
+        papel_autor: userRole,
+        turma: formNovo.turma || meuPerfilCursista?.turmas || 'Turma Geral',
+        cgm_cursista: meuPerfilCursista?.cgm || '',
+        nome_cursista: meuPerfilCursista?.nome_cursista || 'Docente Cursista',
+        titulo: formNovo.titulo,
+        conteudo: formNovo.descricao,
+        categoria: formNovo.categoria,
+        visibilidade: 'publico'
+      });
+    } catch (err) {
+      console.warn('[Diário Formativo] Erro ao inserir no TiDB Cloud:', err);
+    }
+
+    // 2. Salva no Supabase se disponível (redundância)
     if (isSupabaseConfigured && supabase) {
       try {
         await supabase.from('diario_formativo').insert([novo]);

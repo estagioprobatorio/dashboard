@@ -1,13 +1,15 @@
 import { supabase, isConfigured as isSupabaseConfigured } from '../supabase';
+import { tidbService } from '../services/tidbService';
 
 const STORAGE_KEY = 'ep_observacoes_locais_novas';
 
 /**
- * Salva uma nova observação tanto no Supabase quanto na Planilha do Google (via Apps Script)
+ * Salva uma nova observação tanto no TiDB Cloud quanto na Planilha do Google (via Apps Script)
  * e também armazena em cache local para garantir funcionamento 100% resiliente.
  */
 export async function salvarObservacaoIntegrada(novaObservacao) {
   const resultados = {
+    tidb: false,
     supabase: false,
     googleSheets: false,
     local: false,
@@ -24,7 +26,18 @@ export async function salvarObservacaoIntegrada(novaObservacao) {
     console.warn('Erro ao salvar no localStorage:', err);
   }
 
-  // 2. Persistência no Supabase (se configurado)
+  // 2. Persistência Direta no TiDB Cloud Serverless
+  try {
+    const okTiDB = await tidbService.salvarObservacao(novaObservacao);
+    resultados.tidb = okTiDB;
+    if (okTiDB) {
+      console.log('✓ Observação salva no TiDB Cloud com sucesso!');
+    }
+  } catch (errTiDB) {
+    console.warn('Falha na inserção no TiDB:', errTiDB);
+  }
+
+  // 3. Persistência no Supabase (se configurado - fallback opcional)
   if (isSupabaseConfigured && supabase) {
     try {
       const payloadSupabase = {

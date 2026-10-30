@@ -165,6 +165,26 @@ export const tidbService = {
   },
 
   /**
+   * Remove uma movimentação / chamado do TiDB
+   */
+  deletarMovimentacao: async (id) => {
+    try {
+      const res = await fetch('/api/tidb', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'delete_movimentacao',
+          id
+        })
+      });
+      return res.ok;
+    } catch (e) {
+      console.warn('[TiDB Service] Falha ao deletar movimentação no TiDB:', e);
+      return false;
+    }
+  },
+
+  /**
    * Insere um registro no Diário Formativo
    */
   salvarDiario: async (entry) => {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { database, isConfigured as isFirebaseConfigured } from '../firebase';
 import { supabase, isConfigured as isSupabaseConfigured } from '../supabase';
+import { tidbService } from '../services/tidbService';
 import { ref, onValue, remove, update } from 'firebase/database';
 import { calculateSLA } from '../utils/slaUtils';
 import { fetchAllGoogleSheetsData } from '../utils/sheetUtils';
@@ -288,9 +289,14 @@ export default function Movimentacoes({ userEmail, userRole, tutorData, records 
   }, [mockMovements]);
 
   // Handler para novas solicitações (enviadas por cursista ou tutor)
-  const handleNovoChamadoSubmetido = (novoChamado) => {
+  const handleNovoChamadoSubmetido = async (novoChamado) => {
     setMovements(prev => [novoChamado, ...prev]);
     setShowTutorModal(false);
+    try {
+      await tidbService.salvarMovimentacao(novoChamado);
+    } catch (e) {
+      console.warn('[TiDB] Falha ao persistir chamado:', e);
+    }
   };
 
   // Handler para atualizar status do chamado pelo Admin (Deferido, Indeferido, Resolvido, Em Análise)
@@ -305,6 +311,18 @@ export default function Movimentacoes({ userEmail, userRole, tutorData, records 
     };
 
     try {
+      // 1. Atualiza prioritariamente no TiDB Serverless Cloud
+      try {
+        await tidbService.atualizarStatusMovimentacao(
+          selectedMovForAction.id,
+          adminStatusResponse,
+          adminNotaResolucao || `Atendido pelo Admin (${adminStatusResponse})`
+        );
+      } catch (tidbErr) {
+        console.warn('[TiDB] Falha ao atualizar chamado no TiDB:', tidbErr);
+      }
+
+      // 2. Supabase / Firebase (redundância)
       if (isSupabaseConfigured && supabase) {
         await supabase
           .from('movimentacoes')
@@ -337,6 +355,14 @@ export default function Movimentacoes({ userEmail, userRole, tutorData, records 
   const handleDeleteMovement = async (id) => {
     if (!window.confirm("Deseja realmente remover esta solicitação do histórico?")) return;
     try {
+      // 1. Remove do TiDB Cloud Serverless
+      try {
+        await tidbService.deletarMovimentacao(id);
+      } catch (tidbErr) {
+        console.warn('[TiDB] Falha ao deletar chamado no TiDB:', tidbErr);
+      }
+
+      // 2. Remove do Supabase / Firebase
       if (isSupabaseConfigured && supabase) {
         await supabase.from('movimentacoes').delete().eq('id', id);
       } else if (isFirebaseConfigured && database) {
