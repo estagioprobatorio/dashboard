@@ -717,6 +717,25 @@ function sincronizarAbasMovimentacoesParaTiDB() {
     return 'Pendente';
   }
 
+  function formatarTimestamp(carimbo) {
+    if (!carimbo) return new Date().toISOString().slice(0, 19).replace('T', ' ');
+    if (carimbo instanceof Date) {
+      return Utilities.formatDate(carimbo, "America/Sao_Paulo", "yyyy-MM-dd HH:mm:ss");
+    }
+    var str = String(carimbo).trim();
+    var match = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
+    if (match) {
+      var d = match[1].length === 1 ? '0' + match[1] : match[1];
+      var m = match[2].length === 1 ? '0' + match[2] : match[2];
+      var y = match[3];
+      var h = (match[4] || '00').length === 1 ? '0' + match[4] : (match[4] || '00');
+      var min = (match[5] || '00').length === 1 ? '0' + match[5] : (match[5] || '00');
+      var sec = (match[6] || '00').length === 1 ? '0' + match[6] : (match[6] || '00');
+      return y + '-' + m + '-' + d + ' ' + h + ':' + min + ':' + sec;
+    }
+    return str;
+  }
+
   // 1. Aba: Troca de Turma
   var abaTT = ss.getSheetByName("Troca de Turma");
   if (abaTT) {
@@ -739,7 +758,7 @@ function sincronizarAbasMovimentacoesParaTiDB() {
 
       movimentacoes.push({
         id: movId,
-        timestamp: carimbo || new Date().toISOString(),
+        timestamp: formatarTimestamp(carimbo),
         cgm: cgm || null,
         nome_cursista: nome,
         email: email || null,
@@ -778,7 +797,7 @@ function sincronizarAbasMovimentacoesParaTiDB() {
 
       movimentacoes.push({
         id: movIdM,
-        timestamp: carimboM || new Date().toISOString(),
+        timestamp: formatarTimestamp(carimboM),
         cgm: cgmM || null,
         nome_cursista: nomeM,
         email: emailM || null,
@@ -815,7 +834,7 @@ function sincronizarAbasMovimentacoesParaTiDB() {
 
       movimentacoes.push({
         id: movIdV,
-        timestamp: carimboV || new Date().toISOString(),
+        timestamp: formatarTimestamp(carimboV),
         cgm: cgmV || null,
         nome_cursista: nomeV,
         email: emailV || null,

@@ -56,6 +56,7 @@ export default function App() {
   const [concluintesList, setConcluintesList] = useState(fallbackConcluintes);
   const [exoneradosList, setExoneradosList] = useState([]);
   const [movimentacoesList, setMovimentacoesList] = useState([]);
+  const [intencoes2027List, setIntencoes2027List] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [firebaseActive, setFirebaseActive] = useState(false);
 

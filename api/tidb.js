@@ -39,6 +39,28 @@ function parseTiDBConfig() {
   };
 }
 
+function formatMySqlTimestamp(val) {
+  if (!val) return new Date().toISOString().slice(0, 19).replace('T', ' ');
+  const str = String(val).trim();
+  const brMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
+  if (brMatch) {
+    const day = brMatch[1].padStart(2, '0');
+    const month = brMatch[2].padStart(2, '0');
+    const year = brMatch[3];
+    const hour = (brMatch[4] || '00').padStart(2, '0');
+    const min = (brMatch[5] || '00').padStart(2, '0');
+    const sec = (brMatch[6] || '00').padStart(2, '0');
+    return `${year}-${month}-${day} ${hour}:${min}:${sec}`;
+  }
+  try {
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) {
+      return d.toISOString().slice(0, 19).replace('T', ' ');
+    }
+  } catch (e) {}
+  return new Date().toISOString().slice(0, 19).replace('T', ' ');
+}
+
 function getPool() {
   if (!pool) {
     const config = parseTiDBConfig();
@@ -482,7 +504,7 @@ export default async function handler(req, res) {
           placeholders.push('(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
           values.push(
             movId,
-            m.timestamp || new Date().toISOString(),
+            formatMySqlTimestamp(m.timestamp),
             m.cgm ? String(m.cgm) : null,
             m.nome_cursista || '',
             m.email || m.emailCursista || null,
@@ -753,7 +775,7 @@ export default async function handler(req, res) {
 
       const params = [
         movId,
-        m.timestamp || new Date().toISOString(),
+        formatMySqlTimestamp(m.timestamp),
         m.cgm ? String(m.cgm) : null,
         m.nome_cursista || '',
         m.email || m.emailCursista || null,

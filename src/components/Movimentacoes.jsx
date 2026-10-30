@@ -198,20 +198,20 @@ export default function Movimentacoes({ userEmail, userRole, tutorData, records 
     }
   ], []);
 
-  // Função para carregar dados de todas as abas do Google Sheets
+  // Função para recarregar dados de movimentações do TiDB Cloud
   const syncGoogleSheets = async () => {
     setIsSyncingSheet(true);
     try {
-      const sheetData = await fetchAllGoogleSheetsData();
-      if (sheetData && sheetData.length > 0) {
-        setMovements(prev => {
-          const existingIds = new Set(prev.map(p => p.id));
-          const newFromSheet = sheetData.filter(s => !existingIds.has(s.id));
-          return [...newFromSheet, ...prev];
-        });
+      const res = await fetch('/api/tidb?action=bundle');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.movimentacoes && Array.isArray(json.movimentacoes)) {
+          setMovements(json.movimentacoes);
+          return;
+        }
       }
     } catch (e) {
-      console.warn("Erro ao sincronizar com Google Sheets:", e);
+      console.warn("Erro ao recarregar movimentações do TiDB:", e);
     } finally {
       setIsSyncingSheet(false);
     }
@@ -220,10 +220,15 @@ export default function Movimentacoes({ userEmail, userRole, tutorData, records 
   useEffect(() => {
     if (initialMovements && initialMovements.length > 0) {
       setMovements(initialMovements);
+    }
+  }, [initialMovements]);
+
+  useEffect(() => {
+    if (initialMovements && initialMovements.length > 0) {
+      setMovements(initialMovements);
       return;
     }
 
-    // Sincroniza dados da planilha pública ao montar o componente se não houver dados iniciais
     syncGoogleSheets();
 
     if (isSupabaseConfigured && supabase) {
@@ -555,7 +560,7 @@ export default function Movimentacoes({ userEmail, userRole, tutorData, records 
               boxShadow: '0 2px 6px rgba(11,60,93,0.3)'
             }}
           >
-            <span>{isSyncingSheet ? '⏳ Sincronizando...' : '🔄 Sincronizar Google Sheets'}</span>
+            <span>{isSyncingSheet ? '⏳ Atualizando...' : '🔄 Atualizar Dados'}</span>
           </button>
 
           {/* Botão de Abertura de Chamado para Tutores */}
