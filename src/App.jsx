@@ -59,6 +59,7 @@ export default function App() {
   const [exoneradosList, setExoneradosList] = useState([]);
   const [movimentacoesList, setMovimentacoesList] = useState([]);
   const [intencoes2027List, setIntencoes2027List] = useState([]);
+  const [observacoesTutorList, setObservacoesTutorList] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [firebaseActive, setFirebaseActive] = useState(false);
 
@@ -348,6 +349,12 @@ export default function App() {
               }
             }
           } catch (e) { console.warn('[App] Erro ao aplicar intencoes2027:', e); }
+
+          try {
+            if (pacote.observacoesTutor && Array.isArray(pacote.observacoesTutor) && pacote.observacoesTutor.length > 0) {
+              setObservacoesTutorList(pacote.observacoesTutor);
+            }
+          } catch (e) { console.warn('[App] Erro ao aplicar observacoesTutor:', e); }
 
           setFirebaseActive(true);
         }
@@ -789,6 +796,7 @@ export default function App() {
             userEmail={effectiveEmail}
             userName={user?.displayName || user?.name || ''}
             tutores={tutoresList}
+            observacoesRemotas={observacoesTutorList}
           />
         );
       case 'diario_formativo':
@@ -1118,7 +1126,7 @@ export default function App() {
                     {!isSidebarCollapsed && <span className="console-nav-text">Acompanhamento do Cursista</span>}
                   </button>
 
-                  {(isSuperAdminTutor || userRole === 'admin' || userRole === 'tecnico') && (
+                  {(isSuperAdminTutor || userRole === 'admin' || userRole === 'tecnico' || effectiveRole === 'tutor' || userRole === 'tutor') && (
                     <button
                       type="button"
                       className={`console-nav-item ${activeTab === 'tutor_insights' ? 'active' : ''}`}

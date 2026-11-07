@@ -93,8 +93,19 @@ function formatRadarLabel(criterio) {
   return criterio && criterio.length > 16 ? criterio.substring(0, 14) + "…" : criterio;
 }
 
-export default function TutorInsightsDashboard({ userRole = 'admin', userEmail = '', userName = '', tutores = [] }) {
-  const [observacoes, setObservacoes] = useState(() => getTutorObservacoesLocais());
+export default function TutorInsightsDashboard({
+  userRole = 'admin',
+  userEmail = '',
+  userName = '',
+  tutores = [],
+  observacoesRemotas = []
+}) {
+  const [observacoes, setObservacoes] = useState(() => {
+    if (Array.isArray(observacoesRemotas) && observacoesRemotas.length > 0) {
+      return observacoesRemotas;
+    }
+    return getTutorObservacoesLocais();
+  });
   const [activeTab, setActiveTab] = useState('modalidade'); // 'modalidade' | 'tutor' | 'formador' | 'checklist' | 'coordenacao'
   const [selectedObs, setSelectedObs] = useState(null);
   const [modalNovaObs, setModalNovaObs] = useState(false);
@@ -130,6 +141,13 @@ export default function TutorInsightsDashboard({ userRole = 'admin', userEmail =
   useEffect(() => {
     setListPage(1);
   }, [filtroAcao, filtroModalidade, filtroTema, filtroNre, filtroTutor, filtroFormador, busca, ordemData]);
+
+  // Atualiza observações caso sejam injetadas pelo pacote geral remoto
+  useEffect(() => {
+    if (Array.isArray(observacoesRemotas) && observacoesRemotas.length > 0) {
+      setObservacoes(observacoesRemotas);
+    }
+  }, [observacoesRemotas]);
 
   // Sincronização inicial automática da planilha do Google Sheets
   useEffect(() => {
@@ -195,9 +213,42 @@ export default function TutorInsightsDashboard({ userRole = 'admin', userEmail =
     }
   };
 
-  // Enriquecer e normalizar os tutores com fallback por e-mail e NRE
+  // Identificação do tutor logado para isolamento de perfil (RBAC)
+  const myTutorName = useMemo(() => {
+    if (userRole !== 'tutor') return null;
+    const em = (userEmail || '').trim().toLowerCase();
+    const nm = (userName || '').trim().toUpperCase();
+    const match = (tutores || []).find(t => 
+      (t.email_tutor && t.email_tutor.trim().toLowerCase() === em) ||
+      (t.email && t.email.trim().toLowerCase() === em) ||
+      (t.tutor_responsavel && t.tutor_responsavel.trim().toUpperCase() === nm) ||
+      (t.nome && t.nome.trim().toUpperCase() === nm)
+    );
+    if (match) return match.tutor_responsavel || match.nome;
+    const obsMatch = (observacoes || []).find(o => 
+      (o.tutorEmail && o.tutorEmail.trim().toLowerCase() === em)
+    );
+    if (obsMatch) return obsMatch.tutor;
+    return userName || null;
+  }, [userRole, userEmail, userName, tutores, observacoes]);
+
+  // Enriquecer e normalizar os tutores com fallback por e-mail e NRE (com filtro estrito para perfil Tutor)
   const enrichedObservacoes = useMemo(() => {
-    return (observacoes || []).map(o => {
+    let base = observacoes || [];
+    if (userRole === 'tutor') {
+      const em = (userEmail || '').trim().toLowerCase();
+      const myNmUpper = (myTutorName || '').trim().toUpperCase();
+      base = base.filter(o => {
+        const oEm = (o.tutorEmail || '').trim().toLowerCase();
+        if (oEm && em && oEm === em) return true;
+        if (myNmUpper && o.tutor) {
+          return o.tutor.trim().toUpperCase() === myNmUpper;
+        }
+        return false;
+      });
+    }
+
+    return base.map(o => {
       const resolvedTutor = resolveTutorName(o.tutor, o.tutorEmail, tutores);
       let nre = o.nre;
       if (!nre || nre === 'NRE Geral') {
@@ -212,7 +263,7 @@ export default function TutorInsightsDashboard({ userRole = 'admin', userEmail =
         nre: nre || o.nre || 'NRE Geral'
       };
     });
-  }, [observacoes, tutores]);
+  }, [observacoes, tutores, userRole, userEmail, myTutorName]);
 
   // Listas únicas para dropdowns de filtros
   const temasDisponiveis = useMemo(() => {
@@ -567,34 +618,51 @@ export default function TutorInsightsDashboard({ userRole = 'admin', userEmail =
             </select>
           </div>
 
-          {/* Tutor */}
+          {/* Tutor / Observador */}
           <div>
             <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: BRAND.slate600, marginBottom: '0.3rem' }}>
-              TUTOR
+              TUTOR / OBSERVADOR
             </label>
-            <select
-              value={filtroTutor}
-              onChange={e => setFiltroTutor(e.target.value)}
-              style={{
-                width: '100%',
+            {userRole === 'tutor' ? (
+              <div style={{
                 padding: '0.5rem 0.65rem',
                 borderRadius: '6px',
-                border: `1px solid ${BRAND.slate200}`,
+                border: `1px solid ${BRAND.primaryLight}`,
                 fontSize: '0.82rem',
-                backgroundColor: BRAND.slate50
-              }}
-            >
-              <option value="todos">Todos os Tutores ({tutoresDisponiveis.length})</option>
-              {tutoresDisponiveis.map(t => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
+                fontWeight: 700,
+                backgroundColor: '#eff6ff',
+                color: BRAND.primaryDark,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis'
+              }} title={myTutorName || userName || 'Meu Perfil'}>
+                🔒 {myTutorName || userName || 'Meu Perfil'}
+              </div>
+            ) : (
+              <select
+                value={filtroTutor}
+                onChange={e => setFiltroTutor(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '0.5rem 0.65rem',
+                  borderRadius: '6px',
+                  border: `1px solid ${BRAND.slate200}`,
+                  fontSize: '0.82rem',
+                  backgroundColor: BRAND.slate50
+                }}
+              >
+                <option value="todos">Todos os Tutores ({tutoresDisponiveis.length})</option>
+                {tutoresDisponiveis.map(t => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            )}
           </div>
 
-          {/* Formador */}
+          {/* Formador Observado */}
           <div>
             <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: BRAND.slate600, marginBottom: '0.3rem' }}>
-              FORMADOR
+              FORMADOR OBSERVADO
             </label>
             <select
               value={filtroFormador}
@@ -1202,12 +1270,12 @@ export default function TutorInsightsDashboard({ userRole = 'admin', userEmail =
 
                     {/* Tutor e Formador */}
                     <div style={{ marginBottom: '0.5rem' }}>
-                      <div style={{ fontSize: '0.72rem', fontWeight: 700, color: BRAND.slate600, textTransform: 'uppercase' }}>Tutor</div>
+                      <div style={{ fontSize: '0.72rem', fontWeight: 700, color: BRAND.slate600, textTransform: 'uppercase' }}>Tutor / Observador</div>
                       <div style={{ fontSize: '0.9rem', fontWeight: 800, color: BRAND.slate800 }}>{obs.tutor}</div>
                     </div>
 
                     <div style={{ marginBottom: '0.5rem' }}>
-                      <div style={{ fontSize: '0.72rem', fontWeight: 700, color: BRAND.slate600, textTransform: 'uppercase' }}>Formador / Observador</div>
+                      <div style={{ fontSize: '0.72rem', fontWeight: 700, color: BRAND.slate600, textTransform: 'uppercase' }}>Formador Observado</div>
                       <div style={{ fontSize: '0.85rem', fontWeight: 600, color: BRAND.slate800 }}>{obs.formador}</div>
                     </div>
 
@@ -2268,13 +2336,13 @@ function ObservationDetailModal({ obs, onClose }) {
             gap: '0.75rem'
           }}>
             <div>
-              <div style={{ fontSize: '0.7rem', fontWeight: 700, color: BRAND.slate600, textTransform: 'uppercase' }}>Tutor Pedagógico</div>
+              <div style={{ fontSize: '0.7rem', fontWeight: 700, color: BRAND.slate600, textTransform: 'uppercase' }}>Tutor / Observador</div>
               <div style={{ fontSize: '0.92rem', fontWeight: 800, color: BRAND.slate800 }}>{obs.tutor || 'Tutor não informado'}</div>
               {obs.tutorEmail && <div style={{ fontSize: '0.75rem', color: BRAND.slate600 }}>{obs.tutorEmail}</div>}
             </div>
 
             <div>
-              <div style={{ fontSize: '0.7rem', fontWeight: 700, color: BRAND.slate600, textTransform: 'uppercase' }}>Formador / Observador</div>
+              <div style={{ fontSize: '0.7rem', fontWeight: 700, color: BRAND.slate600, textTransform: 'uppercase' }}>Formador Observado</div>
               <div style={{ fontSize: '0.92rem', fontWeight: 800, color: BRAND.slate800 }}>{obs.formador || 'Formador não informado'}</div>
               {obs.formadorEmail && <div style={{ fontSize: '0.75rem', color: BRAND.slate600 }}>{obs.formadorEmail}</div>}
             </div>
@@ -2641,7 +2709,7 @@ function NovaObservacaoModal({ tutores, onClose, onSalvar }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: BRAND.slate600, marginBottom: '0.25rem' }}>
-                NOME DO TUTOR *
+                TUTOR / OBSERVADOR *
               </label>
               <input
                 type="text"
@@ -2669,7 +2737,7 @@ function NovaObservacaoModal({ tutores, onClose, onSalvar }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: BRAND.slate600, marginBottom: '0.25rem' }}>
-                FORMADOR / OBSERVADOR *
+                FORMADOR OBSERVADO *
               </label>
               <input
                 type="text"

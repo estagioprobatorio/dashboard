@@ -59,7 +59,14 @@ export default async function handler(req, res) {
   const action = (req.query && req.query.action) || body.action || 'ping';
 
   try {
-    if (action === 'ping') return res.status(200).json({ status: 'ok', api: 'v2' });
+    if (action === 'ping' || action === 'health') {
+      try {
+        const r = await query('SELECT 1 as ok');
+        return res.status(200).json({ status: 'ok', api: 'v2', banco: 'conectado', ok: r && r[0] && r[0].ok === 1 });
+      } catch (err) {
+        return res.status(500).json({ status: 'erro_banco', api: 'v2', mensagem: 'Falha na conexão com TiDB Cloud', detalhe: err.message });
+      }
+    }
 
     /* ---------- carga das planilhas (Apps Script) ---------- */
     if (SYNC_ACTIONS[action]) {
@@ -68,9 +75,14 @@ export default async function handler(req, res) {
       const items = body.cursistas || body.tutores || body.concluintes || body.exonerados || body.nao_concluintes ||
         body.movimentacoes || body.observacoes || body.observacoes_tutor || body.data;
       if (!Array.isArray(items) || !items.length) throw new HttpError(400, 'Nenhum registro fornecido.');
-      const out = await SYNC_ACTIONS[action](body);
-      await audit(null, action, 'planilha', null, { recebidos: items.length, ...out });
-      return res.status(200).json({ status: 'success', ...out });
+      try {
+        const out = await SYNC_ACTIONS[action](body);
+        await audit(null, action, 'planilha', null, { recebidos: items.length, ...out });
+        return res.status(200).json({ status: 'success', ...out });
+      } catch (syncErr) {
+        console.error(`[SYNC ERROR ${action}]:`, syncErr);
+        return res.status(500).json({ error: syncErr.message || 'Erro interno na sincronização', acao: action });
+      }
     }
 
     /* ---------- ações autenticadas por usuário ---------- */

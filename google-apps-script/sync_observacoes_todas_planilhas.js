@@ -50,7 +50,7 @@ const SYNC_TOKEN = ""; // Configure o mesmo SYNC_TOKEN definido na Vercel ou .en
 
 // (Opcional - Legado) Supabase
 const SUPABASE_URL = "https://apebaoinlopybfgvhudf.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFwZWJhb2lubG9weWJmZ3ZodWRmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMwOTUwOTQsImV4cCI6MjEwODY3MTA5NH0.WlEm896zVOrqYks0Nco1_Plku-d1ksdJ-oBJM0W-JJg";
+const SUPABASE_KEY = ""; // Preencha se utilizar o Supabase legado
 
 // 📋 CONFIGURAÇÃO DAS 4 PLANILHAS
 const PLANILHAS_CONFIG = [

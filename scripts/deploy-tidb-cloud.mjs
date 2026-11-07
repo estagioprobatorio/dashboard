@@ -4,7 +4,7 @@ import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
 dotenv.config({ path: '.env.local' });
 
-const connUrl = process.env.TIDB_DATABASE_URL || process.env.DATABASE_URL || process.argv[2];
+const connUrl = process.argv[2] || process.env.TIDB_DATABASE_URL || process.env.DATABASE_URL;
 
 if (!connUrl) {
   console.error('Uso: node scripts/deploy-tidb-cloud.mjs "mysql://user:pass@host:4000/db"');
