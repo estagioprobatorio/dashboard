@@ -1,0 +1,3 @@
+@echo off
+echo Iniciando MariaDB local na porta 3307...
+"%USERPROFILE%\mariadb-local\mariadb-11.4.5-winx64\bin\mysqld.exe" --datadir="%USERPROFILE%\mariadb-local\data" --port=3307 --bind-address=127.0.0.1 --console

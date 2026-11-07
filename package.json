@@ -7,12 +7,20 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "populate:tidb": "node popular_tidb.cjs"
+    "populate:tidb": "node popular_tidb.cjs",
+    "dev:api": "node scripts/dev-api.mjs",
+    "db:schema": "node scripts/apply-schema.mjs",
+    "db:bootstrap": "node scripts/bootstrap-usuarios.mjs",
+    "db:import-observacoes": "node scripts/import-observacoes.mjs",
+    "db:deploy-tidb": "node scripts/deploy-tidb-cloud.mjs",
+    "test:v2": "node scripts/test-v2.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.0",
     "@tidbcloud/serverless": "^0.1.1",
+    "dotenv": "^18.0.9",
     "firebase": "^10.12.2",
+    "jose": "^6.2.15",
     "mysql2": "^3.24.6",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

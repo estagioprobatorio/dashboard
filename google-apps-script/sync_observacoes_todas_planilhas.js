@@ -44,9 +44,13 @@
  * =========================================================================================
  */
 
-// ⚙️ CONFIGURAÇÕES DE CONEXÃO AO SUPABASE
+// ⚙️ CONFIGURAÇÕES DE CONEXÃO AO BACKEND API v2 / TiDB (e Vercel)
+const VERCEL_APP_URL = "https://dashboard-tawny-delta-96.vercel.app";
+const SYNC_TOKEN = ""; // Configure o mesmo SYNC_TOKEN definido na Vercel ou .env.local
+
+// (Opcional - Legado) Supabase
 const SUPABASE_URL = "https://apebaoinlopybfgvhudf.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFwZWJhb2lubG9weWJmZ3ZodWRmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMwOTUwOTQsImV4cCI6MjEwODY3MTA5NH0.WlEm896zVOrqYks0Nco1_Plku-d1ksdJ-oBJM0W-JJg"; // Cole sua service_role_key (recomendada para sync) ou anon_key do Supabase
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFwZWJhb2lubG9weWJmZ3ZodWRmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMwOTUwOTQsImV4cCI6MjEwODY3MTA5NH0.WlEm896zVOrqYks0Nco1_Plku-d1ksdJ-oBJM0W-JJg";
 
 // 📋 CONFIGURAÇÃO DAS 4 PLANILHAS
 const PLANILHAS_CONFIG = [
@@ -644,33 +648,57 @@ function mapRowToObservation(headers, row, sheetName, sheetId, rowNumber, config
 
 /**
  * =========================================================================================
- * 5. ENVIO EM LOTE COM UPSERT (resolution=merge-duplicates)
+ * 5. ENVIO EM LOTE COM UPSERT (API v2 / TiDB Cloud + fallback Supabase)
  * =========================================================================================
  * Garante que se o registro já existir pelo id_origem, ele será apenas atualizado.
  */
 function sendBatchToSupabase(payloadArray) {
-  const cleanKey = String(SUPABASE_KEY || "").trim();
-  const endpoint = SUPABASE_URL + "/rest/v1/observacoes_pratica?on_conflict=id_origem";
+  // 1. Envio oficial para API v2 (TiDB Cloud)
+  if (VERCEL_APP_URL) {
+    try {
+      const v2Endpoint = VERCEL_APP_URL.replace(/\/$/, '') + "/api/v2?action=sync_observacoes_bulk";
+      const v2Options = {
+        method: "post",
+        contentType: "application/json",
+        headers: {
+          "X-Sync-Token": SYNC_TOKEN
+        },
+        payload: JSON.stringify({
+          action: "sync_observacoes_bulk",
+          observacoes: payloadArray
+        }),
+        muteHttpExceptions: true
+      };
+      const v2Resp = UrlFetchApp.fetch(v2Endpoint, v2Options);
+      const code = v2Resp.getResponseCode();
+      if (code >= 200 && code < 300) {
+        Logger.log("Lote de " + payloadArray.length + " enviado com sucesso à API v2 / TiDB (HTTP " + code + ")");
+      } else {
+        Logger.log("Aviso no envio à API v2 (HTTP " + code + "): " + v2Resp.getContentText());
+      }
+    } catch (errV2) {
+      Logger.log("Erro ao enviar para API v2: " + errV2.toString());
+    }
+  }
 
-  const options = {
-    method: "post",
-    contentType: "application/json",
-    headers: {
-      "apikey": cleanKey,
-      "Authorization": "Bearer " + cleanKey,
-      "Prefer": "resolution=merge-duplicates,return=minimal"
-    },
-    payload: JSON.stringify(payloadArray),
-    muteHttpExceptions: true
-  };
-
-  const response = UrlFetchApp.fetch(endpoint, options);
-  const responseCode = response.getResponseCode();
-
-  if (responseCode >= 200 && responseCode < 300) {
-    Logger.log("Lote de " + payloadArray.length + " enviado com sucesso ao Supabase (HTTP " + responseCode + ")");
-  } else {
-    Logger.log("Erro no envio ao Supabase (HTTP " + responseCode + "): " + response.getContentText());
+  // 2. Envio complementar para Supabase (se configurado)
+  if (SUPABASE_URL && SUPABASE_KEY) {
+    try {
+      const cleanKey = String(SUPABASE_KEY || "").trim();
+      const endpoint = SUPABASE_URL + "/rest/v1/observacoes_pratica?on_conflict=id_origem";
+      const options = {
+        method: "post",
+        contentType: "application/json",
+        headers: {
+          "apikey": cleanKey,
+          "Authorization": "Bearer " + cleanKey,
+          "Prefer": "resolution=merge-duplicates,return=minimal"
+        },
+        payload: JSON.stringify(payloadArray),
+        muteHttpExceptions: true
+      };
+      UrlFetchApp.fetch(endpoint, options);
+    } catch (e) {}
   }
 }
 

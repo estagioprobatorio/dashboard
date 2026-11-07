@@ -284,18 +284,24 @@ export default function App() {
     }
   }, [enrichedRecords, tutoresList]);
 
-  // 3. Efeito para carregar dados do TiDB Cloud Serverless (com fallback resiliente para Drive / Local)
+  // 3. Efeito para carregar dados do TiDB Cloud Serverless / API v2 (com fallback resiliente para Drive / Local)
   useEffect(() => {
     let isMounted = true;
 
     async function carregarDadosBanco() {
       setIsLoading(true);
       try {
-        console.log('[App] Carregando dados consolidados (TiDB Cloud / Cache / Drive)...');
+        console.log('[App] Carregando dados consolidados (API v2 / TiDB Cloud / Drive)...');
         const pacote = await tidbService.carregarPacoteGeral();
         if (!isMounted) return;
 
         if (pacote) {
+          // Se a API v2 autenticada retornou a função oficial do banco, aplica diretamente
+          if (pacote.funcao) {
+            console.log('[App] Função do usuário validada pelo servidor:', pacote.funcao);
+            setUserRole(pacote.funcao);
+          }
+
           try {
             if (pacote.baseCursistas && Array.isArray(pacote.baseCursistas) && pacote.baseCursistas.length > 0) {
               setRecords(pacote.baseCursistas);
@@ -355,7 +361,7 @@ export default function App() {
 
     carregarDadosBanco();
     return () => { isMounted = false; };
-  }, []);
+  }, [user?.email]);
 
   const handleLoginSuccess = (authenticatedUser) => {
     try {

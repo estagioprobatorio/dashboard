@@ -25,11 +25,60 @@
  * =========================================================================================
  */
 
-// URL do Dashboard na Vercel (onde opera o gateway serverless /api/tidb)
+// URL do Dashboard na Vercel ou Localhost (onde opera o gateway serverless)
 var VERCEL_APP_URL = "https://dashboard-tawny-delta-96.vercel.app";
+
+// Versão da API: "v2" (nova arquitetura com CGM protegido e 1 função por conta) ou "v1" (legado /api/tidb)
+var API_VERSION = "v2";
+
+// Token secreto compartilhado para sincronização segura (exigido quando API_VERSION = "v2")
+// Configure o mesmo valor definido em SYNC_TOKEN na Vercel ou no .env.local
+var SYNC_TOKEN = "";
 
 // ID da Planilha Mestra Central SEED/PR
 var SPREADSHEET_ID_MESTRA_TIDB = "1sRkA88VrtczqXxQ6PlmgygeCVhPoElRNS8RC1QuQzx0";
+
+// Planilhas Externas de Observações da Prática (Formadores)
+var PLANILHAS_OBSERVACOES_FORMADOR = [
+  { id: "1KmbMvNOTpj4OaDOdKw5mPVI3iqbo8RbQBqBktM84ToE", nome: "Formador-1ANO_1SEM" },
+  { id: "1uv5QWeqtN5iMkH8nVQUvsYKClv9NaGDHgsdT_D-RPiw", nome: "Formador-2e3ANO-2SEM" },
+  { id: "1dL_Q-_15Idx3SNAZOqmKzrnVqA8tHFBzILA5PZ7p798", nome: "Formador-1ANO_2SEM" },
+  { id: "1zSnlh7aW8df800lP90rCLVxiHNWAa1f9IGjz2OoDfvU", nome: "Formador-2e3ANO-1SEM" }
+];
+
+// Planilha Externa de Observações de Tutoria (Tutores -> Formadores / Tutor Insights)
+var PLANILHA_OBSERVACOES_TUTOR_ID = "1V54Gl-KVGaHjLBH07hQZxq6GU88kfn0Xurh5P2LuSz8";
+
+/**
+ * Helper para obter a URL do endpoint configurado (v2 ou legado)
+ */
+function obterEndpointApi(actionParam) {
+  var base = VERCEL_APP_URL.replace(/\/$/, '');
+  var path = (API_VERSION === "v2") ? "/api/v2" : "/api/tidb";
+  if (actionParam) {
+    return base + path + "?action=" + actionParam;
+  }
+  return base + path;
+}
+
+/**
+ * Helper para montar as opções de requisição HTTP com cabeçalho de autenticação
+ */
+function obterOpcoesHttp(payloadObj) {
+  var headers = {
+    "Content-Type": "application/json"
+  };
+  if (SYNC_TOKEN) {
+    headers["X-Sync-Token"] = SYNC_TOKEN;
+  }
+  return {
+    method: "post",
+    contentType: "application/json",
+    headers: headers,
+    payload: JSON.stringify(payloadObj),
+    muteHttpExceptions: true
+  };
+}
 
 /**
  * Helper resiliente para obter a planilha mestra ativa ou por ID
@@ -49,7 +98,7 @@ function obterPlanilhaMestra() {
  */
 function testarConexaoTiDB() {
   var ui = SpreadsheetApp.getUi();
-  var endpoint = VERCEL_APP_URL.replace(/\/$/, '') + '/api/tidb?action=test';
+  var endpoint = obterEndpointApi(API_VERSION === 'v2' ? 'ping' : 'test');
 
   try {
     var resp = UrlFetchApp.fetch(endpoint, {
@@ -172,9 +221,13 @@ function executarSincronizacaoCompletaTiDB() {
   var resMovimentacoes = sincronizarAbasMovimentacoesParaTiDB();
   Logger.log('Resultado Movimentações: ' + JSON.stringify(resMovimentacoes));
 
-  // 7. Observações Pedagógicas
+  // 7. Observações Pedagógicas (Formadores -> Cursistas)
   var resObservacoes = sincronizarAbaObservacoesParaTiDB();
-  Logger.log('Resultado Observações: ' + JSON.stringify(resObservacoes));
+  Logger.log('Resultado Observações da Prática: ' + JSON.stringify(resObservacoes));
+
+  // 8. Observações de Tutoria (Tutores -> Formadores / Tutor Insights)
+  var resTutoria = sincronizarAbaObservacoesTutoriaParaTiDB();
+  Logger.log('Resultado Observações de Tutoria: ' + JSON.stringify(resTutoria));
 
   Logger.log('✓ Sincronização completa concluída com sucesso!');
 
@@ -185,7 +238,8 @@ function executarSincronizacaoCompletaTiDB() {
     exonerados: resExonerados.total || 0,
     nao_concluintes: resNaoConcluintes.total || 0,
     movimentacoes: resMovimentacoes.total || 0,
-    observacoes: resObservacoes.total || 0
+    observacoes: resObservacoes.total || 0,
+    observacoes_tutoria: resTutoria.total || 0
   };
 }
 
@@ -224,6 +278,7 @@ function sincronizarAbaDadosParaTiDB() {
   var idxEmail = getIdx(["e-mail", "email cursista", "email"]);
   var idxCpf = getIdx(["cpf cursista", "cpf"]);
   var idxTurma = getIdx(["turmas", "turma"]);
+  var idxLinhaFuncional = getIdx(["linha funcional", "linha_funcional", "lf", "padrao", "vinculo"]);
   var idxModalidade = getIdx(["modalidade"]);
   var idxComponente = getIdx(["componente"]);
   var idxDiaSemana = getIdx(["dia da semana", "dia_da_semana"]);
@@ -241,11 +296,22 @@ function sincronizarAbaDadosParaTiDB() {
 
     var cgm = idxCgm !== -1 ? String(row[idxCgm] || "").trim() : "";
     var turmas = idxTurma !== -1 ? String(row[idxTurma] || "").trim() : "";
-    var cod = cgm ? (cgm + "_" + turmas) : ("CURS_" + i);
+    
+    // Extrai a Linha Funcional (pelo cabeçalho ou pela coluna AK [índice 36])
+    var lf = idxLinhaFuncional !== -1 ? String(row[idxLinhaFuncional] || "").trim() : "";
+    if (!lf && row.length > 36) {
+      lf = String(row[36] || "").trim();
+    }
+    // Normaliza números de LF (ex: "LF 1", "1º Padrão", "1" -> "1")
+    var lfNum = lf.replace(/\D/g, "");
+
+    // No dashboard, a identificação da matrícula é CGM + LF
+    var cod = cgm ? (cgm + (lfNum ? ("_LF" + lfNum) : ("_" + turmas))) : ("CURS_" + i);
 
     cursistas.push({
       cod_cursista: cod,
       cgm: cgm || null,
+      linha_funcional: lfNum || null,
       nome_cursista: nome,
       email: idxEmail !== -1 ? String(row[idxEmail] || "").trim().toLowerCase() : null,
       cpf_cursista: idxCpf !== -1 ? String(row[idxCpf] || "").trim() : null,
@@ -265,17 +331,13 @@ function sincronizarAbaDadosParaTiDB() {
   var totalSinc = 0;
   for (var b = 0; b < cursistas.length; b += BATCH_SIZE) {
     var lote = cursistas.slice(b, b + BATCH_SIZE);
-    var endpoint = VERCEL_APP_URL.replace(/\/$/, '') + '/api/tidb';
-
-    var options = {
-      method: 'post',
-      contentType: 'application/json',
-      payload: JSON.stringify({
-        action: 'sync_cursistas_bulk',
-        cursistas: lote
-      }),
-      muteHttpExceptions: true
-    };
+    var endpoint = obterEndpointApi();
+    var options = obterOpcoesHttp({
+      action: 'sync_cursistas_bulk',
+      cursistas: lote,
+      run_id: 'sync_gs_' + Date.now(),
+      final: (b + BATCH_SIZE >= cursistas.length)
+    });
 
     try {
       var resp = UrlFetchApp.fetch(endpoint, options);
@@ -378,19 +440,13 @@ function sincronizarAbaConcluintesParaTiDB() {
   var totalSinc = 0;
   for (var b = 0; b < concluintes.length; b += BATCH_SIZE) {
     var lote = concluintes.slice(b, b + BATCH_SIZE);
-    var endpoint = VERCEL_APP_URL.replace(/\/$/, '') + '/api/tidb';
-
-    var options = {
-      method: 'post',
-      contentType: 'application/json',
-      payload: JSON.stringify({
-        action: 'sync_concluintes_bulk',
-        concluintes: lote,
-        truncate: (b === 0),
-        batch_index: b
-      }),
-      muteHttpExceptions: true
-    };
+    var endpoint = obterEndpointApi();
+    var options = obterOpcoesHttp({
+      action: 'sync_concluintes_bulk',
+      concluintes: lote,
+      truncate: (b === 0),
+      batch_index: b
+    });
 
     try {
       var resp = UrlFetchApp.fetch(endpoint, options);
@@ -475,19 +531,13 @@ function sincronizarAbaTutoresParaTiDB() {
   var totalSinc = 0;
   for (var b = 0; b < tutores.length; b += BATCH_SIZE) {
     var lote = tutores.slice(b, b + BATCH_SIZE);
-    var endpoint = VERCEL_APP_URL.replace(/\/$/, '') + '/api/tidb';
-
-    var options = {
-      method: 'post',
-      contentType: 'application/json',
-      payload: JSON.stringify({
-        action: 'sync_tutores_bulk',
-        tutores: lote,
-        truncate: (b === 0),
-        batch_index: b
-      }),
-      muteHttpExceptions: true
-    };
+    var endpoint = obterEndpointApi();
+    var options = obterOpcoesHttp({
+      action: 'sync_tutores_bulk',
+      tutores: lote,
+      truncate: (b === 0),
+      batch_index: b
+    });
 
     try {
       var resp = UrlFetchApp.fetch(endpoint, options);
@@ -572,19 +622,13 @@ function sincronizarAbaExoneradosParaTiDB() {
   var totalSinc = 0;
   for (var b = 0; b < exonerados.length; b += BATCH_SIZE) {
     var lote = exonerados.slice(b, b + BATCH_SIZE);
-    var endpoint = VERCEL_APP_URL.replace(/\/$/, '') + '/api/tidb';
-
-    var options = {
-      method: 'post',
-      contentType: 'application/json',
-      payload: JSON.stringify({
-        action: 'sync_exonerados_bulk',
-        exonerados: lote,
-        truncate: (b === 0),
-        batch_index: b
-      }),
-      muteHttpExceptions: true
-    };
+    var endpoint = obterEndpointApi();
+    var options = obterOpcoesHttp({
+      action: 'sync_exonerados_bulk',
+      exonerados: lote,
+      truncate: (b === 0),
+      batch_index: b
+    });
 
     try {
       var resp = UrlFetchApp.fetch(endpoint, options);
@@ -665,19 +709,13 @@ function sincronizarAbaNaoConcluintesParaTiDB() {
   var totalSinc = 0;
   for (var b = 0; b < naoConcluintes.length; b += BATCH_SIZE) {
     var lote = naoConcluintes.slice(b, b + BATCH_SIZE);
-    var endpoint = VERCEL_APP_URL.replace(/\/$/, '') + '/api/tidb';
-
-    var options = {
-      method: 'post',
-      contentType: 'application/json',
-      payload: JSON.stringify({
-        action: 'sync_nao_concluintes_bulk',
-        nao_concluintes: lote,
-        truncate: (b === 0),
-        batch_index: b
-      }),
-      muteHttpExceptions: true
-    };
+    var endpoint = obterEndpointApi();
+    var options = obterOpcoesHttp({
+      action: 'sync_nao_concluintes_bulk',
+      nao_concluintes: lote,
+      truncate: (b === 0),
+      batch_index: b
+    });
 
     try {
       var resp = UrlFetchApp.fetch(endpoint, options);
@@ -855,18 +893,12 @@ function sincronizarAbasMovimentacoesParaTiDB() {
   var totalSinc = 0;
   for (var b = 0; b < movimentacoes.length; b += BATCH_SIZE) {
     var lote = movimentacoes.slice(b, b + BATCH_SIZE);
-    var endpoint = VERCEL_APP_URL.replace(/\/$/, '') + '/api/tidb';
-
-    var options = {
-      method: 'post',
-      contentType: 'application/json',
-      payload: JSON.stringify({
-        action: 'sync_movimentacoes_bulk',
-        movimentacoes: lote,
-        truncate: (b === 0)
-      }),
-      muteHttpExceptions: true
-    };
+    var endpoint = obterEndpointApi();
+    var options = obterOpcoesHttp({
+      action: 'sync_movimentacoes_bulk',
+      movimentacoes: lote,
+      truncate: (b === 0)
+    });
 
     try {
       var resp = UrlFetchApp.fetch(endpoint, options);
@@ -885,21 +917,13 @@ function sincronizarAbasMovimentacoesParaTiDB() {
 
 /**
  * -----------------------------------------------------------------------------------------
- * 11. Sincroniza a aba Observações de Prática
+ * 11. Sincroniza as Observações de Prática dos Formadores (Planilhas Google ➔ TiDB)
+ * Suporta tanto aba na planilha mestra quanto as 4 planilhas externas dos formadores.
  * -----------------------------------------------------------------------------------------
  */
-function sincronizarAbaObservacoesParaTiDB() {
-  var ss = obterPlanilhaMestra();
-  var nomesObs = ["Observações de Prática", "Observacoes_Pratica", "OBSERVACOES", "Observações"];
-  var aba = null;
-  for (var k = 0; k < nomesObs.length; k++) {
-    aba = ss.getSheetByName(nomesObs[k]);
-    if (aba) break;
-  }
-  if (!aba) return { status: 'nao_encontrada' };
-
+function extrairLinhasObservacoes(aba, configPadrao) {
   var dados = aba.getDataRange().getValues();
-  if (dados.length < 2) return { status: 'vazio' };
+  if (dados.length < 2) return [];
 
   var cabecalho = dados[0].map(function(c) {
     return String(c || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -919,23 +943,24 @@ function sincronizarAbaObservacoesParaTiDB() {
   }
 
   var idxCarimbo = getIdx(["carimbo", "data hora", "timestamp"]);
-  var idxEmailCursista = getIdx(["e-mail cursista", "email cursista", "e-mail", "email"]);
-  var idxNomeCursista = getIdx(["nome cursista", "cursista", "nome"]);
-  var idxEmailFormador = getIdx(["e-mail formador", "email formador"]);
-  var idxNomeFormador = getIdx(["nome formador", "formador"]);
+  var idxEmailCursista = getIdx(["e-mail cursista", "email cursista", "e-mail institucional do cursista", "e-mail", "email"]);
+  var idxNomeCursista = getIdx(["nome cursista", "nome do profissional", "nome do cursista", "cursista", "nome"]);
+  var idxEmailFormador = getIdx(["e-mail formador", "email formador", "e-mail institucional do formador"]);
+  var idxNomeFormador = getIdx(["nome formador", "nome do formador", "formador"]);
   var idxAno = getIdx(["ano formativo", "ano"]);
   var idxSemestre = getIdx(["semestre"]);
   var idxChamamento = getIdx(["chamamento"]);
   var idxModalidade = getIdx(["modalidade"]);
   var idxComponente = getIdx(["componente"]);
+  var idxTurma = getIdx(["turma", "turmas"]);
   var idxTema = getIdx(["tema"]);
-  var idxObsRealizada = getIdx(["observacao realizada", "realizada"]);
-  var idxDataPratica = getIdx(["data pratica", "data da pratica"]);
-  var idxLinkGravacao = getIdx(["link gravacao", "gravacao"]);
-  var idxLinkPlanejamento = getIdx(["link planejamento", "planejamento"]);
-  var idxLinkFeedback = getIdx(["link gravacao feedback", "link feedback"]);
+  var idxObsRealizada = getIdx(["observacao realizada", "realizada", "a observacao da pratica pedagogica foi realizada"]);
+  var idxDataPratica = getIdx(["data pratica", "data da pratica", "data da observacao"]);
+  var idxLinkGravacao = getIdx(["link gravacao", "gravacao", "link da gravacao da aula observada"]);
+  var idxLinkPlanejamento = getIdx(["link planejamento", "planejamento", "link do planejamento da aula observada"]);
+  var idxLinkFeedback = getIdx(["link gravacao feedback", "link feedback", "link da gravacao do feedback"]);
 
-  var observacoes = [];
+  var lista = [];
   for (var i = 1; i < dados.length; i++) {
     var row = dados[i];
     var emailCur = idxEmailCursista !== -1 ? String(row[idxEmailCursista] || "").trim().toLowerCase() : "";
@@ -944,18 +969,19 @@ function sincronizarAbaObservacoesParaTiDB() {
     var carimbo = idxCarimbo !== -1 ? String(row[idxCarimbo] || "").trim() : "";
     var idOrigem = "OBS_" + emailCur.replace(/[^a-z0-9]/g, "") + "_" + (carimbo ? carimbo.replace(/[^0-9]/g, "") : i);
 
-    observacoes.push({
+    lista.push({
       id_origem: idOrigem,
       carimbo: carimbo,
       email_cursista: emailCur,
       nome_cursista: idxNomeCursista !== -1 ? String(row[idxNomeCursista] || "").trim() : null,
       email_formador: idxEmailFormador !== -1 ? String(row[idxEmailFormador] || "").trim().toLowerCase() : null,
       nome_formador: idxNomeFormador !== -1 ? String(row[idxNomeFormador] || "").trim() : null,
-      ano_formativo: idxAno !== -1 ? String(row[idxAno] || "").trim() : null,
-      semestre: idxSemestre !== -1 ? String(row[idxSemestre] || "").trim() : null,
+      ano_formativo: idxAno !== -1 ? String(row[idxAno] || "").trim() : (configPadrao ? configPadrao.anoFormativoPadrao : null),
+      semestre: idxSemestre !== -1 ? String(row[idxSemestre] || "").trim() : (configPadrao ? configPadrao.semestrePadrao : null),
       chamamento: idxChamamento !== -1 ? String(row[idxChamamento] || "").trim() : null,
       modalidade: idxModalidade !== -1 ? String(row[idxModalidade] || "").trim() : null,
       componente: idxComponente !== -1 ? String(row[idxComponente] || "").trim() : null,
+      turma: idxTurma !== -1 ? String(row[idxTurma] || "").trim() : null,
       tema: idxTema !== -1 ? String(row[idxTema] || "").trim() : null,
       observacao_realizada: idxObsRealizada !== -1 ? String(row[idxObsRealizada] || "").trim() : "Sim",
       data_pratica: idxDataPratica !== -1 ? String(row[idxDataPratica] || "").trim() : null,
@@ -964,22 +990,19 @@ function sincronizarAbaObservacoesParaTiDB() {
       link_gravacao_feedback: idxLinkFeedback !== -1 ? String(row[idxLinkFeedback] || "").trim() : null
     });
   }
+  return lista;
+}
 
-  var BATCH_SIZE = 100;
+function enviarLoteObservacoesParaTiDB(observacoes) {
+  var BATCH_SIZE = 150;
   var totalSinc = 0;
   for (var b = 0; b < observacoes.length; b += BATCH_SIZE) {
     var lote = observacoes.slice(b, b + BATCH_SIZE);
-    var endpoint = VERCEL_APP_URL.replace(/\/$/, '') + '/api/tidb';
-
-    var options = {
-      method: 'post',
-      contentType: 'application/json',
-      payload: JSON.stringify({
-        action: 'sync_observacoes_bulk',
-        observacoes: lote
-      }),
-      muteHttpExceptions: true
-    };
+    var endpoint = obterEndpointApi('sync_observacoes_bulk');
+    var options = obterOpcoesHttp({
+      action: 'sync_observacoes_bulk',
+      observacoes: lote
+    });
 
     try {
       var resp = UrlFetchApp.fetch(endpoint, options);
@@ -992,6 +1015,131 @@ function sincronizarAbaObservacoesParaTiDB() {
       Logger.log('Erro ao sincronizar observações: ' + err.toString());
     }
   }
+  return totalSinc;
+}
 
-  return { total: totalSinc };
+function sincronizarAbaObservacoesParaTiDB() {
+  var ss = obterPlanilhaMestra();
+  var nomesObs = ["Observações de Prática", "Observacoes_Pratica", "OBSERVACOES", "Observações"];
+  var aba = null;
+  for (var k = 0; k < nomesObs.length; k++) {
+    aba = ss.getSheetByName(nomesObs[k]);
+    if (aba) break;
+  }
+
+  // 1. Se a aba existir diretamente na planilha mestra, sincroniza
+  if (aba) {
+    var linhas = extrairLinhasObservacoes(aba, null);
+    var tot = enviarLoteObservacoesParaTiDB(linhas);
+    return { total: tot };
+  }
+
+  // 2. Caso contrário, lê das 4 planilhas externas de formadores
+  Logger.log('Aba de observações não encontrada na mestra. Sincronizando a partir das 4 planilhas externas de Formadores...');
+  var totalGeral = 0;
+  for (var p = 0; p < PLANILHAS_OBSERVACOES_FORMADOR.length; p++) {
+    var cfg = PLANILHAS_OBSERVACOES_FORMADOR[p];
+    try {
+      var extSs = SpreadsheetApp.openById(cfg.id);
+      var extAba = extSs.getSheets()[0];
+      var obs = extrairLinhasObservacoes(extAba, cfg);
+      var ok = enviarLoteObservacoesParaTiDB(obs);
+      totalGeral += ok;
+      Logger.log('✓ ' + cfg.nome + ': ' + ok + ' observações sincronizadas');
+    } catch (errExt) {
+      Logger.log('Erro ao abrir planilha ' + cfg.nome + ' (' + cfg.id + '): ' + errExt.toString());
+    }
+  }
+  return { total: totalGeral };
+}
+
+/**
+ * -----------------------------------------------------------------------------------------
+ * 12. Sincroniza as Observações de Tutoria (Tutores -> Formadores / Tutor Insights)
+ * -----------------------------------------------------------------------------------------
+ */
+function sincronizarAbaObservacoesTutoriaParaTiDB() {
+  if (!PLANILHA_OBSERVACOES_TUTOR_ID) return { total: 0 };
+  Logger.log('Sincronizando observações de tutoria (Tutor Insights)...');
+  try {
+    var ssTutor = SpreadsheetApp.openById(PLANILHA_OBSERVACOES_TUTOR_ID);
+    var aba = ssTutor.getSheets()[0];
+    var dados = aba.getDataRange().getValues();
+    if (dados.length < 2) return { total: 0 };
+
+    var cabecalho = dados[0].map(function(c) {
+      return String(c || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    });
+
+    function getIdx(keywords) {
+      for (var k = 0; k < keywords.length; k++) {
+        var idx = cabecalho.indexOf(keywords[k].toLowerCase());
+        if (idx !== -1) return idx;
+      }
+      for (var k = 0; k < keywords.length; k++) {
+        var kw = keywords[k].toLowerCase();
+        var idx = cabecalho.findIndex(function(c) { return c.includes(kw); });
+        if (idx !== -1) return idx;
+      }
+      return -1;
+    }
+
+    var idxCarimbo = getIdx(["carimbo", "data hora", "timestamp"]);
+    var idxEmailTutor = getIdx(["e-mail tutor", "email tutor", "tutor", "email institucional do tutor"]);
+    var idxNomeTutor = getIdx(["nome tutor", "tutor responsavel", "nome do tutor"]);
+    var idxEmailFormador = getIdx(["e-mail formador", "email formador", "formador"]);
+    var idxNomeFormador = getIdx(["nome formador", "nome do formador"]);
+    var idxNre = getIdx(["nre"]);
+    var idxAcaoAcomp = getIdx(["acao acompanhamento", "acao"]);
+    var idxDataObs = getIdx(["data observacao", "data"]);
+    var idxLinkAcao = getIdx(["link acao observada", "link gravacao", "link"]);
+    var idxDestaques = getIdx(["destaques"]);
+    var idxDesenvolver = getIdx(["pontos a desenvolver", "desenvolver"]);
+    var idxEncaminhamentos = getIdx(["encaminhamentos"]);
+
+    var lista = [];
+    for (var i = 1; i < dados.length; i++) {
+      var row = dados[i];
+      var emailTut = idxEmailTutor !== -1 ? String(row[idxEmailTutor] || "").trim().toLowerCase() : "";
+      var emailForm = idxEmailFormador !== -1 ? String(row[idxEmailFormador] || "").trim().toLowerCase() : "";
+      if (!emailTut && !emailForm) continue;
+
+      lista.push({
+        carimbo: idxCarimbo !== -1 ? String(row[idxCarimbo] || "").trim() : null,
+        email_tutor: emailTut,
+        nome_tutor: idxNomeTutor !== -1 ? String(row[idxNomeTutor] || "").trim() : null,
+        email_formador: emailForm,
+        nome_formador: idxNomeFormador !== -1 ? String(row[idxNomeFormador] || "").trim() : null,
+        nre: idxNre !== -1 ? String(row[idxNre] || "").trim() : null,
+        acao_acompanhamento: idxAcaoAcomp !== -1 ? String(row[idxAcaoAcomp] || "").trim() : null,
+        data_observacao: idxDataObs !== -1 ? String(row[idxDataObs] || "").trim() : null,
+        link_acao_observada: idxLinkAcao !== -1 ? String(row[idxLinkAcao] || "").trim() : null,
+        destaques: idxDestaques !== -1 ? String(row[idxDestaques] || "").trim() : null,
+        desenvolver: idxDesenvolver !== -1 ? String(row[idxDesenvolver] || "").trim() : null,
+        encaminhamentos: idxEncaminhamentos !== -1 ? String(row[idxEncaminhamentos] || "").trim() : null
+      });
+    }
+
+    var BATCH_SIZE = 150;
+    var tot = 0;
+    for (var b = 0; b < lista.length; b += BATCH_SIZE) {
+      var lote = lista.slice(b, b + BATCH_SIZE);
+      var endpoint = obterEndpointApi('sync_observacoes_tutor_bulk');
+      var options = obterOpcoesHttp({
+        action: 'sync_observacoes_tutor_bulk',
+        observacoes: lote
+      });
+      try {
+        var resp = UrlFetchApp.fetch(endpoint, options);
+        if (resp.getResponseCode() === 200) tot += lote.length;
+      } catch (err) {
+        Logger.log('Erro ao enviar observações de tutoria: ' + err.toString());
+      }
+    }
+    return { total: tot };
+  } catch (errSs) {
+    Logger.log('Erro ao sincronizar tutoria: ' + errSs.toString());
+    return { total: 0 };
+  }
+}
 }

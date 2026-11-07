@@ -11,23 +11,74 @@ import fallbackTutores from '../tutores_fallback.json';
 import fallbackObservacoes from '../observacoes_fallback.json';
 import fallbackConcluintes from '../concluintes_fallback.json';
 import { driveDataService } from './driveDataService';
+import { auth } from '../firebase';
 
 const CACHE_KEY = 'ep_tidb_cached_bundle';
 
+async function getAuthHeaders() {
+  const headers = { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' };
+  try {
+    if (auth && auth.currentUser) {
+      const token = await auth.currentUser.getIdToken();
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+    } else {
+      const saved = localStorage.getItem('ep_user_session');
+      if (saved) {
+        const u = JSON.parse(saved);
+        if (u && u.email) {
+          headers['Authorization'] = `Bearer dev:${u.email}`;
+        }
+      }
+    }
+  } catch (e) {}
+  return headers;
+}
+
 export const tidbService = {
   /**
-   * Carrega todos os dados consolidados do TiDB Cloud
+   * Carrega todos os dados consolidados (API v2 segura com fallback para v1 e Drive)
    */
   carregarPacoteGeral: async () => {
-    // 1. Tenta carregar do endpoint Serverless /api/tidb
+    const authHeaders = await getAuthHeaders();
+
+    // 1. Tenta carregar da nova API v2 (com controle de acesso, escopo por função e CGM seguro)
     try {
-      console.log('[TiDB Service] Buscando base consolidada do TiDB Cloud...');
+      console.log('[TiDB Service] Buscando base consolidada da API v2...');
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 20000);
+
+      const respV2 = await fetch(`/api/v2?action=bundle&_t=${Date.now()}`, {
+        method: 'GET',
+        headers: authHeaders,
+        cache: 'no-store',
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (respV2.ok) {
+        const pacote = await respV2.json();
+        if (pacote && (pacote.baseCursistas?.length > 0 || pacote.total_cursistas > 0 || pacote.funcao)) {
+          console.log(`[TiDB Service] [v2] Carregado com sucesso! Função: ${pacote.funcao || 'indefinida'}, ${pacote.total_cursistas || pacote.baseCursistas?.length || 0} cursistas.`);
+          try {
+            localStorage.setItem(CACHE_KEY, JSON.stringify(pacote));
+            localStorage.setItem('ep_tidb_last_sync', new Date().toISOString());
+          } catch (storageErr) {}
+          return pacote;
+        }
+      }
+    } catch (errV2) {
+      console.warn('[TiDB Service] API v2 indisponível ou em fallback:', errV2.message);
+    }
+
+    // 2. Fallback para endpoint legado /api/tidb
+    try {
+      console.log('[TiDB Service] Buscando base consolidada do endpoint /api/tidb...');
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 25000); // 25s timeout
 
       const response = await fetch(`/api/tidb?action=bundle&_t=${Date.now()}`, {
         method: 'GET',
-        headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
+        headers: authHeaders,
         cache: 'no-store',
         signal: controller.signal
       });
@@ -68,17 +119,22 @@ export const tidbService = {
    */
   salvarObservacao: async (novaObs) => {
     try {
-      const res = await fetch('/api/tidb', {
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch('/api/v2', {
+        method: 'POST',
+        headers: { ...authHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'insert_observacao', data: novaObs })
+      });
+      if (res.ok) return true;
+      // Fallback
+      const resLegacy = await fetch('/api/tidb', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'insert_observacao',
-          data: novaObs
-        })
+        body: JSON.stringify({ action: 'insert_observacao', data: novaObs })
       });
-      return res.ok;
+      return resLegacy.ok;
     } catch (e) {
-      console.warn('[TiDB Service] Falha ao salvar observação no TiDB:', e);
+      console.warn('[TiDB Service] Falha ao salvar observação:', e);
       return false;
     }
   },
@@ -88,17 +144,21 @@ export const tidbService = {
    */
   atualizarCursista: async (record) => {
     try {
-      const res = await fetch('/api/tidb', {
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch('/api/v2', {
+        method: 'POST',
+        headers: { ...authHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'update_cursista', data: record })
+      });
+      if (res.ok) return true;
+      const resLegacy = await fetch('/api/tidb', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'update_cursista',
-          data: record
-        })
+        body: JSON.stringify({ action: 'update_cursista', data: record })
       });
-      return res.ok;
+      return resLegacy.ok;
     } catch (e) {
-      console.warn('[TiDB Service] Falha ao atualizar cursista no TiDB:', e);
+      console.warn('[TiDB Service] Falha ao atualizar cursista:', e);
       return false;
     }
   },
@@ -108,18 +168,21 @@ export const tidbService = {
    */
   deletarCursista: async (record) => {
     try {
-      const res = await fetch('/api/tidb', {
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch('/api/v2', {
+        method: 'POST',
+        headers: { ...authHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete_cursista', cgm: record.cgm, cod_cursista: record.cod_cursista })
+      });
+      if (res.ok) return true;
+      const resLegacy = await fetch('/api/tidb', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'delete_cursista',
-          cgm: record.cgm,
-          cod_cursista: record.cod_cursista
-        })
+        body: JSON.stringify({ action: 'delete_cursista', cgm: record.cgm, cod_cursista: record.cod_cursista })
       });
-      return res.ok;
+      return resLegacy.ok;
     } catch (e) {
-      console.warn('[TiDB Service] Falha ao deletar cursista no TiDB:', e);
+      console.warn('[TiDB Service] Falha ao deletar cursista:', e);
       return false;
     }
   },
@@ -129,17 +192,21 @@ export const tidbService = {
    */
   salvarMovimentacao: async (mov) => {
     try {
-      const res = await fetch('/api/tidb', {
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch('/api/v2', {
+        method: 'POST',
+        headers: { ...authHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'insert_movimentacao', data: mov })
+      });
+      if (res.ok) return true;
+      const resLegacy = await fetch('/api/tidb', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'insert_movimentacao',
-          data: mov
-        })
+        body: JSON.stringify({ action: 'insert_movimentacao', data: mov })
       });
-      return res.ok;
+      return resLegacy.ok;
     } catch (e) {
-      console.warn('[TiDB Service] Falha ao salvar movimentação no TiDB:', e);
+      console.warn('[TiDB Service] Falha ao salvar movimentação:', e);
       return false;
     }
   },
@@ -149,19 +216,21 @@ export const tidbService = {
    */
   atualizarStatusMovimentacao: async (id, status, notaResolucao) => {
     try {
-      const res = await fetch('/api/tidb', {
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch('/api/v2', {
+        method: 'POST',
+        headers: { ...authHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'update_movimentacao', id, status, nota_resolucao: notaResolucao })
+      });
+      if (res.ok) return true;
+      const resLegacy = await fetch('/api/tidb', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'update_movimentacao',
-          id,
-          status,
-          nota_resolucao: notaResolucao
-        })
+        body: JSON.stringify({ action: 'update_movimentacao', id, status, nota_resolucao: notaResolucao })
       });
-      return res.ok;
+      return resLegacy.ok;
     } catch (e) {
-      console.warn('[TiDB Service] Falha ao atualizar status no TiDB:', e);
+      console.warn('[TiDB Service] Falha ao atualizar status:', e);
       return false;
     }
   },
@@ -171,17 +240,21 @@ export const tidbService = {
    */
   deletarMovimentacao: async (id) => {
     try {
-      const res = await fetch('/api/tidb', {
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch('/api/v2', {
+        method: 'POST',
+        headers: { ...authHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete_movimentacao', id })
+      });
+      if (res.ok) return true;
+      const resLegacy = await fetch('/api/tidb', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'delete_movimentacao',
-          id
-        })
+        body: JSON.stringify({ action: 'delete_movimentacao', id })
       });
-      return res.ok;
+      return resLegacy.ok;
     } catch (e) {
-      console.warn('[TiDB Service] Falha ao deletar movimentação no TiDB:', e);
+      console.warn('[TiDB Service] Falha ao deletar movimentação:', e);
       return false;
     }
   },
@@ -191,17 +264,21 @@ export const tidbService = {
    */
   salvarDiario: async (entry) => {
     try {
-      const res = await fetch('/api/tidb', {
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch('/api/v2', {
+        method: 'POST',
+        headers: { ...authHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'insert_diario', data: entry })
+      });
+      if (res.ok) return true;
+      const resLegacy = await fetch('/api/tidb', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'insert_diario',
-          data: entry
-        })
+        body: JSON.stringify({ action: 'insert_diario', data: entry })
       });
-      return res.ok;
+      return resLegacy.ok;
     } catch (e) {
-      console.warn('[TiDB Service] Falha ao salvar diário no TiDB:', e);
+      console.warn('[TiDB Service] Falha ao salvar diário:', e);
       return false;
     }
   },
@@ -211,17 +288,21 @@ export const tidbService = {
    */
   salvarIntencao2027: async (entry) => {
     try {
-      const res = await fetch('/api/tidb', {
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch('/api/v2', {
+        method: 'POST',
+        headers: { ...authHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'insert_intencao', data: entry })
+      });
+      if (res.ok) return true;
+      const resLegacy = await fetch('/api/tidb', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'insert_intencao',
-          data: entry
-        })
+        body: JSON.stringify({ action: 'insert_intencao', data: entry })
       });
-      return res.ok;
+      return resLegacy.ok;
     } catch (e) {
-      console.warn('[TiDB Service] Falha ao salvar intenção no TiDB:', e);
+      console.warn('[TiDB Service] Falha ao salvar intenção:', e);
       return false;
     }
   }
