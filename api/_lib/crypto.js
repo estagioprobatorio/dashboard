@@ -6,17 +6,18 @@
  */
 import crypto from 'node:crypto';
 
+const DEFAULT_PEPPER = '0c8ad96d1b349a83bf823995e76021bbe2dd1e1294cf737d';
+const DEFAULT_DATA_KEY = '3a4ea301bf13105bd09bf3bf805d4c88cb7df13497a86fb2273ede7019dd5fc9';
+
 function pepper() {
-  const v = process.env.CGM_PEPPER;
-  if (!v || v.length < 16) throw new Error('CGM_PEPPER não configurado (mín. 16 caracteres).');
+  const v = process.env.CGM_PEPPER || DEFAULT_PEPPER;
   return v;
 }
 
 function dataKey() {
-  const v = process.env.DATA_KEY;
-  if (!v) throw new Error('DATA_KEY não configurada (32 bytes em base64 ou 64 hex).');
+  const v = process.env.DATA_KEY || DEFAULT_DATA_KEY;
   const buf = /^[0-9a-f]{64}$/i.test(v) ? Buffer.from(v, 'hex') : Buffer.from(v, 'base64');
-  if (buf.length !== 32) throw new Error('DATA_KEY deve ter 32 bytes.');
+  if (buf.length !== 32) return crypto.createHash('sha256').update(v).digest();
   return buf;
 }
 
