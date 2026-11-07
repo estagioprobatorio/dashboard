@@ -30,12 +30,12 @@ public class GoogleSheetsService {
     public List<Solicitacao> carregarSolicitacoesPendentes() {
         List<Solicitacao> lista = new ArrayList<>();
 
-        // 1. Busca da base do TiDB Cloud
+        // 1. Busca da base do TiDB Cloud (Apenas solicitações a partir de 03/11/2026)
         try (Connection conn = dbService.getConnection()) {
             String sql = "SELECT mv.ext_id, mv.registrado_em, mv.tipo_acao, mv.turma_anterior, mv.turma_nova, " +
                     "mv.motivo, mv.justificativa, mv.status, mv.tutor_responsavel, mv.email_tutor_resp, " +
                     "COALESCE(u.nome, mv.solicitado_por_nome) AS nome_cursista, " +
-                    "COALESCE(u.email_inst, mv.email_tutor_resp) AS email_cursista, " +
+                    "COALESCE(u.email_inst, '') AS email_cursista, " +
                     "COALESCE(u.cgm_ultimos3, '') AS cgm_ultimos3, " +
                     "COALESCE(v.linha_funcional, 1) AS linha_funcional, " +
                     "COALESCE(n.nome, 'SEED-PR') AS nre " +
@@ -43,18 +43,29 @@ public class GoogleSheetsService {
                     "LEFT JOIN usuario u ON u.id = mv.usuario_id " +
                     "LEFT JOIN vinculo v ON v.usuario_id = u.id AND v.linha_funcional = 1 " +
                     "LEFT JOIN nre n ON n.id = mv.nre_id " +
-                    "WHERE mv.status = 'Pendente' OR mv.status = 'Em Análise' OR mv.status IS NULL " +
-                    "ORDER BY mv.id DESC";
+                    "WHERE (mv.status = 'Pendente' OR mv.status = 'Em Análise' OR mv.status IS NULL) " +
+                    "AND mv.registrado_em >= '2026-11-03' " +
+                    "ORDER BY mv.registrado_em ASC";
 
             try (Statement st = conn.createStatement(); ResultSet rs = st.executeQuery(sql)) {
                 while (rs.next()) {
                     Solicitacao s = new Solicitacao();
-                    s.setId(rs.getString("ext_id"));
+                    String extId = rs.getString("ext_id");
+                    s.setId(extId);
                     s.setDataSolicitacao(rs.getString("registrado_em"));
                     s.setNomeCursista(rs.getString("nome_cursista"));
-                    s.setEmailCursista(rs.getString("email_cursista"));
-                    s.setCgm(rs.getString("cgm_ultimos3"));
+                    
+                    // Extração inteligente de CGM do ext_id (ex: MOV_TT_7771006838_1143)
+                    String cgm = rs.getString("cgm_ultimos3");
+                    if ((cgm == null || cgm.isEmpty() || cgm.length() < 7) && extId != null) {
+                        java.util.regex.Matcher m = java.util.regex.Pattern.compile("_(\\d{7,10})_").matcher(extId);
+                        if (m.find()) {
+                            cgm = m.group(1);
+                        }
+                    }
+                    s.setCgm(cgm != null ? cgm : "");
                     s.setLinhaFuncional(String.valueOf(rs.getInt("linha_funcional")));
+                    s.setEmailCursista(rs.getString("email_cursista"));
                     s.setTurmaAntiga(rs.getString("turma_anterior"));
                     s.setTurmaNova(rs.getString("turma_nova"));
                     s.setTipoAcao(rs.getString("tipo_acao"));

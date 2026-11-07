@@ -21,23 +21,9 @@ var SYNC_TOKEN = "l26zXdDT0Mm3h_KOF9hehDotnB6FYJyg";
 var SPREADSHEET_ID_MESTRA_TIDB = "1sRkA88VrtczqXxQ6PlmgygeCVhPoElRNS8RC1QuQzx0";
 
 // 5. Planilhas Externas Oficiais de Observações da Prática (Formadores -> Cursistas)
+// NOTA: Os dados históricos de 2024, 2025 e 1º Semestre de 2026 estão congelados e armazenados exclusivamente em JSON.
+// A sincronização ativa de planilhas sincroniza exclusivamente o 2º Semestre/2026 para máxima velocidade.
 var PLANILHAS_OBSERVACOES_FORMADOR = [
-  {
-    sigla: "1ANO_1SEM",
-    nome: "Formador-1ANO_1SEM",
-    id: "1KmbMvNOTpj4OaDOdKw5mPVI3iqbo8RbQBqBktM84ToE",
-    gid: "1030562032",
-    anoFormativoPadrao: "1º ANO",
-    semestrePadrao: "1º Semestre/2026"
-  },
-  {
-    sigla: "2e3ANO_2SEM",
-    nome: "Formador-2e3ANO-2SEM",
-    id: "1uv5QWeqtN5iMkH8nVQUvsYKClv9NaGDHgsdT_D-RPiw",
-    gid: "2068065207",
-    anoFormativoPadrao: "2º e 3º ANOS",
-    semestrePadrao: "2º Semestre/2026"
-  },
   {
     sigla: "1ANO_2SEM",
     nome: "Formador-1ANO_2SEM",
@@ -47,12 +33,12 @@ var PLANILHAS_OBSERVACOES_FORMADOR = [
     semestrePadrao: "2º Semestre/2026"
   },
   {
-    sigla: "2e3ANO_1SEM",
-    nome: "Formador-2e3ANO-1SEM",
-    id: "1zSnlh7aW8df800lP90rCLVxiHNWAa1f9IGjz2OoDfvU",
-    gid: "848666482",
+    sigla: "2e3ANO_2SEM",
+    nome: "Formador-2e3ANO-2SEM",
+    id: "1uv5QWeqtN5iMkH8nVQUvsYKClv9NaGDHgsdT_D-RPiw",
+    gid: "2068065207",
     anoFormativoPadrao: "2º e 3º ANOS",
-    semestrePadrao: "1º Semestre/2026"
+    semestrePadrao: "2º Semestre/2026"
   }
 ];
 

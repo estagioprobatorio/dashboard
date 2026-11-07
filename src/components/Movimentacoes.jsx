@@ -412,6 +412,11 @@ export default function Movimentacoes({ userEmail, userRole, tutorData, records 
         if (!isTrocaTurma) return false;
       } else if (activeTab === 'fila') {
         if (isConcluido) return false;
+        // Filtro de corte oficial: Apenas solicitações a partir de 03/11/2026
+        const dtStr = mov.timestamp || mov.registrado_em || mov.data_pedido;
+        if (dtStr && new Date(dtStr) < new Date('2026-11-03T00:00:00')) {
+          return false;
+        }
       } else if (activeTab === 'historico') {
         if (!isConcluido) return false;
       }
@@ -468,7 +473,13 @@ export default function Movimentacoes({ userEmail, userRole, tutorData, records 
   }, [movements]);
 
   const countFila = useMemo(() => {
-    return movements.filter(m => !['Deferido', 'Indeferido', 'Resolvido'].includes(m.status || 'Pendente')).length;
+    return movements.filter(m => {
+      const isConcluido = ['Deferido', 'Indeferido', 'Resolvido'].includes(m.status || 'Pendente');
+      if (isConcluido) return false;
+      const dtStr = m.timestamp || m.registrado_em || m.data_pedido;
+      if (dtStr && new Date(dtStr) < new Date('2026-11-03T00:00:00')) return false;
+      return true;
+    }).length;
   }, [movements]);
 
   const countHistorico = useMemo(() => {

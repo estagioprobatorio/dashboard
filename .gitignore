@@ -36,3 +36,8 @@ out/
 *.sln
 *.sw?
 .DS_Store
+
+# Planilhas pesadas locais (backup local / templates)
+docs-planilhas/
+desktop-app/target/
+desktop-app/dependency-reduced-pom.xml
