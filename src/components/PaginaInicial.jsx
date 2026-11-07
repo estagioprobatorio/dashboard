@@ -111,26 +111,6 @@ export default function PaginaInicial({
       disponivel: userRole === 'admin' || userRole === 'tecnico' || isSuperAdminTutor
     },
     {
-      id: 'diario_formativo',
-      tab: 'diario_formativo',
-      macroPilar: 'pedagogica',
-      titulo: 'Diário Formativo',
-      categoria: 'Registro Reflexivo',
-      subtitulo: 'Caderno Pedagógico',
-      descricao: 'Espaço formativo para registro de reflexões pedagógicas, desafios enfrentados e acompanhamento da evolução profissional.',
-      icone: (
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
-          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
-        </svg>
-      ),
-      corDestaque: '#f59e0b',
-      bgIcone: 'rgba(245, 158, 11, 0.1)',
-      badge: 'Reflexões',
-      badgeCor: '#d97706',
-      disponivel: true
-    },
-    {
       id: 'documentos_pedagogicos',
       tab: 'documentos_pedagogicos',
       macroPilar: 'pedagogica',
@@ -410,26 +390,6 @@ export default function PaginaInicial({
       disponivel: true
     },
     {
-      id: 'cursista_diario',
-      tab: 'cursista_diario',
-      macroPilar: 'pedagogica',
-      titulo: 'Meu Diário Formativo',
-      categoria: 'Caderno Pessoal',
-      subtitulo: 'Reflexões da Docência',
-      descricao: 'Seu caderno pessoal para anotar planos de aula, reflexões da prática diária e anotações para discussões com seu formador.',
-      icone: (
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
-          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
-        </svg>
-      ),
-      corDestaque: '#f59e0b',
-      bgIcone: 'rgba(245, 158, 11, 0.1)',
-      badge: 'Caderno',
-      badgeCor: '#d97706',
-      disponivel: true
-    },
-    {
       id: 'cursista_solicitacoes',
       tab: 'cursista_solicitacoes',
       macroPilar: 'pedagogica',
@@ -544,7 +504,7 @@ export default function PaginaInicial({
               Olá, {primeiroNome}! Bem-vindo(a) à Plataforma.
             </h1>
             <p style={{ margin: 0, fontSize: '0.98rem', opacity: 0.9, maxWidth: '680px', lineHeight: 1.5 }}>
-              Central unificada de acompanhamento pedagógico, gestão de turmas e movimentações do <strong>Estágio Probatório Docente</strong> do Estado do Paraná.
+              Central unificada de acompanhamento pedagógico, gestão de turmas e movimentações do <strong>Estágio Probatório</strong> do Estado do Paraná.
             </p>
           </div>
 

@@ -70,42 +70,24 @@ function onOpen() {
   try {
     var ui = SpreadsheetApp.getUi();
 
-    // Menu 1: Operações Gerais do Estágio Probatório & SIGEP
+    // Menu Único e Centralizado (Planilhas atuando estritamente como Backup do Banco TiDB Cloud)
     ui.createMenu('⚡ ESTÁGIO PROBATÓRIO')
-      .addItem('🔄 Atualizar Dashboard (Gerar JSON no Drive Agora)', 'menuAtualizarDashboard')
-      .addItem('⚡ Ativar Sincronização Automática ao Editar a Planilha', 'instalarGatilhosAutomaticos')
+      .addItem('🔄 Sincronizar Tudo com TiDB Cloud (Backup Completo)', 'sincronizarManualComAlerta')
       .addSeparator()
-      .addItem('🔍 Painel de Busca no SIGEP (Cursistas / Formadores)', 'menuDialogoBuscarSigep')
-      .addItem('⚡ Preencher Linha Selecionada com Dados SIGEP', 'menuPreencherLinhaAtiva')
+      .addItem('👥 Sincronizar Cursistas Ativos (DADOS)', 'sincronizarAbaDadosMenu')
+      .addItem('🚪 Sincronizar Servidores Exonerados', 'sincronizarAbaExoneradosMenu')
+      .addItem('🎓 Sincronizar Concluintes', 'sincronizarAbaConcluintesMenu')
+      .addItem('👨‍🏫 Sincronizar Tutores Regionais', 'sincronizarAbaTutoresMenu')
+      .addItem('📋 Sincronizar Observações da Prática', 'sincronizarObservacoesPraticaMenu')
+      .addItem('🕵️ Sincronizar Observações do Tutor', 'sincronizarObservacoesTutorMenu')
+      .addItem('🔀 Sincronizar Movimentações', 'sincronizarAbaMovimentacoesMenu')
+      .addSeparator()
+      .addItem('🔍 Consultar Cadastro no SIGEP (CPF)', 'menuDialogoBuscarSigep')
       .addItem('🚪 Registrar Exoneração de Servidor', 'menuRegistrarExoneracao')
+      .addItem('⚖️ Remanejamento de Turmas (Analisar)', 'rmjMenuAnalisar')
       .addSeparator()
-      .addItem('🛠️ Verificar / Criar Abas do Sistema', 'setupInicialCriarAbas')
-      .addToUi();
-
-    // Menu 2: Motor de Remanejamento e Nivelamento de Turmas
-    ui.createMenu('⚖️ REMANEJAMENTO DE TURMAS')
-      .addItem('1) 📊 Analisar Redistribuição (Padrão 4 a 9 - Não Zerar Turmas)', 'rmjMenuAnalisar')
-      .addItem('2) 👁️ Validar Redistribuição (Comparativo Visual & Checklist)', 'rmjMenuValidar')
-      .addItem('3) ✍️ Realizar Redistribuição (Gravar na Coluna H)', 'rmjMenuRealizar')
-      .addItem('4) ✉️ Enviar E-mail Informativo', 'rmjMenuEmail')
-      .addSeparator()
-      .addItem('ℹ️ Diretrizes & Regras do Remanejamento', 'menuSobreRemanejamento')
-      .addToUi();
-
-    // Menu 3: Banco de Dados TiDB Serverless Cloud
-    ui.createMenu('⚡ TiDB CLOUD')
-      .addItem('🔄 Sincronizar Tudo com TiDB (Completo)', 'sincronizarManualComAlerta')
-      .addSeparator()
-      .addItem('👥 1. Cursistas Ativos (Aba DADOS)', 'sincronizarAbaDadosMenu')
-      .addItem('🚪 2. Servidores Exonerados (Aba EXONERADOS)', 'sincronizarAbaExoneradosMenu')
-      .addItem('🎓 3. Concluintes (CONCLUINTES-1CH)', 'sincronizarAbaConcluintesMenu')
-      .addItem('👨‍🏫 4. Tutores Regionais (Aba TUTORES)', 'sincronizarAbaTutoresMenu')
-      .addItem('📋 5. Observações da Prática (Formadores)', 'sincronizarObservacoesPraticaMenu')
-      .addItem('🕵️ 6. Observações do Tutor (Tutoria)', 'sincronizarObservacoesTutorMenu')
-      .addItem('🔀 7. Movimentações & Trocas', 'sincronizarAbaMovimentacoesMenu')
-      .addSeparator()
-      .addItem('⏰ Ativar Atualização Automática Diária (07:00)', 'configurarGatilhoDiario7h')
-      .addItem('🔍 Testar Conexão com TiDB', 'testarConexaoTiDB')
+      .addItem('⏰ Agendar Sincronização Automática Diária (07:00)', 'configurarGatilhoDiario7h')
+      .addItem('🔍 Testar Conexão com TiDB Cloud', 'testarConexaoTiDB')
       .addToUi();
 
   } catch (e) {

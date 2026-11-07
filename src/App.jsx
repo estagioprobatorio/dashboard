@@ -24,7 +24,6 @@ import Concluintes from './components/Concluintes';
 import Exonerados from './components/Exonerados';
 import Movimentacoes from './components/Movimentacoes';
 import TutorInsightsDashboard from './components/TutorInsightsDashboard';
-import DiarioFormativo from './components/DiarioFormativo';
 import CentralDocumentos from './components/CentralDocumentos';
 import BuscaGlobalPessoasModal from './components/BuscaGlobalPessoasModal';
 import DossieCursistaModal from './components/DossieCursistaModal';
@@ -748,16 +747,6 @@ export default function App() {
 
     // Se o perfil ativo for Cursista ou se a aba for de Cursista
     if (effectiveRole === 'cursista' || activeTab.startsWith('cursista_') || activeTab === 'espaco_cursista') {
-      if (activeTab === 'cursista_diario') {
-        return (
-          <DiarioFormativo 
-            userRole="cursista"
-            userEmail={effectiveEmail}
-            cursistas={enrichedRecords}
-            tutores={tutoresList}
-          />
-        );
-      }
       if (activeTab === 'cursista_documentos') {
         return <CentralDocumentos userRole="cursista" />;
       }
@@ -797,15 +786,6 @@ export default function App() {
             userName={user?.displayName || user?.name || ''}
             tutores={tutoresList}
             observacoesRemotas={observacoesTutorList}
-          />
-        );
-      case 'diario_formativo':
-        return (
-          <DiarioFormativo 
-            userRole={effectiveRole}
-            userEmail={effectiveEmail}
-            cursistas={enrichedRecords}
-            tutores={tutoresList}
           />
         );
       case 'documentos_pedagogicos':
@@ -940,7 +920,7 @@ export default function App() {
 
             <div className="identidade-titulos">
               <span className="subtitulo-governo">SEED-PR · ESTADO DO PARANÁ</span>
-              <span className="titulo-plataforma">ESTÁGIO PROBATÓRIO DOCENTE</span>
+              <span className="titulo-plataforma">ESTÁGIO PROBATÓRIO</span>
             </div>
           </div>
 
@@ -1025,16 +1005,6 @@ export default function App() {
                 >
                   <span className="console-nav-icon">🏅</span>
                   {!isSidebarCollapsed && <span className="console-nav-text">Meu Acompanhamento</span>}
-                </button>
-
-                <button
-                  type="button"
-                  className={`console-nav-item ${activeTab === 'cursista_diario' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('cursista_diario')}
-                  title="Meu Diário Formativo"
-                >
-                  <span className="console-nav-icon">📖</span>
-                  {!isSidebarCollapsed && <span className="console-nav-text">Diário Formativo</span>}
                 </button>
 
                 <button

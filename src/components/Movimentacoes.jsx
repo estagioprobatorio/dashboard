@@ -553,36 +553,28 @@ export default function Movimentacoes({ userEmail, userRole, tutorData, records 
       <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.2rem' }}>
         <div>
           <h2 className="panel-title" style={{ fontSize: '1.35rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span>🔄</span> Central de Movimentações, Requerimentos & Chamados
+            <span>🔄</span> Registro de Movimentações Realizadas
           </h2>
           <p style={{ color: 'var(--color-text-muted)', fontSize: '0.88rem', marginTop: '0.2rem' }}>
-            Atendimento de solicitações de Troca de Turma, Troca de Modalidade, Vínculo na AF e Requerimentos de Tutores.
+            Acompanhamento e consulta das movimentações efetuadas (trocas de turma, modalidade e vínculos cadastrados via Sistema Desktop Java Swing).
           </p>
         </div>
 
         <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          {/* Botão de Abertura de Chamado para Tutores */}
-          {(userRole === 'tutor' || userRole === 'admin' || userRole === 'tecnico') && (
-            <button
-              onClick={() => setShowTutorModal(true)}
-              style={{
-                backgroundColor: '#15803d',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: '8px',
-                padding: '0.55rem 1.1rem',
-                fontSize: '0.85rem',
-                fontWeight: 700,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.4rem',
-                boxShadow: '0 2px 6px rgba(21,128,61,0.3)'
-              }}
-            >
-              <span>📋</span> Abrir Chamado do Tutor
-            </button>
-          )}
+          <div style={{
+            padding: '0.45rem 0.85rem',
+            backgroundColor: '#eff6ff',
+            border: '1px solid #bfdbfe',
+            borderRadius: '8px',
+            fontSize: '0.82rem',
+            fontWeight: 600,
+            color: '#1e40af',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.4rem'
+          }}>
+            <span>🖥️</span> Gestão: <strong>Sistema Desktop Java Swing</strong>
+          </div>
 
           <button
             onClick={handleExportCSV}

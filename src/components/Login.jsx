@@ -218,7 +218,7 @@ export default function Login({ onLoginSuccess }) {
               lineHeight: 1.5,
               maxWidth: '360px'
             }}>
-              Plataforma Integrada de Gestão e Acompanhamento Pedagógico do Estágio Probatório Docente.
+              Plataforma Integrada de Gestão e Acompanhamento Pedagógico do Estágio Probatório.
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
