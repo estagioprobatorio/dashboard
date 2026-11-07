@@ -28,6 +28,26 @@ export const normalizeComponente = (text) => {
   return upper;
 };
 
+// Helper para garantir que apenas registros do ciclo 2026 apareçam em Observações 2026
+export const isObservacao2026 = (obs) => {
+  if (!obs) return false;
+  const anoLetivo = String(obs.ano_letivo || '').trim();
+  const anoFormativo = String(obs.ano_formativo || '').trim();
+  const semestre = String(obs.semestre || '').trim();
+  const idOrigem = String(obs.id_origem || obs.id || '').trim().toLowerCase();
+  const carimbo = String(obs.carimbo || '').trim();
+  const dataPratica = String(obs.data_pratica || '').trim();
+
+  if (anoLetivo === '2024' || anoLetivo === '2025') return false;
+  if (anoFormativo === '2024' || anoFormativo === '2025') return false;
+  if (semestre === '2024' || semestre === '2025') return false;
+  if (idOrigem.includes('obs_2024') || idOrigem.includes('obs_2025')) return false;
+  if (carimbo.includes('/2024') || carimbo.includes('/2025') || carimbo.startsWith('2024-') || carimbo.startsWith('2025-')) return false;
+  if (dataPratica.startsWith('2024-') || dataPratica.startsWith('2025-') || dataPratica.includes('/2024') || dataPratica.includes('/2025')) return false;
+
+  return true;
+};
+
 // Helper para identificar o semestre
 export const getSemestre = (obs) => {
   if (obs.semestre) {
@@ -91,9 +111,9 @@ export default function ObservacoesOverview({ observacoes = [], cursistas = [], 
     return map;
   }, [cursistas]);
 
-  // Base enriquecida
+  // Base enriquecida (somente ciclo 2026)
   const enrichedData = useMemo(() => {
-    return observacoes.map(obs => {
+    return observacoes.filter(isObservacao2026).map(obs => {
       const emailCursista = (obs.email_cursista || '').trim().toLowerCase();
       const cursistaInfo = cursistasMap.get(emailCursista);
 

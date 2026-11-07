@@ -849,46 +849,27 @@ export default function Movimentacoes({ userEmail, userRole, tutorData, records 
                     </span>
                   </div>
 
-                  {/* Data e Ações do Admin */}
+                  {/* Data (Modo Somente Leitura / View Only no Dashboard) */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                     <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
                       🕒 {formatTime(mov.timestamp || mov.dataHora)}
                     </span>
 
-                    {/* Botão para o Admin Atender / Responder Chamado */}
-                    {(userRole === 'admin' || userRole === 'tecnico') && (
-                      <button
-                        onClick={() => {
-                          setSelectedMovForAction(mov);
-                          setAdminStatusResponse(mov.status && ['Deferido', 'Indeferido', 'Resolvido'].includes(mov.status) ? mov.status : 'Deferido');
-                          setAdminNotaResolucao(mov.nota_resolucao || '');
-                        }}
-                        style={{
-                          backgroundColor: 'var(--color-primary-dark)',
-                          color: '#ffffff',
-                          border: 'none',
-                          padding: '0.35rem 0.8rem',
-                          borderRadius: '6px',
-                          fontSize: '0.78rem',
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '0.3rem'
-                        }}
-                      >
-                        ✏️ {['Deferido', 'Indeferido', 'Resolvido'].includes(currentStatus) ? 'Alterar Resposta' : 'Atender Chamado'}
-                      </button>
-                    )}
-
-                    {userRole === 'admin' && (
-                      <button
-                        title="Remover do histórico"
-                        style={{ background: 'none', border: 'none', color: '#e53e3e', cursor: 'pointer', padding: '0.2rem' }}
-                        onClick={() => handleDeleteMovement(mov.id)}
-                      >
-                        🗑️
-                      </button>
+                    {!['Deferido', 'Indeferido', 'Resolvido'].includes(currentStatus) && (
+                      <span style={{
+                        backgroundColor: '#eff6ff',
+                        color: '#1e40af',
+                        border: '1px solid #bfdbfe',
+                        padding: '0.3rem 0.7rem',
+                        borderRadius: '6px',
+                        fontSize: '0.74rem',
+                        fontWeight: 700,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.3rem'
+                      }}>
+                        🖥️ Atendimento via Java Swing
+                      </span>
                     )}
                   </div>
 
@@ -1192,85 +1173,6 @@ export default function Movimentacoes({ userEmail, userRole, tutorData, records 
           onClose={() => setShowTutorModal(false)}
           onSubmitSuccess={handleNovoChamadoSubmetido}
         />
-      )}
-
-      {/* Modal de Ação do Administrador (Atender Chamado / Alterar Status) */}
-      {selectedMovForAction && (
-        <div style={{
-          position: 'fixed',
-          top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0, 29, 61, 0.75)',
-          backdropFilter: 'blur(5px)',
-          display: 'flex', justifyContent: 'center', alignItems: 'center',
-          zIndex: 1200, padding: '1rem'
-        }} onClick={() => setSelectedMovForAction(null)}>
-          <div className="animate-fade-in" style={{
-            background: 'white', borderRadius: '14px',
-            width: '100%', maxWidth: '580px',
-            padding: '1.5rem', boxShadow: 'var(--shadow-lg)',
-            display: 'flex', flexDirection: 'column', gap: '1.2rem'
-          }} onClick={e => e.stopPropagation()}>
-            
-            <div style={{ borderBottom: '2px solid #e2e8f0', paddingBottom: '0.8rem' }}>
-              <h3 style={{ fontSize: '1.15rem', color: 'var(--color-primary-dark)', fontWeight: 800, margin: 0 }}>
-                ✏️ Atendimento do Chamado / Solicitação
-              </h3>
-              <span style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)' }}>
-                Solicitante: <b>{selectedMovForAction.nome_cursista || selectedMovForAction.nomeCursista}</b>
-              </span>
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-primary-dark)', marginBottom: '0.4rem' }}>
-                Alterar Status para:
-              </label>
-              <select
-                value={adminStatusResponse}
-                onChange={e => setAdminStatusResponse(e.target.value)}
-                style={{ width: '100%', padding: '0.65rem 0.8rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.88rem', fontWeight: 700, backgroundColor: 'white' }}
-              >
-                <option value="Deferido">✅ Deferido (Aprovado)</option>
-                <option value="Indeferido">❌ Indeferido (Recusado)</option>
-                <option value="Resolvido">🎉 Resolvido (Concluído)</option>
-                <option value="Em Análise">⏳ Em Análise (Aguardando Informações)</option>
-              </select>
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-primary-dark)', marginBottom: '0.4rem' }}>
-                Observação / Resposta do Atendimento:
-              </label>
-              <textarea
-                rows="3"
-                placeholder="Informe a resposta para a solicitação (será visível no histórico)..."
-                value={adminNotaResolucao}
-                onChange={e => setAdminNotaResolucao(e.target.value)}
-                style={{ width: '100%', padding: '0.65rem 0.8rem', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.85rem', fontFamily: 'inherit' }}
-              />
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.8rem', borderTop: '1px solid #e2e8f0', paddingTop: '1rem' }}>
-              <button 
-                type="button" 
-                className="btn-secondary" 
-                onClick={() => setSelectedMovForAction(null)}
-                disabled={isUpdatingStatus}
-              >
-                Cancelar
-              </button>
-              <button 
-                type="button" 
-                className="btn-primary" 
-                onClick={handleSalvarStatusAdmin}
-                disabled={isUpdatingStatus}
-                style={{ padding: '0.65rem 1.4rem' }}
-              >
-                {isUpdatingStatus ? 'Salvando...' : 'Salvar Resolução'}
-              </button>
-            </div>
-
-          </div>
-        </div>
       )}
 
     </div>

@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import ObservacaoModalDetalhes from './ObservacaoModalDetalhes';
 import FormularioInserirObservacao from './FormularioInserirObservacao';
-import { normalizeComponente, getSemestre } from './ObservacoesOverview';
+import { normalizeComponente, getSemestre, isObservacao2026 } from './ObservacoesOverview';
 import { formatDatePtBr } from '../utils/dateUtils';
 import { NRES_OFICIAIS, normalizeNre } from '../utils/nreUtils';
 
@@ -56,9 +56,9 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
     return map;
   }, [cursistas]);
 
-  // Lista de observações enriquecidas com NRE, Tutor, Semestre e Componente Normalizado
+  // Lista de observações enriquecidas com NRE, Tutor, Semestre e Componente Normalizado (somente ciclo 2026)
   const enrichedObservacoes = useMemo(() => {
-    return observacoes.map(obs => {
+    return observacoes.filter(isObservacao2026).map(obs => {
       const emailCursista = (obs.email_cursista || '').trim().toLowerCase();
       const cursistaInfo = cursistasMap.get(emailCursista);
 

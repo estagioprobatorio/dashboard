@@ -173,9 +173,9 @@ export async function resolverCursista(ctx, r, { criarVinculo = true } = {}) {
 
   if (!criarVinculo) return { usuarioId: u.id, vinculoId: null };
 
-  // 2. Resolve o vínculo (Linha Funcional 1 ou 2)
-  let lf = Number(r.linha_funcional || r.vinculo || r.lf || r.padrao || r.ordem);
-  if (!lf || (lf !== 1 && lf !== 2)) {
+  // 2. Resolve o vínculo usando a Linha Funcional real da planilha (ex: 1, 2, 3, 10, 59...)
+  let lf = parseInt(String(r.linha_funcional || r['Linha Funcional'] || r.vinculo || r.lf || r.padrao || r.ordem || '').replace(/\D/g, ''), 10);
+  if (!lf || isNaN(lf) || lf < 1 || lf > 999) {
     const vinculosExistentes = await query(
       'SELECT id, linha_funcional, cargo FROM vinculo WHERE usuario_id = ? ORDER BY linha_funcional',
       [u.id]
@@ -198,7 +198,7 @@ export async function resolverCursista(ctx, r, { criarVinculo = true } = {}) {
       } else {
         const jaTemMatricula = (await query('SELECT id FROM matricula WHERE vinculo_id = ?', [v1.id]))[0];
         if (jaTemMatricula && turmaCod) {
-          lf = v1.linha_funcional === 1 ? 2 : 1;
+          lf = v1.linha_funcional === 1 ? 2 : v1.linha_funcional + 1;
         } else {
           lf = v1.linha_funcional;
         }
@@ -215,7 +215,7 @@ export async function resolverCursista(ctx, r, { criarVinculo = true } = {}) {
           if (mat) { matchedVinc = ve; break; }
         }
       }
-      return { usuarioId: u.id, vinculoId: matchedVinc.id };
+      return { usuarioId: u.id, vinculoId: matchedVinc.id, lf: matchedVinc.linha_funcional };
     }
   }
 
@@ -223,7 +223,7 @@ export async function resolverCursista(ctx, r, { criarVinculo = true } = {}) {
   if (!v) {
     const insV = await query(
       'INSERT INTO vinculo (usuario_id, linha_funcional, ordem, cargo, nre_id, municipio) VALUES (?,?,?,?,?,?)',
-      [u.id, lf, lf, cargo, nreEx, munic]
+      [u.id, lf, lf <= 100 ? lf : 1, cargo, nreEx, munic]
     );
     v = { id: insV.insertId };
   } else {
@@ -233,7 +233,7 @@ export async function resolverCursista(ctx, r, { criarVinculo = true } = {}) {
     );
   }
 
-  return { usuarioId: u.id, vinculoId: v.id };
+  return { usuarioId: u.id, vinculoId: v.id, lf };
 }
 
 /* ---------------- cursistas (aba DADOS) ---------------- */
@@ -280,7 +280,9 @@ export async function ingestCursistas(items, { runId, final }) {
       turmaId = ctx.turma.get(codigo);
     }
 
-    const codCursista = s(r.cod_cursista) || `V${res.vinculoId}T${turmaId || 0}`;
+    const cgmClean = normalizeDigits(r.cgm);
+    const lfClean = res.lf || parseInt(String(r.linha_funcional || r['Linha Funcional'] || 1).replace(/\D/g, ''), 10) || 1;
+    const codCursista = s(r.cod_cursista) || (cgmClean ? `${cgmClean}_${lfClean}` : `V${res.vinculoId}T${turmaId || 0}`);
 
     await query(
       `INSERT INTO matricula (cod_cursista, vinculo_id, turma_id, ciclo_id, status, na_base_ativa, sync_run, obs_cursista)

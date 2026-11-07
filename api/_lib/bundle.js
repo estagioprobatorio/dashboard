@@ -18,13 +18,13 @@ const SCOPE_USERS = {
 export async function buildBundle(user) {
   const isVisualizador = user.funcao === 'visualizador' || !user.funcao;
   const staff = STAFF.includes(user.funcao);
-  const verCgm = user.funcao === 'superadmin';
+  const verCgm = staff || user.funcao === 'cursista';
   const hasRestrictedScope = !staff && !isVisualizador && !!SCOPE_USERS[user.funcao];
   const scope = hasRestrictedScope ? SCOPE_USERS[user.funcao] : null;
   const scopeSql = (col) => (hasRestrictedScope ? `${col} IN (${scope})` : '1=1');
   const scopeP = hasRestrictedScope ? [user.id] : [];
 
-  // ----- CGM decifrado (apenas superadmin) -----
+  // ----- CGM decifrado (equipe administrativa / próprio cursista) -----
   const cgmPlain = new Map();
   if (verCgm) {
     const rows = await query("SELECT u.id AS usuario_id, v.id AS vinculo_id, u.cgm_cifrado FROM usuario u LEFT JOIN vinculo v ON v.usuario_id = u.id WHERE u.funcao = 'cursista' AND u.cgm_cifrado IS NOT NULL");
@@ -54,6 +54,7 @@ export async function buildBundle(user) {
     vinculo_id: r.vinculo_id,
     usuario_id: r.usuario_id,
     cgm: cgmOf(r.vinculo_id, r.cgm_ultimos3),
+    linha_funcional: r.linha_funcional || 1,
     nome_cursista: r.nome_cursista,
     email: r.email || '',
     telefone_cursista: r.telefone_cursista || '',

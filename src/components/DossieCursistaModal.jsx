@@ -69,10 +69,14 @@ export default function DossieCursistaModal({
     });
   }, [observacoes, cursistaEmail, cursistaNomeNorm, cursistaCgm]);
 
-  // Todas as observações mescladas (2026 + histórico de 2024)
+  // Todas as observações mescladas (2026 + histórico de 2024/2025), sem duplicidades
   const todasObservacoesDoCursista = useMemo(() => {
-    const todasMescladas = [...observacoesAtuais2026, ...obs2024];
-    return todasMescladas.sort((a, b) => getObsTimestamp(b) - getObsTimestamp(a));
+    const map = new Map();
+    [...observacoesAtuais2026, ...obs2024].forEach((o, idx) => {
+      const k = o.id_origem || o.id || `${o.carimbo}_${o.data_pratica}_${idx}`;
+      if (!map.has(k)) map.set(k, o);
+    });
+    return Array.from(map.values()).sort((a, b) => getObsTimestamp(b) - getObsTimestamp(a));
   }, [observacoesAtuais2026, obs2024]);
 
   // Componentes presentes nas observações (útil caso o cursista tenha dois padrões)
