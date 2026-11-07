@@ -448,16 +448,22 @@ export async function ingestObservacoes(items) {
   return { sincronizados: ok, rejeitados: ctx.rej };
 }
 
-/* ---------------- observaÃ§Ãµes do tutor (acompanhamento de formadores) ---------------- */
+/* ---------------- observações do tutor (acompanhamento de formadores) ---------------- */
 export async function ingestObservacoesTutor(items) {
   const ctx = makeCtx();
   let ok = 0;
   for (let i = 0; i < items.length; i++) {
     const o = items[i];
-    const tut = await usuarioPorEmail(ctx, { email: o.tutorEmail || o.tutor_email, nome: o.tutor, funcao: 'tutor' });
-    const form = await usuarioPorEmail(ctx, { email: o.formadorEmail || o.formador_email, nome: o.formador, funcao: 'formador' });
+    const tutorEmail = o.tutorEmail || o.tutor_email || o.email_tutor;
+    const tutorNome = o.tutor || o.tutor_nome || o.nome_tutor;
+    const formadorEmail = o.formadorEmail || o.formador_email || o.email_formador;
+    const formadorNome = o.formador || o.formador_nome || o.nome_formador;
+    const ts = o.timestamp || o.registrado_em || o.carimbo || o.data_registro;
+    const acaoObs = o.acaoObservada || o.acao_observada;
+    const tut = await usuarioPorEmail(ctx, { email: tutorEmail, nome: tutorNome, funcao: 'tutor' });
+    const form = await usuarioPorEmail(ctx, { email: formadorEmail, nome: formadorNome, funcao: 'formador' });
     const nid = await nreId(ctx, o.nre, null);
-    const idOrig = String(o.id || o.id_origem || `OBS_TUT_${sha(o.tutorEmail || o.tutor_email, o.timestamp, o.acaoObservada || o.acao_observada)}`);
+    const idOrig = String(o.id || o.id_origem || `OBS_TUT_${sha(tutorEmail, ts, acaoObs, i)}`);
     const avg = o.avgScore !== null && o.avgScore !== undefined && !isNaN(o.avgScore) ? Number(o.avgScore) : null;
     await query(
       `INSERT INTO observacao_tutor (id_origem, tutor_id, formador_id, registrado_em, acao_acompanhamento, acao_observada, data_observacao,
@@ -465,13 +471,14 @@ export async function ingestObservacoesTutor(items) {
          checklist_nao_realizadas, outros_registros, destaques, desenvolver, encaminhamentos, nre_id, tema, rubricas)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
        ON DUPLICATE KEY UPDATE tutor_id = VALUES(tutor_id), formador_id = VALUES(formador_id), avg_score = VALUES(avg_score),
-         rubricas = VALUES(rubricas), destaques = VALUES(destaques), desenvolver = VALUES(desenvolver), encaminhamentos = VALUES(encaminhamentos)`,
-      [idOrig, tut ? tut.id : null, form ? form.id : null, parseDateTime(o.timestamp), s(o.acaoAcompanhamento || o.acao_acompanhamento),
-        s(o.acaoObservada || o.acao_observada), s(o.dataObservacao || o.data_observacao), s(o.linkAcaoObservada || o.link_acao_observada),
+         rubricas = VALUES(rubricas), destaques = VALUES(destaques), desenvolver = VALUES(desenvolver), encaminhamentos = VALUES(encaminhamentos),
+         nre_id = VALUES(nre_id), tema = VALUES(tema), modalidade = VALUES(modalidade)`,
+      [idOrig, tut ? tut.id : null, form ? form.id : null, parseDateTime(ts), s(o.acaoAcompanhamento || o.acao_acompanhamento),
+        s(acaoObs), s(o.dataObservacao || o.data_observacao), s(o.linkAcaoObservada || o.link_acao_observada),
         s(o.dataFeedback || o.data_feedback), s(o.linkFeedback || o.link_feedback), s(o.linksComplementares || o.links_complementares),
         s(o.modalidade), avg, s(o.checklistRealizadas || o.checklist_realizadas), s(o.checklistNaoRealizadas || o.checklist_nao_realizadas),
         s(o.outrosRegistros || o.outros_registros), s(o.destaques), s(o.desenvolver), s(o.encaminhamentos), nid, s(o.tema),
-        JSON.stringify(o.rubrics || [])]
+        JSON.stringify(o.rubrics || o.rubricas || [])]
     );
     ok++;
   }

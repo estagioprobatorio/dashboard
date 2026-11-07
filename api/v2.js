@@ -23,7 +23,7 @@ const SYNC_ACTIONS = {
   sync_nao_concluintes_bulk: (b) => ingestNaoConcluintes(b.nao_concluintes || b.data || []),
   sync_movimentacoes_bulk: (b) => ingestMovimentacoes(b.movimentacoes || b.data || []),
   sync_observacoes_bulk: (b) => ingestObservacoes(b.observacoes || b.data || []),
-  sync_observacoes_tutor_bulk: (b) => ingestObservacoesTutor(b.observacoes_tutor || b.data || [])
+  sync_observacoes_tutor_bulk: (b) => ingestObservacoesTutor(b.observacoes_tutor || b.observacoes || b.data || [])
 };
 
 function applyCors(req, res) {

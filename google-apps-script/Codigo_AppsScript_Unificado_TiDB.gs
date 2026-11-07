@@ -1227,6 +1227,7 @@ function sincronizarAbaObservacoesTutoriaParaTiDB() {
       var endpoint = obterEndpointApi('sync_observacoes_tutor_bulk');
       var options = obterOpcoesHttp({
         action: 'sync_observacoes_tutor_bulk',
+        observacoes_tutor: lote,
         observacoes: lote
       });
       try {
@@ -1742,7 +1743,7 @@ function salvarLinhaPlanilha(idPlanilha, nomeAba, colunasCabecalho, linhaDados) 
 
 function setupInicialCriarAbas() {
   var ss = obterPlanilhaMestra();
-  var abasNecessarias = ["DADOS", "CONCLUINTES-1CH", "TUTORES", "EXONERADOS", "CURSISTAS NAO CONCLUINTES", "SIGEP", "SIGEP_FORMADORES"];
+  var abasNecessarias = ["DADOS", "CONCLUINTES-1CH", "TUTORES", "EXONERADOS", "CURSISTAS NAO CONCLUINTES", "Histórico de Movimentações", "SIGEP", "SIGEP_FORMADORES"];
   var criadas = 0;
   for (var i = 0; i < abasNecessarias.length; i++) {
     var nome = abasNecessarias[i];
@@ -1752,4 +1753,456 @@ function setupInicialCriarAbas() {
     }
   }
   SpreadsheetApp.getUi().alert('Verificação de Abas', 'Estrutura verificada! ' + criadas + ' abas adicionais foram criadas.', SpreadsheetApp.getUi().ButtonSet.OK);
+}
+
+/**
+ * -----------------------------------------------------------------------------------------
+ * 15. API EXCLUSIVA PARA O SISTEMA DESKTOP JAVA SWING
+ * Gerencia leitura de solicitações, alteração da Coluna H e disparo de e-mails
+ * -----------------------------------------------------------------------------------------
+ */
+
+function apiObterSolicitacoesPendentes() {
+  var ss = obterPlanilhaMestra();
+  if (!ss) return { status: 'erro', mensagem: 'Planilha mestra não acessível.', lista: [] };
+
+  var solicitacoes = [];
+
+  // 1. Aba: Troca de Turma
+  var abaTurma = ss.getSheetByName("Troca de Turma");
+  if (abaTurma) {
+    var dTurma = abaTurma.getDataRange().getValues();
+    for (var t = 1; t < dTurma.length; t++) {
+      var rt = dTurma[t];
+      var emailT = String(rt[1] || "").trim().toLowerCase();
+      var nomeT = String(rt[2] || "").trim();
+      if (!emailT && !nomeT) continue;
+
+      var statusRawT = String(rt[14] || "").trim();
+      var statusT = (statusRawT.toLowerCase().indexOf("atendido") !== -1 || statusRawT.toLowerCase().indexOf("conclu") !== -1 || statusRawT.toLowerCase().indexOf("deferido") !== -1) ? "Deferido" :
+                    (statusRawT.toLowerCase().indexOf("indefer") !== -1 || statusRawT.toLowerCase().indexOf("recus") !== -1) ? "Indeferido" : "Pendente";
+
+      solicitacoes.push({
+        id: "SOLIC_TURMA_" + (t + 1),
+        abaOrigem: "Troca de Turma",
+        linhaOrigem: t + 1,
+        origem: "Troca de Turma",
+        dataSolicitacao: rt[0] ? String(rt[0]) : "",
+        emailCursista: emailT,
+        nomeCursista: nomeT,
+        cpf: rt[4] ? String(rt[4]).replace(/\D/g, "") : "",
+        cgm: rt[5] ? String(rt[5]).replace(/\D/g, "") : "",
+        turmaAntiga: rt[9] ? String(rt[9]).trim() : "",
+        turmaNova: rt[10] ? String(rt[10]).trim() : "",
+        tipoAcao: "Troca de Turma",
+        motivo: rt[12] ? String(rt[12]).trim() : "Solicitação via Formulário",
+        justificativa: rt[13] ? String(rt[13]).trim() : "",
+        status: statusT,
+        notaResolucao: rt[15] ? String(rt[15]).trim() : ""
+      });
+    }
+  }
+
+  // 2. Aba: Troca de Modalidade
+  var abaMod = ss.getSheetByName("Troca de Modalidade");
+  if (abaMod) {
+    var dMod = abaMod.getDataRange().getValues();
+    for (var m = 1; m < dMod.length; m++) {
+      var rm = dMod[m];
+      var emailM = String(rm[1] || "").trim().toLowerCase();
+      var nomeM = String(rm[2] || "").trim();
+      if (!emailM && !nomeM) continue;
+
+      var statusRawM = String(rm[12] || "").trim();
+      var statusM = (statusRawM.toLowerCase().indexOf("atendido") !== -1 || statusRawM.toLowerCase().indexOf("conclu") !== -1 || statusRawM.toLowerCase().indexOf("deferido") !== -1) ? "Deferido" :
+                    (statusRawM.toLowerCase().indexOf("indefer") !== -1 || statusRawM.toLowerCase().indexOf("recus") !== -1) ? "Indeferido" : "Pendente";
+
+      solicitacoes.push({
+        id: "SOLIC_MOD_" + (m + 1),
+        abaOrigem: "Troca de Modalidade",
+        linhaOrigem: m + 1,
+        origem: "Troca de Modalidade",
+        dataSolicitacao: rm[0] ? String(rm[0]) : "",
+        emailCursista: emailM,
+        nomeCursista: nomeM,
+        cpf: rm[4] ? String(rm[4]).replace(/\D/g, "") : "",
+        cgm: rm[5] ? String(rm[5]).replace(/\D/g, "") : "",
+        turmaAntiga: rm[9] ? String(rm[9]).trim() : "",
+        turmaNova: rm[10] ? String(rm[10]).trim() : "",
+        tipoAcao: "Troca de Modalidade",
+        motivo: rm[11] ? String(rm[11]).trim() : "Solicitação de Modalidade",
+        justificativa: rm[12] ? String(rm[12]).trim() : "",
+        status: statusM,
+        notaResolucao: rm[13] ? String(rm[13]).trim() : ""
+      });
+    }
+  }
+
+  // 3. Aba: Vínculos em Avaliação Formativa
+  var abaVinc = ss.getSheetByName("Vínculos em Avaliação Formativa") || ss.getSheetByName("Vinculos na AF");
+  if (abaVinc) {
+    var dVinc = abaVinc.getDataRange().getValues();
+    for (var v = 1; v < dVinc.length; v++) {
+      var rv = dVinc[v];
+      var emailV = String(rv[1] || "").trim().toLowerCase();
+      var nomeV = String(rv[2] || "").trim();
+      if (!emailV && !nomeV) continue;
+
+      var statusRawV = String(rv[17] || "").trim();
+      var statusV = (statusRawV.toLowerCase().indexOf("atendido") !== -1 || statusRawV.toLowerCase().indexOf("conclu") !== -1 || statusRawV.toLowerCase().indexOf("deferido") !== -1) ? "Deferido" :
+                    (statusRawV.toLowerCase().indexOf("indefer") !== -1 || statusRawV.toLowerCase().indexOf("recus") !== -1) ? "Indeferido" : "Pendente";
+
+      var turmaAntigaV = (rv.length > 21 && rv[21]) ? String(rv[21]).trim() : (rv[12] ? String(rv[12]).trim() : "");
+      var turmaNovaV = (rv.length > 22 && rv[22]) ? String(rv[22]).trim() : (rv[13] ? String(rv[13]).trim() : "");
+
+      solicitacoes.push({
+        id: "SOLIC_VINC_" + (v + 1),
+        abaOrigem: abaVinc.getName(),
+        linhaOrigem: v + 1,
+        origem: "Vínculos na AF",
+        dataSolicitacao: rv[0] ? String(rv[0]) : "",
+        emailCursista: emailV,
+        nomeCursista: nomeV,
+        cpf: rv[4] ? String(rv[4]).replace(/\D/g, "") : "",
+        cgm: rv[5] ? String(rv[5]).replace(/\D/g, "") : "",
+        turmaAntiga: turmaAntigaV,
+        turmaNova: turmaNovaV,
+        tipoAcao: "Vínculo na AF",
+        motivo: "Vínculo em Avaliação Formativa",
+        justificativa: rv[16] ? String(rv[16]).trim() : "",
+        status: statusV,
+        notaResolucao: rv[18] ? String(rv[18]).trim() : ""
+      });
+    }
+  }
+
+  return { status: 'sucesso', total: solicitacoes.length, lista: solicitacoes };
+}
+
+function apiProcessarMovimentacao(dados) {
+  var ss = obterPlanilhaMestra();
+  if (!ss) return { status: 'erro', mensagem: 'Planilha mestra não acessível.' };
+
+  var cgmBusca = dados.cgm ? String(dados.cgm).replace(/\D/g, "").trim() : "";
+  var cpfBusca = dados.cpf ? String(dados.cpf).replace(/\D/g, "").trim() : "";
+  var emailBusca = dados.email ? String(dados.email).trim().toLowerCase() : "";
+  var lfBusca = dados.lf ? String(dados.lf).replace(/\D/g, "").trim() : "";
+  var turmaNova = dados.turmaNova ? String(dados.turmaNova).trim() : "";
+  var codSereNova = dados.codSereNova ? String(dados.codSereNova).trim() : "";
+  var statusDecisao = dados.statusDecisao || "Deferido";
+  var isDeferido = (statusDecisao.toLowerCase() === "deferido" || statusDecisao.toLowerCase() === "atendida");
+
+  var abaCursistas = ss.getSheetByName("CURSISTAS") || ss.getSheetByName("DADOS");
+  if (!abaCursistas) return { status: 'erro', mensagem: 'Aba CURSISTAS/DADOS não encontrada.' };
+
+  var valoresCursistas = abaCursistas.getDataRange().getValues();
+  var cabecalho = valoresCursistas[0].map(function(c) {
+    return String(c || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  });
+
+  function getIdx(keywords) {
+    for (var k = 0; k < keywords.length; k++) {
+      var idx = cabecalho.indexOf(keywords[k].toLowerCase());
+      if (idx !== -1) return idx;
+    }
+    for (var k = 0; k < keywords.length; k++) {
+      var kw = keywords[k].toLowerCase();
+      var idx = cabecalho.findIndex(function(c) { return c.includes(kw); });
+      if (idx !== -1) return idx;
+    }
+    return -1;
+  }
+
+  var idxCgm = getIdx(["cgm"]);
+  var idxCpf = getIdx(["cpf cursista", "cpf"]);
+  var idxEmail = getIdx(["e-mail", "email cursista", "email"]);
+  var idxNome = getIdx(["nome cursista", "nome do cursista", "cursista", "nome"]);
+  var idxTurma = getIdx(["turmas", "turma"]);
+  var idxFormador = getIdx(["nome formador", "formador"]);
+  var idxEmailFormador = getIdx(["e-mail formador", "email formador"]);
+  var idxTutor = getIdx(["tutor responsavel", "tutor"]);
+  var idxEmailTutor = getIdx(["e-mail tutor", "email tutor"]);
+  var idxLinhaFuncional = getIdx(["linha funcional", "linha_funcional", "lf", "padrao", "vinculo"]);
+
+  // Coluna H na planilha padrão da SEED-PR é a coluna 8
+  var colTurma = idxTurma !== -1 ? (idxTurma + 1) : 8;
+
+  var linhaCursista = -1;
+  var linhaDadosCursista = null;
+
+  for (var r = 1; r < valoresCursistas.length; r++) {
+    var row = valoresCursistas[r];
+    var cgmRow = idxCgm !== -1 ? String(row[idxCgm] || "").replace(/\D/g, "").trim() : "";
+    var cpfRow = idxCpf !== -1 ? String(row[idxCpf] || "").replace(/\D/g, "").trim() : "";
+    var emailRow = idxEmail !== -1 ? String(row[idxEmail] || "").trim().toLowerCase() : "";
+    var lfRow = idxLinhaFuncional !== -1 ? String(row[idxLinhaFuncional] || "").replace(/\D/g, "").trim() : (row.length > 36 ? String(row[36] || "").replace(/\D/g, "").trim() : "");
+
+    var match = false;
+    if (cgmBusca && cgmRow === cgmBusca) {
+      if (lfBusca && lfRow) {
+        match = (lfRow === lfBusca);
+      } else {
+        match = true;
+      }
+    } else if (cpfBusca && cpfRow === cpfBusca) {
+      match = true;
+    } else if (emailBusca && emailRow === emailBusca) {
+      match = true;
+    }
+
+    if (match) {
+      linhaCursista = r + 1; // 1-based index no Google Sheets
+      linhaDadosCursista = row;
+      break;
+    }
+  }
+
+  var turmaAnterior = dados.turmaAnterior || "";
+  var nomeCursista = dados.nomeCursista || (dados.nome || "");
+  var emailCursista = emailBusca;
+  var cgmEncontrado = cgmBusca;
+  var lfEncontrada = lfBusca || "1";
+  var cpfEncontrado = cpfBusca;
+  var tutorAntigo = "";
+  var emailTutorAntigo = "";
+  var formadorAntigo = "";
+  var emailFormadorAntigo = "";
+
+  if (linhaDadosCursista) {
+    turmaAnterior = idxTurma !== -1 ? String(linhaDadosCursista[idxTurma] || "").trim() : String(linhaDadosCursista[7] || "").trim();
+    nomeCursista = idxNome !== -1 ? String(linhaDadosCursista[idxNome] || "").trim() : nomeCursista;
+    emailCursista = idxEmail !== -1 ? String(linhaDadosCursista[idxEmail] || "").trim().toLowerCase() : emailCursista;
+    cgmEncontrado = idxCgm !== -1 ? String(linhaDadosCursista[idxCgm] || "").replace(/\D/g, "").trim() : cgmEncontrado;
+    cpfEncontrado = idxCpf !== -1 ? String(linhaDadosCursista[idxCpf] || "").replace(/\D/g, "").trim() : cpfEncontrado;
+    tutorAntigo = idxTutor !== -1 ? String(linhaDadosCursista[idxTutor] || "").trim() : "";
+    emailTutorAntigo = idxEmailTutor !== -1 ? String(linhaDadosCursista[idxEmailTutor] || "").trim().toLowerCase() : "";
+    formadorAntigo = idxFormador !== -1 ? String(linhaDadosCursista[idxFormador] || "").trim() : "";
+    emailFormadorAntigo = idxEmailFormador !== -1 ? String(linhaDadosCursista[idxEmailFormador] || "").trim().toLowerCase() : "";
+    if (idxLinhaFuncional !== -1 && linhaDadosCursista[idxLinhaFuncional]) {
+      lfEncontrada = String(linhaDadosCursista[idxLinhaFuncional]).replace(/\D/g, "").trim() || lfEncontrada;
+    }
+  }
+
+  // 1. SE DEFERIDO: Atualiza a Coluna H na aba CURSISTAS/DADOS
+  if (isDeferido && linhaCursista !== -1 && turmaNova) {
+    abaCursistas.getRange(linhaCursista, colTurma).setValue(turmaNova);
+    SpreadsheetApp.flush();
+  }
+
+  // 2. Busca Formador e Tutor da Turma Nova na aba DADOS
+  var tutorNovo = "";
+  var emailTutorNovo = "";
+  var formadorNovo = "";
+  var emailFormadorNovo = "";
+
+  if (turmaNova) {
+    var cleanNova = turmaNova.trim().toUpperCase();
+    for (var r = 1; r < valoresCursistas.length; r++) {
+      var tRow = idxTurma !== -1 ? String(valoresCursistas[r][idxTurma] || "").trim().toUpperCase() : "";
+      if (tRow === cleanNova) {
+        formadorNovo = idxFormador !== -1 ? String(valoresCursistas[r][idxFormador] || "").trim() : "";
+        emailFormadorNovo = idxEmailFormador !== -1 ? String(valoresCursistas[r][idxEmailFormador] || "").trim().toLowerCase() : "";
+        tutorNovo = idxTutor !== -1 ? String(valoresCursistas[r][idxTutor] || "").trim() : "";
+        emailTutorNovo = idxEmailTutor !== -1 ? String(valoresCursistas[r][idxEmailTutor] || "").trim().toLowerCase() : "";
+        break;
+      }
+    }
+  }
+
+  // 3. Garante e grava na aba "Histórico de Movimentações"
+  var nomeAbaHist = "Histórico de Movimentações";
+  var abaHist = ss.getSheetByName(nomeAbaHist);
+  if (!abaHist) {
+    abaHist = ss.insertSheet(nomeAbaHist);
+    abaHist.appendRow([
+      "Data/Hora Registro",
+      "CGM",
+      "Linha Funcional",
+      "Nome do Cursista",
+      "CPF",
+      "Turma Anterior",
+      "Turma Nova",
+      "Cód. SERE Nova",
+      "Status Decisão",
+      "Motivo",
+      "Justificativa / Observação",
+      "Status E-mail",
+      "Operador / Solicitado Por"
+    ]);
+    abaHist.getRange(1, 1, 1, 13).setFontWeight("bold").setBackground("#001d3d").setFontColor("#ffffff");
+  }
+
+  var dataHoraAgora = Utilities.formatDate(new Date(), "America/Sao_Paulo", "dd/MM/yyyy HH:mm:ss");
+  var linhaHist = [
+    dataHoraAgora,
+    cgmEncontrado,
+    lfEncontrada,
+    nomeCursista,
+    cpfEncontrado,
+    turmaAnterior,
+    turmaNova,
+    codSereNova,
+    statusDecisao,
+    dados.motivo || "Movimentação de Turma",
+    dados.notaResolucao || "",
+    "Pendente",
+    dados.solicitadoPor || "Sistema Desktop Java Swing"
+  ];
+  abaHist.appendRow(linhaHist);
+  var linhaInserida = abaHist.getLastRow();
+
+  // 4. Atualiza o status na aba de solicitação original se informada
+  if (dados.abaOrigem && dados.linhaOrigem) {
+    try {
+      var abaOrig = ss.getSheetByName(dados.abaOrigem);
+      if (abaOrig) {
+        var numLinha = parseInt(dados.linhaOrigem, 10);
+        if (numLinha > 1) {
+          var headersOrig = abaOrig.getRange(1, 1, 1, abaOrig.getLastColumn()).getValues()[0].map(function(h) {
+            return String(h || "").trim().toLowerCase();
+          });
+          var colStatus = headersOrig.findIndex(function(h) { return h.indexOf("status") !== -1 || h.indexOf("situa") !== -1; });
+          if (colStatus !== -1) {
+            abaOrig.getRange(numLinha, colStatus + 1).setValue(statusDecisao);
+          }
+        }
+      }
+    } catch (eOrig) {
+      Logger.log("Aviso atualização origem: " + eOrig.toString());
+    }
+  }
+
+  // 5. Grava no TiDB Cloud para atualizar o dashboard web em tempo real
+  try {
+    var movPayload = {
+      id: "MOV_SWING_" + Date.now(),
+      timestamp: new Date().toISOString(),
+      cgm: cgmEncontrado,
+      linha_funcional: lfEncontrada,
+      nome_cursista: nomeCursista,
+      emailCursista: emailCursista,
+      cpf: cpfEncontrado,
+      turma_anterior: turmaAnterior,
+      turma_nova: turmaNova,
+      tipo_acao: dados.tipoAcao || "Troca de Turma",
+      motivo: dados.motivo || "Movimentação de Turma",
+      justificativa: dados.notaResolucao || "",
+      status: statusDecisao,
+      nota_resolucao: dados.notaResolucao || ("Decisão: " + statusDecisao),
+      solicitadoPor: dados.solicitadoPor || "Sistema Desktop Java Swing"
+    };
+
+    var endpoint = obterEndpointApi('sync_movimentacoes_bulk');
+    var options = obterOpcoesHttp({
+      action: 'sync_movimentacoes_bulk',
+      movimentacoes: [movPayload]
+    });
+    UrlFetchApp.fetch(endpoint, options);
+  } catch (eTiDB) {
+    Logger.log("Aviso TiDB: " + eTiDB.toString());
+  }
+
+  return {
+    status: 'sucesso',
+    linhaHistIndice: linhaInserida,
+    dadosEmail: {
+      cursistaNome: nomeCursista,
+      cursistaEmail: emailCursista,
+      cgm: cgmEncontrado,
+      linhaFuncional: lfEncontrada,
+      turmaAnterior: turmaAnterior,
+      turmaNova: turmaNova,
+      codSereNova: codSereNova,
+      formadorAntigoNome: formadorAntigo,
+      formadorAntigoEmail: emailFormadorAntigo,
+      tutorAntigoNome: tutorAntigo,
+      tutorAntigoEmail: emailTutorAntigo,
+      formadorNovoNome: formadorNovo,
+      formadorNovoEmail: emailFormadorNovo,
+      tutorNovoNome: tutorNovo,
+      tutorNovoEmail: emailTutorNovo,
+      statusDecisao: statusDecisao,
+      notaResolucao: dados.notaResolucao || "",
+      dataEfetivacao: dataHoraAgora
+    }
+  };
+}
+
+function apiEnviarEmailMovimentacao(dadosEmail) {
+  try {
+    var para = dadosEmail.para || dadosEmail.cursistaEmail;
+    if (!para) return { status: 'erro', mensagem: 'E-mail do cursista não informado.' };
+
+    var ccs = [];
+    if (dadosEmail.ccFormadorAntigo) ccs.push(dadosEmail.ccFormadorAntigo);
+    if (dadosEmail.ccFormadorNovo) ccs.push(dadosEmail.ccFormadorNovo);
+    if (dadosEmail.ccTutorAntigo) ccs.push(dadosEmail.ccTutorAntigo);
+    if (dadosEmail.ccTutorNovo) ccs.push(dadosEmail.ccTutorNovo);
+
+    var ccString = ccs.filter(function(e) { return e && e.indexOf("@") !== -1; }).join(",");
+    var assunto = dadosEmail.assunto || ("[SEED-PR / Estágio Probatório] Movimentação de Turma: " + (dadosEmail.cursistaNome || ""));
+    var corpo = dadosEmail.corpo || "";
+
+    MailApp.sendEmail({
+      to: para,
+      cc: ccString || undefined,
+      subject: assunto,
+      body: corpo
+    });
+
+    // Atualiza a coluna Status E-mail na aba "Histórico de Movimentações"
+    if (dadosEmail.linhaHistIndice) {
+      var ss = obterPlanilhaMestra();
+      var abaHist = ss.getSheetByName("Histórico de Movimentações");
+      if (abaHist) {
+        var dataHoraEnvio = Utilities.formatDate(new Date(), "America/Sao_Paulo", "dd/MM/yyyy HH:mm");
+        abaHist.getRange(dadosEmail.linhaHistIndice, 12).setValue("Enviado em " + dataHoraEnvio);
+      }
+    }
+
+    return { status: 'sucesso', mensagem: 'E-mails enviados com sucesso para todos os envolvidos!' };
+  } catch (err) {
+    return { status: 'erro', mensagem: err.toString() };
+  }
+}
+
+/**
+ * Endpoint HTTP REST para o Aplicativo Java Swing (quando publicado como Web App)
+ */
+function doGet(e) {
+  var params = (e && e.parameter) ? e.parameter : {};
+  var action = params.action || 'ping';
+
+  var result = {};
+  if (action === 'get_solicitacoes_pendentes') {
+    result = apiObterSolicitacoesPendentes();
+  } else if (action === 'health') {
+    result = { status: 'ok', servico: 'Google Apps Script SEED-PR' };
+  } else {
+    result = { status: 'erro', mensagem: 'Ação GET desconhecida: ' + action };
+  }
+
+  return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function doPost(e) {
+  var action = (e && e.parameter && e.parameter.action) ? e.parameter.action : '';
+  var body = {};
+  try {
+    body = JSON.parse(e.postData.contents || '{}');
+    if (!action && body.action) action = body.action;
+  } catch (err) {}
+
+  var result = {};
+  if (action === 'processar_movimentacao') {
+    result = apiProcessarMovimentacao(body);
+  } else if (action === 'enviar_email') {
+    result = apiEnviarEmailMovimentacao(body);
+  } else if (action === 'get_solicitacoes_pendentes') {
+    result = apiObterSolicitacoesPendentes();
+  } else {
+    result = { status: 'erro', mensagem: 'Ação POST desconhecida: ' + action };
+  }
+
+  return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
 }
