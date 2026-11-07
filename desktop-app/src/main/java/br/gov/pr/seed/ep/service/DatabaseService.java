@@ -32,7 +32,7 @@ public class DatabaseService {
 
     private String getJdbcUrl() {
         return "jdbc:mysql://" + DB_HOST + ":" + DB_PORT + "/" + DB_NAME +
-                "?sslMode=VERIFY_IDENTITY&useUnicode=true&characterEncoding=utf8&serverTimezone=America/Sao_Paulo";
+                "?sslMode=REQUIRED&useUnicode=true&characterEncoding=utf8&serverTimezone=America/Sao_Paulo";
     }
 
     public Connection getConnection() throws SQLException {
