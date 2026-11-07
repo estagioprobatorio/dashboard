@@ -375,15 +375,35 @@ export async function ingestNaoConcluintes(items) {
   return { sincronizados: ok, rejeitados: ctx.rej };
 }
 
-/* ---------------- movimentaÃ§Ãµes ---------------- */
+/* ---------------- movimentações ---------------- */
 export async function ingestMovimentacoes(items) {
   const ctx = makeCtx();
   let ok = 0;
   for (const m of items) {
-    const res = await resolverCursista(ctx, { ...m, nome_cursista: m.nome_cursista }, { criarVinculo: false });
+    const emailCur = lowerEmail(m.email || m.emailCursista || m.email_cursista);
+    const nomeCur = m.nome_cursista || m.nomeCursista || m.nome;
+    const turmaAnt = s(m.turma_anterior || m.turma_antiga || m.turmaAntiga);
+    const turmaNov = s(m.turma_nova || m.turmaNova);
+    const tipoAcao = s(m.tipo_acao || m.tipoAcao) || 'Troca de Turma';
+    const statusMov = s(m.status) || 'Pendente';
+    const motivoMov = s(m.motivo);
+    const justifMov = s(m.justificativa);
+    const notaRes = s(m.nota_resolucao || m.notaResolucao);
+    const tsRaw = m.timestamp || m.data_solicitacao || m.dataSolicitacao || m.registrado_em;
+    const registrado = parseDateTime(tsRaw) || new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+    const res = await resolverCursista(ctx, {
+      ...m,
+      email: emailCur,
+      email_cursista: emailCur,
+      nome_cursista: nomeCur,
+      cpf: m.cpf || m.cpf_cursista,
+      cgm: m.cgm
+    }, { criarVinculo: false });
+
     const nid = await nreId(ctx, m.nre, null);
-    const registrado = parseDateTime(m.timestamp) || new Date().toISOString().slice(0, 19).replace('T', ' ');
-    const extId = s(m.id) || `MOV_${sha(lowerEmail(m.email || m.emailCursista), registrado, m.tipo_acao, m.turma_anterior, m.turma_nova, m.motivo)}`;
+    const extId = s(m.id || m.ext_id) || `MOV_${sha(emailCur, registrado, tipoAcao, turmaAnt, turmaNov, motivoMov)}`;
+
     await query(
       `INSERT INTO movimentacao (ext_id, usuario_id, registrado_em, nre_id, tutor_responsavel, email_tutor_resp, turma_anterior, turma_nova,
          tipo_acao, motivo, situacao_relacionada, ano_formacao, chamamento, modalidade_detalhes, turma_detalhes, justificativa, descricao,
@@ -393,10 +413,10 @@ export async function ingestMovimentacoes(items) {
          status = IF(resolvido_em IS NOT NULL, status, VALUES(status)),
          nota_resolucao = IF(resolvido_em IS NOT NULL, nota_resolucao, VALUES(nota_resolucao)),
          turma_anterior = VALUES(turma_anterior), turma_nova = VALUES(turma_nova), justificativa = VALUES(justificativa)`,
-      [extId, res ? res.usuarioId : null, registrado, nid, s(m.tutor_responsavel || m.tutor), lowerEmail(m.email_tutor_responsavel),
-        s(m.turma_anterior), s(m.turma_nova), s(m.tipo_acao) || 'SolicitaÃ§Ã£o', s(m.motivo), s(m.situacao_relacionada), s(m.ano_formacao),
-        s(m.chamamento), s(m.modalidade_detalhes), s(m.turma_detalhes), s(m.justificativa), s(m.descricao), s(m.comprovante),
-        s(m.status) || 'Pendente', s(m.nota_resolucao), s(m.solicitadoPor) || 'Google Forms']
+      [extId, res ? res.usuarioId : null, registrado, nid, s(m.tutor_responsavel || m.tutor), lowerEmail(m.email_tutor_responsavel || m.email_tutor),
+        turmaAnt, turmaNov, tipoAcao, motivoMov, s(m.situacao_relacionada), s(m.ano_formacao),
+        s(m.chamamento), s(m.modalidade_detalhes), s(m.turma_detalhes), justifMov, s(m.descricao), s(m.comprovante),
+        statusMov, notaRes, s(m.solicitadoPor) || 'Google Forms']
     );
     ok++;
   }

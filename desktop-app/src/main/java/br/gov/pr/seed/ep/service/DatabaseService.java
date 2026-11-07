@@ -130,7 +130,9 @@ public class DatabaseService {
         try (Connection conn = getConnection()) {
             String sql = "SELECT mv.ext_id, mv.registrado_em, mv.tipo_acao, mv.turma_anterior, mv.turma_nova, " +
                     "mv.motivo, mv.justificativa, mv.status, mv.tutor_responsavel, mv.email_tutor_resp, " +
-                    "u.nome AS nome_cursista, u.email_inst AS email_cursista " +
+                    "COALESCE(u.nome, mv.solicitado_por_nome) AS nome_cursista, " +
+                    "COALESCE(u.email_inst, mv.email_tutor_resp) AS email_cursista, " +
+                    "u.cgm_ultimos3 AS cgm " +
                     "FROM movimentacao mv LEFT JOIN usuario u ON u.id = mv.usuario_id " +
                     "ORDER BY mv.id DESC LIMIT 500";
 
@@ -149,6 +151,7 @@ public class DatabaseService {
                     m.setEmailTutor(rs.getString("email_tutor_resp"));
                     m.setNomeCursista(rs.getString("nome_cursista"));
                     m.setEmailCursista(rs.getString("email_cursista"));
+                    m.setCgm(rs.getString("cgm"));
                     lista.add(m);
                 }
             }

@@ -666,7 +666,7 @@ function sincronizarAbaNaoConcluintesParaTiDB() {
     });
   }
 
-  var endpoint = obterEndpointApi('sync_exonerados_bulk');
+  var endpoint = obterEndpointApi('sync_nao_concluintes_bulk');
   var options = obterOpcoesHttp({
     action: 'sync_nao_concluintes_bulk',
     nao_concluintes: naoConcluintes
@@ -794,7 +794,7 @@ function sincronizarAbasMovimentacoesParaTiDB() {
   var totalSinc = 0;
   for (var b = 0; b < movimentacoes.length; b += BATCH_SIZE) {
     var lote = movimentacoes.slice(b, b + BATCH_SIZE);
-    var endpoint = obterEndpointApi('sync_exonerados_bulk');
+    var endpoint = obterEndpointApi('sync_movimentacoes_bulk');
     var options = obterOpcoesHttp({
       action: 'sync_movimentacoes_bulk',
       movimentacoes: lote,
