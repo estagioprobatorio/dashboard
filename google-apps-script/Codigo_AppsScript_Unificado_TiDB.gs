@@ -14,18 +14,46 @@ var VERCEL_APP_URL = "https://dashboard-tawny-delta-96.vercel.app";
 var API_VERSION = "v2";
 
 // 3. Token Secreto de Sincronização (SYNC_TOKEN)
-// IMPORTANTE: Insira aqui a mesma chave secreta configurada no painel da Vercel (Project Settings ➔ Environment Variables)
-var SYNC_TOKEN = "";
+// Configure o mesmo valor definido no painel da Vercel (Project Settings ➔ Environment Variables)
+var SYNC_TOKEN = "l26zXdDT0Mm3h_KOF9hehDotnB6FYJyg";
 
 // 4. IDs Oficiais das Planilhas do Google Sheets (SEED-PR)
 var SPREADSHEET_ID_MESTRA_TIDB = "1sRkA88VrtczqXxQ6PlmgygeCVhPoElRNS8RC1QuQzx0";
 
-// 5. Planilhas Externas de Observações da Prática (Formadores -> Cursistas)
+// 5. Planilhas Externas Oficiais de Observações da Prática (Formadores -> Cursistas)
 var PLANILHAS_OBSERVACOES_FORMADOR = [
-  { id: "1KmbMvNOTpj4OaDOdKw5mPVI3iqbo8RbQBqBktM84ToE", nome: "Formador-1ANO_1SEM", anoFormativoPadrao: "1º ANO", semestrePadrao: "1º Semestre/2026" },
-  { id: "1uv5QWeqtN5iMkH8nVQUvsYKClv9NaGDHgsdT_D-RPiw", nome: "Formador-2e3ANO-2SEM", anoFormativoPadrao: "2º e 3º ANOS", semestrePadrao: "2º Semestre/2026" },
-  { id: "1dL_Q-_15Idx3SNAZOqmKzrnVqA8tHFBzILA5PZ7p798", nome: "Formador-1ANO_2SEM", anoFormativoPadrao: "1º ANO", semestrePadrao: "2º Semestre/2026" },
-  { id: "1zSnlh7aW8df800lP90rCLVxiHNWAa1f9IGjz2OoDfvU", nome: "Formador-2e3ANO-1SEM", anoFormativoPadrao: "2º e 3º ANOS", semestrePadrao: "1º Semestre/2026" }
+  {
+    sigla: "1ANO_1SEM",
+    nome: "Formador-1ANO_1SEM",
+    id: "1KmbMvNOTpj4OaDOdKw5mPVI3iqbo8RbQBqBktM84ToE",
+    gid: "1030562032",
+    anoFormativoPadrao: "1º ANO",
+    semestrePadrao: "1º Semestre/2026"
+  },
+  {
+    sigla: "2e3ANO_2SEM",
+    nome: "Formador-2e3ANO-2SEM",
+    id: "1uv5QWeqtN5iMkH8nVQUvsYKClv9NaGDHgsdT_D-RPiw",
+    gid: "2068065207",
+    anoFormativoPadrao: "2º e 3º ANOS",
+    semestrePadrao: "2º Semestre/2026"
+  },
+  {
+    sigla: "1ANO_2SEM",
+    nome: "Formador-1ANO_2SEM",
+    id: "1dL_Q-_15Idx3SNAZOqmKzrnVqA8tHFBzILA5PZ7p798",
+    gid: "425616417",
+    anoFormativoPadrao: "1º ANO",
+    semestrePadrao: "2º Semestre/2026"
+  },
+  {
+    sigla: "2e3ANO_1SEM",
+    nome: "Formador-2e3ANO-1SEM",
+    id: "1zSnlh7aW8df800lP90rCLVxiHNWAa1f9IGjz2OoDfvU",
+    gid: "848666482",
+    anoFormativoPadrao: "2º e 3º ANOS",
+    semestrePadrao: "1º Semestre/2026"
+  }
 ];
 
 // 6. Planilha Externa de Observações de Tutoria (Tutores -> Formadores / Tutor Insights)
@@ -66,10 +94,15 @@ function onOpen() {
 
     // Menu 3: Banco de Dados TiDB Serverless Cloud
     ui.createMenu('⚡ TiDB CLOUD')
-      .addItem('🔄 Sincronizar Tudo com TiDB Agora (Manual)', 'sincronizarManualComAlerta')
+      .addItem('🔄 Sincronizar Tudo com TiDB (Completo)', 'sincronizarManualComAlerta')
       .addSeparator()
-      .addItem('📋 Sincronizar Observações da Prática (1º e 2º/3º Anos)', 'sincronizarObservacoesPraticaMenu')
-      .addItem('👨‍🏫 Sincronizar Observações do Tutor (Formadores)', 'sincronizarObservacoesTutorMenu')
+      .addItem('👥 1. Cursistas Ativos (Aba DADOS)', 'sincronizarAbaDadosMenu')
+      .addItem('🚪 2. Servidores Exonerados (Aba EXONERADOS)', 'sincronizarAbaExoneradosMenu')
+      .addItem('🎓 3. Concluintes (CONCLUINTES-1CH)', 'sincronizarAbaConcluintesMenu')
+      .addItem('👨‍🏫 4. Tutores Regionais (Aba TUTORES)', 'sincronizarAbaTutoresMenu')
+      .addItem('📋 5. Observações da Prática (Formadores)', 'sincronizarObservacoesPraticaMenu')
+      .addItem('🕵️ 6. Observações do Tutor (Tutoria)', 'sincronizarObservacoesTutorMenu')
+      .addItem('🔀 7. Movimentações & Trocas', 'sincronizarAbaMovimentacoesMenu')
       .addSeparator()
       .addItem('⏰ Ativar Atualização Automática Diária (07:00)', 'configurarGatilhoDiario7h')
       .addItem('🔍 Testar Conexão com TiDB', 'testarConexaoTiDB')
@@ -182,15 +215,48 @@ function sincronizarManualComAlerta() {
 }
 
 function sincronizarObservacoesPraticaMenu() {
-  SpreadsheetApp.getActiveSpreadsheet().toast('Sincronizando observações pedagógicas com TiDB...', 'TiDB Serverless', 6);
+  SpreadsheetApp.getActiveSpreadsheet().toast('Sincronizando as 4 planilhas de observações dos Formadores...', 'TiDB Serverless', 10);
   var res = sincronizarAbaObservacoesParaTiDB();
-  SpreadsheetApp.getUi().alert('Observações de Prática', '✓ Total de observações sincronizadas: ' + (res.total || 0), SpreadsheetApp.getUi().ButtonSet.OK);
+  var msg = '✓ Sincronização de Observações de Prática Concluída!\n\n' +
+            'Total enviado ao TiDB: ' + (res.total || 0) + ' observações.\n\n' +
+            (res.relatorio ? res.relatorio.join('\n') : '');
+  SpreadsheetApp.getUi().alert('Observações dos Formadores', msg, SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
 function sincronizarObservacoesTutorMenu() {
   SpreadsheetApp.getActiveSpreadsheet().toast('Sincronizando observações de tutoria com TiDB...', 'TiDB Serverless', 6);
   var res = sincronizarAbaObservacoesTutoriaParaTiDB();
   SpreadsheetApp.getUi().alert('Observações do Tutor', '✓ Total de observações de tutoria sincronizadas: ' + (res.total || 0), SpreadsheetApp.getUi().ButtonSet.OK);
+}
+
+function sincronizarAbaDadosMenu() {
+  SpreadsheetApp.getActiveSpreadsheet().toast('Sincronizando Cursistas Ativos (Aba DADOS)...', 'TiDB Serverless', 10);
+  var res = sincronizarAbaDadosParaTiDB();
+  SpreadsheetApp.getUi().alert('Cursistas Ativos (DADOS)', '✓ Sincronização concluída!\n\nTotal de cursistas enviados: ' + (res.total || 0), SpreadsheetApp.getUi().ButtonSet.OK);
+}
+
+function sincronizarAbaExoneradosMenu() {
+  SpreadsheetApp.getActiveSpreadsheet().toast('Sincronizando Servidores Exonerados...', 'TiDB Serverless', 6);
+  var res = sincronizarAbaExoneradosParaTiDB();
+  SpreadsheetApp.getUi().alert('Servidores Exonerados', '✓ Sincronização concluída!\n\nTotal de exonerados registrados no TiDB: ' + (res.total || 0), SpreadsheetApp.getUi().ButtonSet.OK);
+}
+
+function sincronizarAbaConcluintesMenu() {
+  SpreadsheetApp.getActiveSpreadsheet().toast('Sincronizando Concluintes (1º Chamamento)...', 'TiDB Serverless', 6);
+  var res = sincronizarAbaConcluintesParaTiDB();
+  SpreadsheetApp.getUi().alert('Concluintes', '✓ Sincronização concluída!\n\nTotal de concluintes enviados: ' + (res.total || 0), SpreadsheetApp.getUi().ButtonSet.OK);
+}
+
+function sincronizarAbaTutoresMenu() {
+  SpreadsheetApp.getActiveSpreadsheet().toast('Sincronizando Tutores Regionais...', 'TiDB Serverless', 5);
+  var res = sincronizarAbaTutoresParaTiDB();
+  SpreadsheetApp.getUi().alert('Tutores Regionais', '✓ Sincronização concluída!\n\nTotal de tutores enviados: ' + (res.total || 0), SpreadsheetApp.getUi().ButtonSet.OK);
+}
+
+function sincronizarAbaMovimentacoesMenu() {
+  SpreadsheetApp.getActiveSpreadsheet().toast('Sincronizando Movimentações e Trocas...', 'TiDB Serverless', 6);
+  var res = sincronizarAbasMovimentacoesParaTiDB();
+  SpreadsheetApp.getUi().alert('Movimentações de Turma', '✓ Sincronização concluída!\n\nTotal de movimentações enviadas: ' + (res.total || 0), SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
 
@@ -324,13 +390,13 @@ function sincronizarAbaDadosParaTiDB() {
     });
   }
 
-  var BATCH_SIZE = 250;
+  var BATCH_SIZE = 400;
   var totalSinc = 0;
   var runId = 'sync_gs_' + Date.now();
 
   for (var b = 0; b < cursistas.length; b += BATCH_SIZE) {
     var lote = cursistas.slice(b, b + BATCH_SIZE);
-    var endpoint = obterEndpointApi();
+    var endpoint = obterEndpointApi('sync_cursistas_bulk');
     var options = obterOpcoesHttp({
       action: 'sync_cursistas_bulk',
       cursistas: lote,
@@ -411,11 +477,11 @@ function sincronizarAbaConcluintesParaTiDB() {
     });
   }
 
-  var BATCH_SIZE = 250;
+  var BATCH_SIZE = 400;
   var totalSinc = 0;
   for (var b = 0; b < concluintes.length; b += BATCH_SIZE) {
     var lote = concluintes.slice(b, b + BATCH_SIZE);
-    var endpoint = obterEndpointApi();
+    var endpoint = obterEndpointApi('sync_concluintes_bulk');
     var options = obterOpcoesHttp({
       action: 'sync_concluintes_bulk',
       concluintes: lote,
@@ -483,7 +549,7 @@ function sincronizarAbaTutoresParaTiDB() {
     });
   }
 
-  var endpoint = obterEndpointApi();
+  var endpoint = obterEndpointApi('sync_tutores_bulk');
   var options = obterOpcoesHttp({
     action: 'sync_tutores_bulk',
     tutores: tutores
@@ -550,7 +616,7 @@ function sincronizarAbaExoneradosParaTiDB() {
     });
   }
 
-  var endpoint = obterEndpointApi();
+  var endpoint = obterEndpointApi('sync_exonerados_bulk');
   var options = obterOpcoesHttp({
     action: 'sync_exonerados_bulk',
     exonerados: exonerados
@@ -618,7 +684,7 @@ function sincronizarAbaNaoConcluintesParaTiDB() {
     });
   }
 
-  var endpoint = obterEndpointApi();
+  var endpoint = obterEndpointApi('sync_exonerados_bulk');
   var options = obterOpcoesHttp({
     action: 'sync_nao_concluintes_bulk',
     nao_concluintes: naoConcluintes
@@ -746,7 +812,7 @@ function sincronizarAbasMovimentacoesParaTiDB() {
   var totalSinc = 0;
   for (var b = 0; b < movimentacoes.length; b += BATCH_SIZE) {
     var lote = movimentacoes.slice(b, b + BATCH_SIZE);
-    var endpoint = obterEndpointApi();
+    var endpoint = obterEndpointApi('sync_exonerados_bulk');
     var options = obterOpcoesHttp({
       action: 'sync_movimentacoes_bulk',
       movimentacoes: lote,
@@ -770,81 +836,264 @@ function sincronizarAbasMovimentacoesParaTiDB() {
  * 10. SINCRONIZAR OBSERVAÇÕES DA PRÁTICA (4 PLANILHAS EXTERNAS DOS FORMADORES)
  * -----------------------------------------------------------------------------------------
  */
-function extrairLinhasObservacoes(aba, configPadrao) {
-  var dados = aba.getDataRange().getValues();
-  if (dados.length < 2) return [];
-
-  var cabecalho = dados[0].map(function(c) {
-    return String(c || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  });
-
-  function getIdx(keywords) {
-    for (var k = 0; k < keywords.length; k++) {
-      var idx = cabecalho.indexOf(keywords[k].toLowerCase());
-      if (idx !== -1) return idx;
+function getSheetByGid(ss, gid) {
+  var sheets = ss.getSheets();
+  for (var i = 0; i < sheets.length; i++) {
+    if (String(sheets[i].getSheetId()) === String(gid)) {
+      return sheets[i];
     }
-    for (var k = 0; k < keywords.length; k++) {
-      var kw = keywords[k].toLowerCase();
-      var idx = cabecalho.findIndex(function(c) { return c.includes(kw); });
-      if (idx !== -1) return idx;
+  }
+  return sheets[0];
+}
+
+function mapRowToObservation(headers, row, sheetName, sheetId, rowNumber, config) {
+  function getRawVal(keywords) {
+    for (var i = 0; i < headers.length; i++) {
+      var h = String(headers[i] || "").toLowerCase();
+      for (var k = 0; k < keywords.length; k++) {
+        if (h.indexOf(keywords[k].toLowerCase()) !== -1) {
+          var val = row[i];
+          if (val !== undefined && val !== null && val !== "") {
+            return val;
+          }
+        }
+      }
     }
-    return -1;
+    return null;
   }
 
-  var idxCarimbo = getIdx(["carimbo", "data hora", "timestamp"]);
-  var idxEmailCursista = getIdx(["e-mail cursista", "email cursista", "e-mail institucional do cursista", "e-mail", "email"]);
-  var idxNomeCursista = getIdx(["nome cursista", "nome do profissional", "nome do cursista", "cursista", "nome"]);
-  var idxEmailFormador = getIdx(["e-mail formador", "email formador", "e-mail institucional do formador"]);
-  var idxNomeFormador = getIdx(["nome formador", "nome do formador", "formador"]);
-  var idxAno = getIdx(["ano formativo", "ano"]);
-  var idxSemestre = getIdx(["semestre"]);
-  var idxChamamento = getIdx(["chamamento"]);
-  var idxModalidade = getIdx(["modalidade"]);
-  var idxComponente = getIdx(["componente"]);
-  var idxTurma = getIdx(["turma", "turmas"]);
-  var idxTema = getIdx(["tema"]);
-  var idxObsRealizada = getIdx(["observacao realizada", "realizada", "a observacao da pratica pedagogica foi realizada"]);
-  var idxDataPratica = getIdx(["data pratica", "data da pratica", "data da observacao"]);
-  var idxLinkGravacao = getIdx(["link gravacao", "gravacao", "link da gravacao da aula observada"]);
-  var idxLinkPlanejamento = getIdx(["link planejamento", "planejamento", "link do planejamento da aula observada"]);
-  var idxLinkFeedback = getIdx(["link gravacao feedback", "link feedback", "link da gravacao do feedback"]);
-
-  var lista = [];
-  for (var i = 1; i < dados.length; i++) {
-    var row = dados[i];
-    var emailCur = idxEmailCursista !== -1 ? String(row[idxEmailCursista] || "").trim().toLowerCase() : "";
-    if (!emailCur) continue;
-
-    var carimbo = idxCarimbo !== -1 ? String(row[idxCarimbo] || "").trim() : "";
-    var idOrigem = "OBS_" + emailCur.replace(/[^a-z0-9]/g, "") + "_" + (carimbo ? carimbo.replace(/[^0-9]/g, "") : i);
-
-    lista.push({
-      id_origem: idOrigem,
-      carimbo: carimbo,
-      email_cursista: emailCur,
-      nome_cursista: idxNomeCursista !== -1 ? String(row[idxNomeCursista] || "").trim() : null,
-      email_formador: idxEmailFormador !== -1 ? String(row[idxEmailFormador] || "").trim().toLowerCase() : null,
-      nome_formador: idxNomeFormador !== -1 ? String(row[idxNomeFormador] || "").trim() : null,
-      ano_formativo: idxAno !== -1 ? String(row[idxAno] || "").trim() : (configPadrao ? configPadrao.anoFormativoPadrao : null),
-      semestre: idxSemestre !== -1 ? String(row[idxSemestre] || "").trim() : (configPadrao ? configPadrao.semestrePadrao : null),
-      chamamento: idxChamamento !== -1 ? String(row[idxChamamento] || "").trim() : null,
-      modalidade: idxModalidade !== -1 ? String(row[idxModalidade] || "").trim() : null,
-      componente: idxComponente !== -1 ? String(row[idxComponente] || "").trim() : null,
-      turma: idxTurma !== -1 ? String(row[idxTurma] || "").trim() : null,
-      tema: idxTema !== -1 ? String(row[idxTema] || "").trim() : null,
-      observacao_realizada: idxObsRealizada !== -1 ? String(row[idxObsRealizada] || "").trim() : "Sim",
-      data_pratica: idxDataPratica !== -1 ? String(row[idxDataPratica] || "").trim() : null,
-      link_gravacao_pratica: idxLinkGravacao !== -1 ? String(row[idxLinkGravacao] || "").trim() : null,
-      link_planejamento: idxLinkPlanejamento !== -1 ? String(row[idxLinkPlanejamento] || "").trim() : null,
-      link_gravacao_feedback: idxLinkFeedback !== -1 ? String(row[idxLinkFeedback] || "").trim() : null
-    });
+  function getVal(keywords) {
+    var raw = getRawVal(keywords);
+    return raw !== null && raw !== undefined ? String(raw).trim() : "";
   }
-  return lista;
+
+  function parseDate(dateRaw) {
+    if (!dateRaw) return null;
+    if (dateRaw instanceof Date) {
+      if (isNaN(dateRaw.getTime())) return null;
+      return Utilities.formatDate(dateRaw, "America/Sao_Paulo", "yyyy-MM-dd");
+    }
+    var str = String(dateRaw).trim();
+    if (!str || str === "-" || str === "—" || str.toLowerCase() === "não informada") return null;
+
+    if (str.indexOf("GMT") !== -1 || str.indexOf("T") !== -1 || /^[A-Za-z]{3}\s/.test(str)) {
+      var d = new Date(str);
+      if (!isNaN(d.getTime())) {
+        return Utilities.formatDate(d, "America/Sao_Paulo", "yyyy-MM-dd");
+      }
+    }
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+      return str;
+    }
+
+    var parts = str.split(/[/.-]/);
+    if (parts.length === 3) {
+      if (parts[0].length === 4) {
+        return parts[0] + "-" + parts[1].padStart(2, "0") + "-" + parts[2].padStart(2, "0");
+      }
+      var dd = parts[0].padStart(2, "0");
+      var mm = parts[1].padStart(2, "0");
+      var yy = parts[2].length === 2 ? "20" + parts[2] : parts[2].slice(0, 4);
+      return yy + "-" + mm + "-" + dd;
+    }
+    return null;
+  }
+
+  function formatCarimbo(dateRaw) {
+    if (!dateRaw) return null;
+    if (dateRaw instanceof Date) {
+      if (isNaN(dateRaw.getTime())) return null;
+      return Utilities.formatDate(dateRaw, "America/Sao_Paulo", "dd/MM/yyyy HH:mm:ss");
+    }
+    var str = String(dateRaw).trim();
+    if (!str || str === "-" || str === "—") return null;
+
+    if (str.indexOf("GMT") !== -1 || str.indexOf("T") !== -1 || /^[A-Za-z]{3}\s/.test(str)) {
+      var d = new Date(str);
+      if (!isNaN(d.getTime())) {
+        return Utilities.formatDate(d, "America/Sao_Paulo", "dd/MM/yyyy HH:mm:ss");
+      }
+    }
+    return str;
+  }
+
+  // 1. Identificar e-mail do cursista
+  var emailCursista = getVal([
+    "e-mail institucional do cursista",
+    "email institucional do cursista",
+    "e-mail do cursista",
+    "email do cursista"
+  ]);
+
+  if (!emailCursista) {
+    for (var c = 0; c < row.length; c++) {
+      var cellStr = String(row[c] || "").toLowerCase().trim();
+      if (cellStr.indexOf("@escola.pr.gov.br") !== -1 && cellStr.indexOf("formador") === -1 && cellStr.indexOf("seed") === -1) {
+        emailCursista = cellStr;
+        break;
+      }
+    }
+  }
+
+  if (!emailCursista || emailCursista.indexOf("@") === -1) return null;
+  emailCursista = emailCursista.toLowerCase().trim();
+
+  // 2. Chave Única Determinística (id_origem)
+  var idOrigem = (config.sigla || "OBS") + "_L" + rowNumber;
+
+  var nomeCursista = getVal(["nome do cursista", "cursista"]);
+  var nomeFormador = getVal(["selecione o nome do formador", "nome do formador", "formador/tutor/técnico"]);
+  var emailFormador = String(row[1] || "").toLowerCase().trim();
+
+  // 3. Status da observação
+  var obsRealizadaRaw = getVal(["a observação da prática foi realizada", "observação da prática foi realizada"]);
+  var isRealizada = !obsRealizadaRaw || obsRealizadaRaw.toLowerCase().indexOf("sim") !== -1;
+
+  // 4. Níveis pedagógicos
+  var nivelPlanejamento = "";
+  var nivelPratica = "";
+
+  for (var hIdx = 0; hIdx < headers.length; hIdx++) {
+    var headLower = String(headers[hIdx] || "").toLowerCase();
+    var valUpper = String(row[hIdx] || "").trim().toUpperCase();
+
+    if ((headLower.indexOf("planejamento") !== -1 || headLower.indexOf("critério 1") !== -1) && !nivelPlanejamento) {
+      if (valUpper.indexOf("SUPERA") !== -1 || valUpper.indexOf("ATINGE") !== -1 || valUpper.indexOf("ATENDE") !== -1 || valUpper.indexOf("PARCIAL") !== -1) {
+        nivelPlanejamento = valUpper.replace(/[.,;]$/, "").trim();
+      }
+    }
+    if ((headLower.indexOf("prática") !== -1 || headLower.indexOf("pratica") !== -1 || headLower.indexOf("critério 2") !== -1) && !nivelPratica) {
+      if (valUpper.indexOf("SUPERA") !== -1 || valUpper.indexOf("ATINGE") !== -1 || valUpper.indexOf("ATENDE") !== -1 || valUpper.indexOf("PARCIAL") !== -1) {
+        nivelPratica = valUpper.replace(/[.,;]$/, "").trim();
+      }
+    }
+  }
+
+  // 5. Modalidade do cursista
+  var modalidadeCursista = getVal([
+    "selecione a modalidade do cursista",
+    "modalidades. selecione a modalidade",
+    "modalidades. selecione",
+    "modalidade do cursista"
+  ]);
+  if (!modalidadeCursista || modalidadeCursista.toLowerCase().indexOf("feedback") !== -1 || modalidadeCursista.toLowerCase().indexOf("diálogo") !== -1 || modalidadeCursista.toLowerCase().indexOf("dialogo") !== -1) {
+    modalidadeCursista = "Docentes";
+  }
+
+  var componente = getVal(["componente curricular", "componente", "área"]);
+  if (!componente && (modalidadeCursista.toLowerCase().indexOf("gestora") !== -1 || modalidadeCursista.toLowerCase().indexOf("pedagog") !== -1)) {
+    componente = "PEDAGÓGICO";
+  }
+
+  var chamamento = getVal(["chamamento"]);
+  if (!chamamento && sheetName && sheetName.toLowerCase().indexOf("4º chamamento") !== -1) chamamento = "4º Chamamento";
+
+  var tema = getVal([
+    "selecione o tema relacionado",
+    "tema relacionado à observação",
+    "tema relacionado a observacao",
+    "tema relacionado",
+    "tema"
+  ]);
+
+  var proposta = getVal([
+    "qual  é a proposta escolhida",
+    "qual é a proposta escolhida",
+    "qual a proposta escolhida",
+    "proposta escolhida"
+  ]);
+
+  if (tema && proposta && tema.toLowerCase().indexOf(proposta.toLowerCase()) === -1) {
+    tema = tema + " (" + proposta + ")";
+  }
+
+  var carimboRaw = getRawVal(["carimbo de data/hora", "carimbo", "timestamp"]);
+  if (!carimboRaw && row[0]) {
+    carimboRaw = row[0];
+  }
+  var carimbo = formatCarimbo(carimboRaw);
+
+  var dataPraticaRaw = getRawVal([
+    "data em que a prática pedagógica foi realizada",
+    "data da realização da prática pedagógica",
+    "data da realização da prática",
+    "data de observação da prática pedagógica",
+    "data da observação da prática pedagógica",
+    "data em que a prática foi realizada",
+    "data da prática pedagógica",
+    "data da prática"
+  ]);
+
+  var dataObservacaoRaw = getRawVal([
+    "data de observação da prática pedagógica",
+    "data da observação da prática pedagógica",
+    "data em que foi realizada a observação",
+    "data da realização da observação",
+    "data da observação",
+    "data de observação"
+  ]);
+
+  var parsedDataPratica = parseDate(dataPraticaRaw) || parseDate(dataObservacaoRaw);
+  var parsedDataObservacao = parseDate(dataObservacaoRaw) || parsedDataPratica;
+
+  var dataFeedbackRaw = getRawVal(["data do feedback", "data da devolutiva", "devolutiva"]);
+  var dataAgendamentoRaw = getRawVal(["data do agendamento", "agendamento"]);
+
+  var evidenciasPlanejamento = getVal([
+    "evidências para que o planejamento",
+    "evidências para que a prática seja situada nesse nível do critério 1",
+    "evidências para que a prática seja situada nesse nível do  critério 1",
+    "evidências para que a implementação",
+    "critério 1:"
+  ]);
+
+  var evidenciasPratica = getVal([
+    "evidências para que a implementação",
+    "evidências para que a prática seja situada nesse nível do critério 2",
+    "evidências para que a prática seja situada nesse nível do  critério 2",
+    "critério 2:"
+  ]);
+
+  return {
+    id_origem: idOrigem,
+    carimbo: carimbo || null,
+    semestre: config.semestrePadrao,
+    email_cursista: emailCursista,
+    nome_cursista: nomeCursista || "",
+    email_formador: emailFormador || null,
+    nome_formador: nomeFormador || null,
+    ano_formativo: config.anoFormativoPadrao,
+    chamamento: chamamento || null,
+    modalidade: modalidadeCursista,
+    componente: componente || null,
+    tema: tema || null,
+    observacao_realizada: obsRealizadaRaw || (isRealizada ? "Sim, a observação foi realizada." : "Não"),
+    data_pratica: parsedDataPratica,
+    data_observacao: parsedDataObservacao,
+    data_feedback: parseDate(dataFeedbackRaw),
+    data_agendamento: parseDate(dataAgendamentoRaw),
+    modalidade_feedback: getVal(["modalidade de feedback formativo", "modalidade de feedback"]) || (isRealizada ? "Diálogo formativo" : null),
+    motivo_devolutiva: getVal(["motivo da realização de feedback", "qual foi o motivo"]),
+    link_gravacao_pratica: getVal(["link da gravação da prática pedagógica", "link da gravação da prática"]),
+    link_planejamento: getVal(["link do documento de planejamento", "link do pdp"]),
+    link_gravacao_feedback: getVal(["link da gravação do diálogo formativo", "link da gravação do feedback"]),
+    nivel_planejamento: nivelPlanejamento || (isRealizada ? "SUPERA" : null),
+    nivel_pratica: nivelPratica || (isRealizada ? "ATENDE INTEGRALMENTE" : null),
+    evidencias_planejamento: evidenciasPlanejamento || null,
+    evidencias_pratica: evidenciasPratica || null,
+    questionamentos_propositivos: getVal(["questionamentos propositivos"]),
+    proposicoes_sugestoes: getVal(["proposições ou sugestões", "proposições"]),
+    combinados: getVal(["combinados realizados no feedback", "combinados"]),
+    justificativa_nao_realizada: getVal(["justificativa:"]),
+    contexto_justificativa: getVal(["descreva a situação ou contexto"]),
+    reflexoes_gerais: getVal(["registre informações ou reflexões"])
+  };
 }
 
 function enviarLoteObservacoesParaTiDB(observacoes) {
   if (!observacoes || observacoes.length === 0) return 0;
-  var BATCH_SIZE = 150;
+  var BATCH_SIZE = 400;
   var totalSinc = 0;
   for (var b = 0; b < observacoes.length; b += BATCH_SIZE) {
     var lote = observacoes.slice(b, b + BATCH_SIZE);
@@ -856,7 +1105,11 @@ function enviarLoteObservacoesParaTiDB(observacoes) {
 
     try {
       var resp = UrlFetchApp.fetch(endpoint, options);
-      if (resp.getResponseCode() === 200) totalSinc += lote.length;
+      if (resp.getResponseCode() === 200) {
+        totalSinc += lote.length;
+      } else {
+        Logger.log('Aviso ao sincronizar lote: ' + resp.getContentText());
+      }
     } catch (err) {
       Logger.log('Erro ao sincronizar observações: ' + err.toString());
     }
@@ -865,38 +1118,56 @@ function enviarLoteObservacoesParaTiDB(observacoes) {
 }
 
 function sincronizarAbaObservacoesParaTiDB() {
-  var ss = obterPlanilhaMestra();
-  var nomesObs = ["Observações de Prática", "Observacoes_Pratica", "OBSERVACOES", "Observações"];
-  var aba = null;
-  for (var k = 0; k < nomesObs.length; k++) {
-    aba = ss.getSheetByName(nomesObs[k]);
-    if (aba) break;
-  }
-
-  // 1. Se existir diretamente na planilha mestra, sincroniza
-  if (aba) {
-    var linhas = extrairLinhasObservacoes(aba, null);
-    var tot = enviarLoteObservacoesParaTiDB(linhas);
-    return { total: tot };
-  }
-
-  // 2. Lê a partir das 4 planilhas externas de Formadores
   Logger.log('Sincronizando a partir das 4 planilhas externas de Formadores...');
   var totalGeral = 0;
+  var relatorio = [];
+  var startTime = Date.now();
+
   for (var p = 0; p < PLANILHAS_OBSERVACOES_FORMADOR.length; p++) {
+    // Guarda de segurança contra timeout (máximo 4.5 minutos de execução)
+    if (Date.now() - startTime > 260000) {
+      relatorio.push('⏱️ Tempo limite preventivo atingido (demais planilhas serão processadas no próximo disparo).');
+      break;
+    }
     var cfg = PLANILHAS_OBSERVACOES_FORMADOR[p];
     try {
       var extSs = SpreadsheetApp.openById(cfg.id);
-      var extAba = extSs.getSheets()[0];
-      var obs = extrairLinhasObservacoes(extAba, cfg);
-      var ok = enviarLoteObservacoesParaTiDB(obs);
+      var extAba = getSheetByGid(extSs, cfg.gid);
+      if (!extAba) {
+        relatorio.push('❌ ' + cfg.nome + ': Aba não localizada.');
+        continue;
+      }
+
+      var lastRow = extAba.getLastRow();
+      var lastCol = extAba.getLastColumn();
+      if (lastRow < 2 || lastCol < 3) {
+        relatorio.push('⚠️ ' + cfg.nome + ': Planilha sem dados.');
+        continue;
+      }
+
+      var headers = extAba.getRange(1, 1, 1, lastCol).getValues()[0];
+      var allValues = extAba.getRange(2, 1, lastRow - 1, lastCol).getValues();
+      var lista = [];
+
+      for (var r = 0; r < allValues.length; r++) {
+        var rowNumber = r + 2;
+        var payload = mapRowToObservation(headers, allValues[r], extAba.getName(), extAba.getSheetId(), rowNumber, cfg);
+        if (payload && payload.email_cursista) {
+          lista.push(payload);
+        }
+      }
+
+      var ok = enviarLoteObservacoesParaTiDB(lista);
       totalGeral += ok;
+      relatorio.push('✓ ' + cfg.nome + ': ' + ok + ' observações');
       Logger.log('✓ ' + cfg.nome + ': ' + ok + ' observações sincronizadas');
     } catch (errExt) {
+      relatorio.push('❌ ' + cfg.nome + ': Erro ' + errExt.message);
       Logger.log('Erro ao abrir planilha ' + cfg.nome + ' (' + cfg.id + '): ' + errExt.toString());
     }
   }
-  return { total: totalGeral };
+
+  return { total: totalGeral, relatorio: relatorio };
 }
 
 

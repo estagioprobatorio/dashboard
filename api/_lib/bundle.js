@@ -16,11 +16,13 @@ const SCOPE_USERS = {
 };
 
 export async function buildBundle(user) {
+  const isVisualizador = user.funcao === 'visualizador' || !user.funcao;
   const staff = STAFF.includes(user.funcao);
   const verCgm = user.funcao === 'superadmin';
-  const scope = staff ? null : SCOPE_USERS[user.funcao];
-  const scopeSql = (col) => (staff ? '1=1' : `${col} IN (${scope})`);
-  const scopeP = staff ? [] : [user.id];
+  const hasRestrictedScope = !staff && !isVisualizador && !!SCOPE_USERS[user.funcao];
+  const scope = hasRestrictedScope ? SCOPE_USERS[user.funcao] : null;
+  const scopeSql = (col) => (hasRestrictedScope ? `${col} IN (${scope})` : '1=1');
+  const scopeP = hasRestrictedScope ? [user.id] : [];
 
   // ----- CGM decifrado (apenas superadmin) -----
   const cgmPlain = new Map();
@@ -143,9 +145,9 @@ export async function buildBundle(user) {
     };
   });
 
-  // ----- exonerados (somente equipe) -----
+  // ----- exonerados (equipe e visão geral do dashboard) -----
   let exonerados = [];
-  if (staff) {
+  if (staff || isVisualizador) {
     const rows = await query(
       `SELECT h.data_evento, h.portaria, h.motivo, h.detalhes, v.id AS vinculo_id, u.id AS usuario_id, u.cgm_ultimos3, u.nome AS nome_cursista, u.email_inst AS email
        FROM matricula_status_hist h JOIN matricula m ON m.id = h.matricula_id JOIN vinculo v ON v.id = m.vinculo_id
@@ -214,9 +216,15 @@ export async function buildBundle(user) {
 
   // ----- observações do tutor -----
   let otWhere = '1=1'; let otP = [];
-  if (user.funcao === 'tutor') { otWhere = 'ot.tutor_id = ?'; otP = [user.id]; }
-  else if (user.funcao === 'formador') { otWhere = 'ot.formador_id = ?'; otP = [user.id]; }
-  else if (user.funcao === 'cursista') otWhere = '0=1';
+  if (user.funcao === 'tutor') {
+    otWhere = '(ot.tutor_id = ? OR t.email_inst = ?)';
+    otP = [user.id, user.email];
+  } else if (user.funcao === 'formador') {
+    otWhere = '(ot.formador_id = ? OR f.email_inst = ?)';
+    otP = [user.id, user.email];
+  } else if (user.funcao === 'cursista') {
+    otWhere = '0=1';
+  }
   const otRows = await query(
     `SELECT ot.*, t.nome AS tutor, t.email_inst AS tutor_email, f.nome AS formador, f.email_inst AS formador_email, n.nome AS nre
      FROM observacao_tutor ot LEFT JOIN usuario t ON t.id = ot.tutor_id LEFT JOIN usuario f ON f.id = ot.formador_id

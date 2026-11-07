@@ -86,7 +86,8 @@ export default async function handler(req, res) {
     }
 
     /* ---------- ações autenticadas por usuário ---------- */
-    const user = await authenticate(req);
+    const isBundleAction = action === 'bundle' || action === 'get_all';
+    const user = await authenticate(req, { optional: isBundleAction });
 
     if (action === 'me') return res.status(200).json({ id: user.id, email: user.email, nome: user.nome, funcao: user.funcao });
     if (action === 'bundle' || action === 'get_all') return res.status(200).json(await buildBundle(user));

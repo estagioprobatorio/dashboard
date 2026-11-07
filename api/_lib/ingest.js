@@ -108,13 +108,16 @@ export async function resolverCursista(ctx, r, { criarVinculo = true } = {}) {
   const cpfN = normalizeDigits(r.cpf_cursista || r.cpf);
   const rgStr = s(r.rg);
 
-  // 1. Identifica o usuário cursista por e-mail ou cgm_hash
+  // 1. Identifica o usuário cursista por e-mail, cgm_hash ou cpf_hash
   let u = null;
   if (em) {
-    u = (await query('SELECT id, funcao, cgm_hash FROM usuario WHERE email_inst = ?', [em]))[0] || null;
+    u = (await query('SELECT id, funcao, cgm_hash, cpf_hash FROM usuario WHERE email_inst = ?', [em]))[0] || null;
   }
   if (!u && cgm) {
-    u = (await query('SELECT id, funcao, cgm_hash FROM usuario WHERE cgm_hash = ?', [hmacHex(cgm)]))[0] || null;
+    u = (await query('SELECT id, funcao, cgm_hash, cpf_hash FROM usuario WHERE cgm_hash = ?', [hmacHex(cgm)]))[0] || null;
+  }
+  if (!u && cpfN) {
+    u = (await query('SELECT id, funcao, cgm_hash, cpf_hash FROM usuario WHERE cpf_hash = ?', [hmacHex(cpfN)]))[0] || null;
   }
 
   if (u) {
@@ -144,7 +147,7 @@ export async function resolverCursista(ctx, r, { criarVinculo = true } = {}) {
       ]
     );
   } else {
-    if (!em && !cgm) {
+    if (!em && !cgm && !cpfN) {
       reject(ctx, 'cursista_sem_identificacao');
       return null;
     }
@@ -153,7 +156,7 @@ export async function resolverCursista(ctx, r, { criarVinculo = true } = {}) {
        VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
       [
         em || null,
-        nome || (em ? em.split('@')[0].replace(/\./g, ' ').toUpperCase() : 'CURSISTA'),
+        nome || (em ? em.split('@')[0].replace(/\./g, ' ').toUpperCase() : (cpfN ? `CURSISTA CPF ${cpfN.slice(-4)}` : 'CURSISTA')),
         'cursista',
         s(r.telefone_cursista || r.telefone),
         nreEx || null,
@@ -166,12 +169,6 @@ export async function resolverCursista(ctx, r, { criarVinculo = true } = {}) {
       ]
     );
     u = { id: ins.insertId, funcao: 'cursista' };
-  }
-
-  if (!cgm && !u.cgm_hash) {
-    const v = (await query('SELECT id FROM vinculo WHERE usuario_id = ? ORDER BY linha_funcional LIMIT 1', [u.id]))[0];
-    if (!v) reject(ctx, 'cursista_sem_cgm');
-    return { usuarioId: u.id, vinculoId: v ? v.id : null };
   }
 
   if (!criarVinculo) return { usuarioId: u.id, vinculoId: null };
