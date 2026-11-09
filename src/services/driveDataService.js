@@ -14,12 +14,14 @@ import fallbackConcluintes from '../concluintes_fallback.json';
 
 const CACHE_KEY = 'ep_drive_cached_bundle';
 
+export const DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxegUS4Dh2BRhMILVIaS7e5KiJ7c1JQH8VPPSn0nAe9-OJ8NiwSFReROay31aEjNVIy/exec';
+
 export const getAppsScriptUrl = () => {
-  return (
-    (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_APPS_SCRIPT_URL) ||
-    (typeof localStorage !== 'undefined' ? localStorage.getItem('ep_apps_script_url') : '') ||
-    ''
-  ).trim();
+  const envUrl = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_APPS_SCRIPT_URL) || '';
+  const localUrl = (typeof localStorage !== 'undefined' ? localStorage.getItem('ep_apps_script_url') : '') || '';
+  const chosen = (envUrl || localUrl || DEFAULT_APPS_SCRIPT_URL).trim();
+  if (chosen.includes('/api/')) return DEFAULT_APPS_SCRIPT_URL;
+  return chosen;
 };
 
 export const setAppsScriptUrl = (url) => {
@@ -136,11 +138,11 @@ export const driveDataService = {
     if (appsScriptUrl && appsScriptUrl.startsWith('http')) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 6000);
+        const timeoutId = setTimeout(() => controller.abort(), 12000);
         await fetch(appsScriptUrl, {
           method: 'POST',
           mode: 'no-cors',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({
             action: 'salvar_intencao_2027',
             dados: dadosIntencao
@@ -191,7 +193,7 @@ export const driveDataService = {
         await fetch(appsScriptUrl, {
           method: 'POST',
           mode: 'no-cors',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({ action: 'limpar_intencoes_2027' }),
           signal: controller.signal
         }).catch(() => null);

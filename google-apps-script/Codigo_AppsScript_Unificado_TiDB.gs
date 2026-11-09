@@ -1909,8 +1909,17 @@ function apiLimparIntencoes2027() {
 }
 
 function enviarEmailConfirmacaoIntencao(d, chaveCgmLf, lfLimpa) {
+  if (!d) return false;
   var destinatario = String(d.email_cursista || d.email || "").trim().toLowerCase();
   if (!destinatario || destinatario.indexOf("@") === -1) return false;
+
+  var cgmLimpo = String(d.cgm_cursista || d.cgm || "").trim();
+  if (!lfLimpa) {
+    lfLimpa = String(d.linha_funcional || "1").replace(/\D/g, "").trim() || "1";
+  }
+  if (!chaveCgmLf) {
+    chaveCgmLf = String(d.cgm_lf || (cgmLimpo ? (cgmLimpo + "_LF" + lfLimpa) : ("LF" + lfLimpa))).trim();
+  }
 
   var nome = d.nome_cursista || d.nome || "Cursista";
   var cgm = d.cgm_cursista || d.cgm || "-";

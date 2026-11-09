@@ -817,25 +817,28 @@ function setupInicialCriarAbas() {
 /**
  * Envia e-mail oficial de confirmação da intenção de matrícula 2027 ao cursista
  */
-function enviarEmailConfirmacaoIntencao(payload) {
+function enviarEmailConfirmacaoIntencao(payload, chaveCgmLf, lfLimpa) {
   try {
-    var destinatario = payload.email_cursista || payload.email;
+    var p = (payload && payload.dados) ? payload.dados : (payload || {});
+    var destinatario = p.email_cursista || p.email;
     if (!destinatario || destinatario.indexOf('@') === -1) {
       Logger.log('Aviso: E-mail de destino inválido para confirmação da intenção: ' + destinatario);
       return;
     }
 
-    var nome = payload.nome_cursista || 'Docente Cursista';
-    var cgm = payload.cgm_cursista || payload.cgm || 'Não informado';
-    var componente = payload.componente || 'Não informado';
-    var turno = payload.turnoPretendido || payload.opcao_turno || 'Não informado';
-    var horario = payload.horarioPretendido || payload.opcao_modalidade || 'Não informado';
-    var dia = payload.dia_semana_formativo || 'Conforme cronograma';
-    var etapa = payload.ano_formativo_pretendido || '2027';
-    var nre = payload.nre || 'SEED/PR';
+    var nome = p.nome_cursista || p.nome || 'Docente Cursista';
+    var cgm = p.cgm_cursista || p.cgm || 'Não informado';
+    var lf = lfLimpa || p.linha_funcional || p.lf || '1';
+    var chave = chaveCgmLf || p.cgm_lf || (cgm !== 'Não informado' ? (cgm + '_LF' + lf) : ('LF' + lf));
+    var componente = p.componente || 'Não informado';
+    var turno = p.turnoPretendido || p.opcao_turno || 'Não informado';
+    var horario = p.horarioPretendido || p.opcao_modalidade || 'Não informado';
+    var dia = p.dia_semana_formativo || 'Conforme cronograma';
+    var etapa = p.ano_formativo_pretendido || '2027';
+    var nre = p.nre || 'SEED/PR';
     var dataHora = Utilities.formatDate(new Date(), 'America/Sao_Paulo', 'dd/MM/yyyy HH:mm:ss');
 
-    var assunto = "✓ Confirmação de Registro: Intenção de Vagas 2027 - Estágio Probatório SEED/PR";
+    var assunto = "✓ Confirmação de Registro: Intenção de Vagas 2027 (" + chave + ") - Estágio Probatório SEED/PR";
 
     var corpoTexto = "Olá, " + nome + "!\n\n" +
       "Sua manifestação de intenção de vaga para o ciclo formativo 2027 do Estágio Probatório foi registrada com sucesso.\n\n" +

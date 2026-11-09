@@ -110,7 +110,20 @@ export async function buildBundle(user) {
   // ----- cursistas (matrículas ativas na base) -----
   let whereBase = 'vct.na_base_ativa = 1 AND vct.turma IS NOT NULL';
   const pBase = [];
-  if (user.funcao === 'tutor') { whereBase += ' AND vct.tutor_id = ?'; pBase.push(user.id); }
+  if (user.funcao === 'tutor') {
+    let tutorNre = null;
+    if (user.nre_id) {
+      const nRow = (await query('SELECT nome FROM nre WHERE id = ?', [user.nre_id]))[0];
+      tutorNre = nRow?.nome;
+    }
+    if (tutorNre) {
+      whereBase += ' AND (vct.tutor_id = ? OR vct.email_tutor = ? OR vct.nre_exe = ? OR vct.nre_tutor = ?)';
+      pBase.push(user.id, user.email, tutorNre, tutorNre);
+    } else {
+      whereBase += ' AND (vct.tutor_id = ? OR vct.email_tutor = ?)';
+      pBase.push(user.id, user.email);
+    }
+  }
   else if (user.funcao === 'formador') { whereBase += ' AND vct.formador_id = ?'; pBase.push(user.id); }
   else if (user.funcao === 'cursista') { whereBase += ' AND vct.usuario_id = ?'; pBase.push(user.id); }
 

@@ -187,9 +187,9 @@ export default async function handler(req, res) {
       return res.status(200).json({ status: 'success' });
     }
 
-    if (action === 'insert_intencao') {
+    if (action === 'insert_intencao' || action === 'salvar_intencao_2027') {
       exigeFuncao(user, ...STAFF, 'tutor', 'cursista');
-      const d = body.data || {};
+      const d = body.data || body.dados || {};
       const alvo = await alvoCursista(user, d.email_cursista || d.email, d.nome_cursista);
       const lf = d.linha_funcional ? String(d.linha_funcional).trim() : '1';
       let v = null;
@@ -298,12 +298,13 @@ export default async function handler(req, res) {
         );
       } catch (eTab2) {}
 
-      // Notifica o Google Apps Script para gravação em planilha e disparo do e-mail institucional
-      const scriptUrl = process.env.APPS_SCRIPT_URL || process.env.VITE_APPS_SCRIPT_URL;
-      if (scriptUrl) {
+      // Notifica o Google Apps Script para gravação em planilha e disparo do e-mail institucional com cópia
+      const DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxegUS4Dh2BRhMILVIaS7e5KiJ7c1JQH8VPPSn0nAe9-OJ8NiwSFReROay31aEjNVIy/exec';
+      const scriptUrl = process.env.APPS_SCRIPT_URL || process.env.VITE_APPS_SCRIPT_URL || DEFAULT_APPS_SCRIPT_URL;
+      if (scriptUrl && !scriptUrl.includes('/api/')) {
         fetch(scriptUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({ action: 'salvar_intencao_2027', dados: d })
         }).catch(() => null);
       }

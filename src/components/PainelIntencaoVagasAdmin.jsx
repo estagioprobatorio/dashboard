@@ -231,14 +231,14 @@ export default function PainelIntencaoVagasAdmin({ records = [], userRole, userE
     return Array.from(mapaUnicos.values());
   }, [records, mapaConsultaIntencoes, todasIntencoes]);
 
-  // Lista única de NREs para filtro
+  // Lista única de NREs para filtro (normalizado)
   const nresDisponiveis = useMemo(() => {
-    return Array.from(new Set(records.map(r => r.nre_exe || r.nre).filter(Boolean))).sort();
+    return Array.from(new Set(records.map(r => normalizeNre(r.nre_exe || r.nre_cursista || r.nre_tutor || r.nre)).filter(Boolean))).sort();
   }, [records]);
 
-  // Lista única de Componentes para filtro
+  // Lista única de Componentes para filtro (normalizado)
   const componentesDisponiveis = useMemo(() => {
-    return Array.from(new Set(records.map(r => r.componente_conc || r.componente).filter(Boolean))).sort();
+    return Array.from(new Set(records.map(r => normalizeComponenteCanonical(r.componente_conc || r.componente)).filter(Boolean))).sort();
   }, [records]);
 
   // 3. Indicadores Gerais e KPIs de Acompanhamento das Inscrições
@@ -380,7 +380,7 @@ export default function PainelIntencaoVagasAdmin({ records = [], userRole, userE
     let list = recordsComEvolucao.filter(r => r.inscrito);
 
     if (filtroNre !== 'todos') {
-      list = list.filter(r => normalizeNre(r.nre_exe || r.nre_cursista || r.nre_tutor || r.nre) === filtroNre);
+      list = list.filter(r => normalizeNre(r.nre_exe || r.nre_cursista || r.nre_tutor || r.nre || r.intencao?.nre) === normalizeNre(filtroNre));
     }
 
     if (filtroTurno !== 'todos') {
@@ -391,7 +391,7 @@ export default function PainelIntencaoVagasAdmin({ records = [], userRole, userE
     }
 
     if (filtroComponente !== 'todos') {
-      list = list.filter(r => normalizeComponenteCanonical(r.componente_conc || r.componente) === filtroComponente);
+      list = list.filter(r => normalizeComponenteCanonical(r.componente_conc || r.componente || r.intencao?.componente) === normalizeComponenteCanonical(filtroComponente));
     }
 
     if (filtroEspecial !== 'todos') {
@@ -420,11 +420,11 @@ export default function PainelIntencaoVagasAdmin({ records = [], userRole, userE
     let list = recordsComEvolucao.filter(r => r.evolucao.elegivelIntencao && !r.inscrito);
 
     if (filtroNre !== 'todos') {
-      list = list.filter(r => normalizeNre(r.nre_exe || r.nre_cursista || r.nre_tutor || r.nre) === filtroNre);
+      list = list.filter(r => normalizeNre(r.nre_exe || r.nre_cursista || r.nre_tutor || r.nre) === normalizeNre(filtroNre));
     }
 
     if (filtroComponente !== 'todos') {
-      list = list.filter(r => normalizeComponenteCanonical(r.componente_conc || r.componente) === filtroComponente);
+      list = list.filter(r => normalizeComponenteCanonical(r.componente_conc || r.componente) === normalizeComponenteCanonical(filtroComponente));
     }
 
     if (busca.trim()) {
@@ -462,7 +462,7 @@ export default function PainelIntencaoVagasAdmin({ records = [], userRole, userE
     }
 
     if (filtroNre !== 'todos') {
-      list = list.filter(r => (r.nre_exe || r.nre) === filtroNre);
+      list = list.filter(r => normalizeNre(r.nre_exe || r.nre) === normalizeNre(filtroNre));
     }
 
     if (busca.trim()) {

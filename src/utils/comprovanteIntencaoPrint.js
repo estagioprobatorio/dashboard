@@ -94,7 +94,7 @@ function normalizarDadosComprovante(raw) {
 
 function renderCardComprovanteHtml(item, idx, total) {
   const d = normalizarDadosComprovante(item);
-  const quebraPagina = idx < total - 1 ? 'page-break-after: always;' : '';
+  const quebraPagina = idx < total - 1 ? 'page-break-after: always; break-after: page;' : '';
 
   return `
     <div class="receipt-page" style="${quebraPagina}">
@@ -440,16 +440,37 @@ export function imprimirComprovanteIntencao2027(registroOuLista) {
       color: #475569;
       line-height: 1.4;
     }
+    * {
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      color-adjust: exact !important;
+      box-sizing: border-box;
+    }
+    @page {
+      size: A4 portrait;
+      margin: 8mm 8mm;
+    }
     @media print {
-      body {
-        background: #ffffff;
+      html, body {
+        background: #ffffff !important;
+        margin: 0 !important;
+        padding: 0 !important;
       }
       .no-print-toolbar {
         display: none !important;
       }
       .receipt-page {
-        max-width: 100%;
-        margin: 0;
+        max-width: 100% !important;
+        margin: 0 0 6mm 0 !important;
+        padding: 0 !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
+      .receipt-container {
+        border: 2px solid #002d5c !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        box-shadow: none !important;
       }
     }
   </style>

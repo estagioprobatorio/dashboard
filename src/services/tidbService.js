@@ -292,7 +292,7 @@ export const tidbService = {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 6000); // 6s timeout máximo
 
-      const res = await fetch('/api/v2', {
+      const res = await fetch('/api/v2?action=insert_intencao', {
         method: 'POST',
         headers: { ...authHeaders, 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'insert_intencao', data: entry }),
@@ -329,7 +329,7 @@ export const tidbService = {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 8000);
 
-      const res = await fetch('/api/v2', {
+      const res = await fetch('/api/v2?action=reset_intencoes_2027', {
         method: 'POST',
         headers: { ...authHeaders, 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'reset_intencoes_2027' }),
