@@ -110,11 +110,41 @@ export function resolverNumeroChamamento(raw, dataAlt = '') {
  * - 3º, 4º e 5º Chamamento: Elegíveis. Requerem turmas de 2º/3º ano.
  * - 6º Chamamento: Elegíveis. Requerem turmas de 1º ano.
  */
+/**
+ * Helper para conversão flexível de datas de posse (DD/MM/YYYY ou YYYY-MM-DD)
+ */
+export function parseDataPosse(val) {
+  if (!val) return null;
+  if (val instanceof Date && !isNaN(val.getTime())) return val;
+  const str = String(val).trim();
+  const partsSlash = str.split('/');
+  if (partsSlash.length === 3) {
+    const d = parseInt(partsSlash[0], 10);
+    const m = parseInt(partsSlash[1], 10) - 1;
+    const y = parseInt(partsSlash[2], 10);
+    const dt = new Date(y, m, d);
+    if (!isNaN(dt.getTime())) return dt;
+  }
+  const partsDash = str.split('-');
+  if (partsDash.length === 3) {
+    const y = parseInt(partsDash[0], 10);
+    const m = parseInt(partsDash[1], 10) - 1;
+    const d = parseInt(partsDash[2], 10);
+    const dt = new Date(y, m, d);
+    if (!isNaN(dt.getTime())) return dt;
+  }
+  const dt = new Date(str);
+  return isNaN(dt.getTime()) ? null : dt;
+}
+
 export function calcularEvolucaoCursista2027(cursista) {
   const rawChamamento = String(
     cursista?.chamamento || cursista?.CHAMAMENTO || cursista?.chamamento_cursista || ''
   ).trim();
-  const periodoIni = String(cursista?.periodo_ini || cursista?.data_inicio || '').trim();
+  const periodoIni = String(
+    cursista?.periodo_ini || cursista?.PERIODO_INI || cursista?.periodo_inicial ||
+    cursista?.data_posse || cursista?.data_inicio || cursista?.dt_posse || ''
+  ).trim();
 
   let numChamamento = resolverNumeroChamamento(rawChamamento, periodoIni);
 
@@ -139,16 +169,43 @@ export function calcularEvolucaoCursista2027(cursista) {
   }
 
   if (numChamamento === 2) {
+    const rawPosse = periodoIni || cursista?.periodo_ini || cursista?.PERIODO_INI || cursista?.periodo_inicial ||
+      cursista?.data_posse || cursista?.data_inicio || cursista?.dt_posse;
+    const dtPosse = parseDataPosse(rawPosse);
+
+    // REGRA SEED-PR: Professores do 2º Chamamento que tomaram posse a partir de 01/08/2024
+    // permanecem e precisam realizar o preenchimento da intenção de matrícula para 2027/1
+    if (dtPosse && dtPosse >= new Date(2024, 7, 1)) {
+      const dataFormatada = dtPosse.toLocaleDateString('pt-BR');
+      return {
+        numChamamento: 2,
+        chamamentoTexto: '2º Chamamento',
+        status2027: 'precisa_turma_2_3_ano',
+        elegivelIntencao: true,
+        tituloStatus: 'Turma de 2º/3º Ano (Posse ≥ 01/08/2024)',
+        badgeCor: '#0072bc',
+        mensagem: `Docente do 2º Chamamento (Posse em ${dataFormatada}): em virtude da posse a partir de 01/08/2024, seu estágio probatório estende-se para 2027. É necessário registrar sua intenção de vaga para turmas de 2º/3º ano.`,
+        anoNecessario2027: '2º/3º ANO',
+        detalhes: `Posse em ${dataFormatada} (a partir de 01/08/2024). Necessita abertura e continuidade em turmas de 2º/3º ano em 2027/1.`,
+        periodoIni: dataFormatada,
+        posseAposAgosto: true
+      };
+    }
+
+    // Professores do 2º Chamamento que tomaram posse até 30/07/2024 estão dispensados da matrícula
+    const dataFormatada = dtPosse ? dtPosse.toLocaleDateString('pt-BR') : '';
     return {
       numChamamento: 2,
       chamamentoTexto: '2º Chamamento',
-      status2027: 'encerra_dezembro_2026',
+      status2027: 'dispensado_matricula',
       elegivelIntencao: false,
-      tituloStatus: 'Encerra em Dezembro/2026',
+      tituloStatus: 'Dispensado da Matrícula (Posse ≤ 30/07/2024)',
       badgeCor: '#00984a',
-      mensagem: 'O ciclo formativo do 2º Chamamento encerra em dezembro de 2026. O estágio probatório será concluído neste ano letivo, sem necessidade de turmas para 2027.',
+      mensagem: `Docente do 2º Chamamento${dataFormatada ? ` (Posse em ${dataFormatada})` : ''}: com posse ocorrida até 30/07/2024, você está dispensado da matrícula, pois seu ciclo formativo encerra regularmente em dezembro de 2026.`,
       anoNecessario2027: null,
-      detalhes: 'Encerramento regular previsto para o término do semestre 2026/2.'
+      detalhes: `Posse em ${dataFormatada || 'até 30/07/2024'}. Ciclo regular de estágio probatório finalizado em dezembro/2026.`,
+      periodoIni: dataFormatada,
+      posseAposAgosto: false
     };
   }
 
@@ -789,7 +846,7 @@ export default function IntencaoMatricula2027({
           <div style={{ padding: '3rem 2rem', textAlign: 'center' }}>
             <div style={{ fontSize: '3.5rem', marginBottom: '0.85rem' }}>🎓</div>
             <h3 style={{ margin: '0 0 0.5rem 0', color: '#00984a', fontSize: '1.35rem', fontWeight: 800 }}>
-              {evolucao.numChamamento === 1 ? 'Ciclo Formativo Encerrado' : 'Conclusão em Dezembro de 2026'}
+              {evolucao.numChamamento === 1 ? 'Ciclo Formativo Encerrado' : 'Dispensado da Matrícula (Conclusão em Dezembro/2026)'}
             </h3>
             <p style={{ margin: '0 auto', maxWidth: '620px', color: '#334155', fontSize: '0.94rem', lineHeight: 1.6 }}>
               {evolucao.mensagem}
@@ -805,7 +862,7 @@ export default function IntencaoMatricula2027({
               color: '#166534',
               fontWeight: 700
             }}>
-              ✓ Docentes do {evolucao.chamamentoTexto} não necessitam manifestar intenção de vaga para 2027/1.
+              ✓ {evolucao.numChamamento === 1 ? 'Docentes do 1º Chamamento' : 'Docentes do 2º Chamamento com posse até 30/07/2024'} estão dispensados e não necessitam manifestar intenção de vaga para 2027/1.
             </div>
           </div>
         )}

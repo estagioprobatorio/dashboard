@@ -200,7 +200,7 @@ export default function PainelIntencaoVagasAdmin({ records = [], userRole, userE
       const isElegivel = r.evolucao.elegivelIntencao;
 
       if (num === 1) concluidos++;
-      else if (num === 2) encerram2026++;
+      else if (num === 2 && !isElegivel) encerram2026++;
 
       if (isElegivel) {
         elegiveis++;
@@ -389,7 +389,7 @@ export default function PainelIntencaoVagasAdmin({ records = [], userRole, userE
       } else if (filtroDemanda === 'demanda_1') {
         list = list.filter(r => r.evolucao.status2027 === 'precisa_turma_1_ano');
       } else if (filtroDemanda === 'encerra_dez') {
-        list = list.filter(r => r.evolucao.status2027 === 'encerra_dezembro_2026');
+        list = list.filter(r => r.evolucao.status2027 === 'encerra_dezembro_2026' || r.evolucao.status2027 === 'dispensado_matricula');
       } else if (filtroDemanda === 'encerrados') {
         list = list.filter(r => r.evolucao.status2027 === 'encerrado');
       }
@@ -712,7 +712,7 @@ export default function PainelIntencaoVagasAdmin({ records = [], userRole, userE
       }}>
         {/* Elegíveis */}
         <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '1rem 1.25rem', border: '1px solid #bae6fd', borderLeft: '4px solid #0072bc' }}>
-          <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#0072bc', textTransform: 'uppercase' }}>Total Elegíveis (3º ao 6º)</div>
+          <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#0072bc', textTransform: 'uppercase' }}>Total Elegíveis (2º ao 6º)</div>
           <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#001d3d', marginTop: '0.2rem' }}>{kpisAcompanhamento.elegiveis}</div>
           <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.2rem' }}>Necessitam de vaga em 2027</div>
         </div>
@@ -817,7 +817,7 @@ export default function PainelIntencaoVagasAdmin({ records = [], userRole, userE
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
                       <strong style={{ fontSize: '0.88rem', color: '#0369a1' }}>Turmas de 2º e 3º Ano</strong>
-                      <div style={{ fontSize: '0.72rem', color: '#0284c7' }}>3º, 4º e 5º Chamamento</div>
+                      <div style={{ fontSize: '0.72rem', color: '#0284c7' }}>2º (posse ≥ 01/08/24), 3º, 4º e 5º Chamamento</div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
                       <span style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0369a1' }}>{kpisAcompanhamento.confirmados2e3Ano}</span>
