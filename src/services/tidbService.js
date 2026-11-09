@@ -289,20 +289,65 @@ export const tidbService = {
   salvarIntencao2027: async (entry) => {
     try {
       const authHeaders = await getAuthHeaders();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000); // 6s timeout máximo
+
       const res = await fetch('/api/v2', {
         method: 'POST',
         headers: { ...authHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'insert_intencao', data: entry })
-      });
-      if (res.ok) return true;
+        body: JSON.stringify({ action: 'insert_intencao', data: entry }),
+        signal: controller.signal
+      }).catch(() => null);
+      clearTimeout(timeoutId);
+
+      if (res && res.ok) return true;
+
+      // Fallback legado com timeout
+      const controllerLegacy = new AbortController();
+      const timeoutLegacy = setTimeout(() => controllerLegacy.abort(), 6000);
       const resLegacy = await fetch('/api/tidb', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'insert_intencao', data: entry })
-      });
-      return resLegacy.ok;
+        body: JSON.stringify({ action: 'insert_intencao', data: entry }),
+        signal: controllerLegacy.signal
+      }).catch(() => null);
+      clearTimeout(timeoutLegacy);
+
+      return resLegacy && resLegacy.ok;
     } catch (e) {
       console.warn('[TiDB Service] Falha ao salvar intenção:', e);
+      return false;
+    }
+  },
+
+  /**
+   * Limpa todos os dados de intenção de matrícula 2027 (Ação de Superadmin / Testes)
+   */
+  limparIntencoes2027: async () => {
+    try {
+      const authHeaders = await getAuthHeaders();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+      const res = await fetch('/api/v2', {
+        method: 'POST',
+        headers: { ...authHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reset_intencoes_2027' }),
+        signal: controller.signal
+      }).catch(() => null);
+      clearTimeout(timeoutId);
+
+      if (res && res.ok) return true;
+
+      const resLegacy = await fetch('/api/tidb', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reset_intencoes_2027' })
+      }).catch(() => null);
+
+      return resLegacy && resLegacy.ok;
+    } catch (e) {
+      console.warn('[TiDB Service] Falha ao resetar intenções:', e);
       return false;
     }
   }

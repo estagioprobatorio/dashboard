@@ -135,6 +135,8 @@ export const driveDataService = {
     const appsScriptUrl = getAppsScriptUrl();
     if (appsScriptUrl && appsScriptUrl.startsWith('http')) {
       try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
         await fetch(appsScriptUrl, {
           method: 'POST',
           mode: 'no-cors',
@@ -142,8 +144,10 @@ export const driveDataService = {
           body: JSON.stringify({
             action: 'salvar_intencao_2027',
             dados: dadosIntencao
-          })
-        });
+          }),
+          signal: controller.signal
+        }).catch(() => null);
+        clearTimeout(timeoutId);
         console.log('[DriveService] Intenção 2027 enviada para o Google Sheets.');
       } catch (err) {
         console.error('[DriveService] Erro ao enviar intenção para Apps Script:', err);
@@ -167,6 +171,36 @@ export const driveDataService = {
     } catch (e) {}
 
     return { status: 'sucesso', dados: dadosIntencao };
+  },
+
+  /**
+   * Limpa todos os dados locais e no Google Sheets de intenções de 2027
+   */
+  limparIntencoes2027: async () => {
+    const appsScriptUrl = getAppsScriptUrl();
+    if (appsScriptUrl && appsScriptUrl.startsWith('http')) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        await fetch(appsScriptUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'limpar_intencoes_2027' }),
+          signal: controller.signal
+        }).catch(() => null);
+        clearTimeout(timeoutId);
+      } catch (err) {}
+    }
+
+    try {
+      Object.keys(localStorage).forEach(k => {
+        if (k.startsWith('intencao_2027_')) localStorage.removeItem(k);
+      });
+      localStorage.removeItem('intencoes_2027_todas');
+    } catch (e) {}
+
+    return true;
   },
 
   /**

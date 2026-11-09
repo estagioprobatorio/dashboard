@@ -652,7 +652,10 @@ function apiSalvarIntencao2027(payload) {
     payload.descricaoAtendimentoEspecializado || ''
   ];
 
-  return salvarLinhaPlanilha(getConfig().ID_PLANILHA_RESPOSTAS, getConfig().ABA_INTENCAO_2027, colunas, linha);
+  var resSalvar = salvarLinhaPlanilha(getConfig().ID_PLANILHA_RESPOSTAS, getConfig().ABA_INTENCAO_2027, colunas, linha);
+  // Dispara envio de e-mail com o comprovante oficial ao cursista
+  enviarEmailConfirmacaoIntencao(payload);
+  return resSalvar;
 }
 
 function apiSalvarRemanejamento(payload) {
@@ -807,5 +810,81 @@ function setupInicialCriarAbas() {
     SpreadsheetApp.getUi().alert('Abas Verificadas', 'Todas as abas de gravação estão prontas para uso.', SpreadsheetApp.getUi().ButtonSet.OK);
   } catch (e) {
     Logger.log('✅ Abas Verificadas: Todas as abas de gravação estão prontas para uso.');
+  }
+}
+
+/**
+ * Envia e-mail oficial de confirmação da intenção de matrícula 2027 ao cursista
+ */
+function enviarEmailConfirmacaoIntencao(payload) {
+  try {
+    var destinatario = payload.email_cursista || payload.email;
+    if (!destinatario || destinatario.indexOf('@') === -1) {
+      Logger.log('Aviso: E-mail de destino inválido para confirmação da intenção: ' + destinatario);
+      return;
+    }
+
+    var nome = payload.nome_cursista || 'Docente Cursista';
+    var cgm = payload.cgm_cursista || payload.cgm || 'Não informado';
+    var componente = payload.componente || 'Não informado';
+    var turno = payload.turnoPretendido || payload.opcao_turno || 'Não informado';
+    var horario = payload.horarioPretendido || payload.opcao_modalidade || 'Não informado';
+    var dia = payload.dia_semana_formativo || 'Conforme cronograma';
+    var etapa = payload.ano_formativo_pretendido || '2027';
+    var nre = payload.nre || 'SEED/PR';
+    var dataHora = Utilities.formatDate(new Date(), 'America/Sao_Paulo', 'dd/MM/yyyy HH:mm:ss');
+
+    var assunto = "✓ Confirmação de Registro: Intenção de Vagas 2027 - Estágio Probatório SEED/PR";
+
+    var corpoTexto = "Olá, " + nome + "!\n\n" +
+      "Sua manifestação de intenção de vaga para o ciclo formativo 2027 do Estágio Probatório foi registrada com sucesso.\n\n" +
+      "-------------------------------------------------------\n" +
+      "COMPROVANTE DE REGISTRO - INTENÇÃO DE VAGAS 2027\n" +
+      "-------------------------------------------------------\n" +
+      "• Data/Hora do Registro: " + dataHora + "\n" +
+      "• Cursista: " + nome + "\n" +
+      "• CGM: " + cgm + "\n" +
+      "• E-mail: " + destinatario + "\n" +
+      "• NRE: " + nre + "\n" +
+      "• Componente Curricular: " + componente + "\n" +
+      "• Etapa Pretendida 2027: " + etapa + "\n" +
+      "• Dia Formativo: " + dia + "\n" +
+      "• Turno Preferencial: " + turno + "\n" +
+      "• Horário Pretendido: " + horario + "\n" +
+      "• Necessita Atendimento Especializado: " + (payload.necessitaAtendimentoEspecializado || 'Não') + "\n" +
+      "-------------------------------------------------------\n\n" +
+      "Este comprovante confirma o recebimento dos seus dados para planejamento da enturmação 2027.\n\n" +
+      "Atenciosamente,\n" +
+      "Coordenação de Estágio Probatório - DEDUC / SEED-PR";
+
+    var corpoHtml = '<div style="font-family: -apple-system, BlinkMacSystemFont, Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden;">' +
+      '<div style="background: #001d3d; color: #ffffff; padding: 1.25rem 1.5rem; text-align: center;">' +
+      '<h2 style="margin: 0; font-size: 1.25rem; font-weight: 700;">ESTÁGIO PROBATÓRIO · SEED/PR</h2>' +
+      '<p style="margin: 0.3rem 0 0; font-size: 0.85rem; color: #90e0ef;">Comprovante de Intenção de Vagas 2027</p>' +
+      '</div>' +
+      '<div style="padding: 1.5rem; color: #1e293b; line-height: 1.5;">' +
+      '<p>Olá, <strong>' + nome + '</strong>!</p>' +
+      '<p style="font-size: 0.92rem; color: #334155;">Confirmamos com sucesso o recebimento da sua intenção de matrícula para o ciclo formativo de <strong>2027</strong> no Estágio Probatório.</p>' +
+      '<div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 1rem; margin: 1rem 0;">' +
+      '<h4 style="margin: 0 0 0.5rem 0; color: #002d5c; font-size: 0.88rem; text-transform: uppercase;">📋 Detalhes do Registro</h4>' +
+      '<p style="margin: 3px 0; font-size: 0.85rem;"><strong>Data/Hora:</strong> ' + dataHora + '</p>' +
+      '<p style="margin: 3px 0; font-size: 0.85rem;"><strong>CGM:</strong> ' + cgm + '</p>' +
+      '<p style="margin: 3px 0; font-size: 0.85rem;"><strong>NRE:</strong> ' + nre + '</p>' +
+      '<p style="margin: 3px 0; font-size: 0.85rem;"><strong>Componente:</strong> ' + componente + '</p>' +
+      '<p style="margin: 3px 0; font-size: 0.85rem;"><strong>Etapa Prevista:</strong> ' + etapa + '</p>' +
+      '<p style="margin: 3px 0; font-size: 0.85rem;"><strong>Turno Preferencial:</strong> <span style="color: #007a33; font-weight: 700;">' + turno + '</span> (' + horario + ')</p>' +
+      '</div>' +
+      '<p style="font-size: 0.85rem; color: #64748b; margin-bottom: 0;">Atenciosamente,<br><strong>Coordenação de Estágio Probatório — SEED/PR</strong></p>' +
+      '</div></div>';
+
+    MailApp.sendEmail({
+      to: destinatario,
+      subject: assunto,
+      body: corpoTexto,
+      htmlBody: corpoHtml
+    });
+    Logger.log('✓ E-mail de confirmação enviado para: ' + destinatario);
+  } catch (eMail) {
+    Logger.log('Aviso ao enviar e-mail de confirmação: ' + eMail.toString());
   }
 }

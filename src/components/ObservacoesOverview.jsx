@@ -113,28 +113,64 @@ export default function ObservacoesOverview({ observacoes = [], cursistas = [], 
 
   // Base enriquecida (somente ciclo 2026)
   const enrichedData = useMemo(() => {
-    return observacoes.filter(isObservacao2026).map(obs => {
-      const emailCursista = (obs.email_cursista || '').trim().toLowerCase();
-      const cursistaInfo = cursistasMap.get(emailCursista);
+    return observacoes.filter(isObservacao2026).map(rawObs => {
+      let emailCursista = (rawObs.email_cursista || '').trim().toLowerCase();
+      let nomeCursista = (rawObs.nome_cursista || '').trim();
+      let tutorTecnicoObs = (rawObs.tutor_tecnico_observador || '').trim();
+      let quemObservou = (rawObs.quem_observou || '').trim();
+      let obsRealizada = (rawObs.observacao_realizada || '').trim();
 
-      const nre = normalizeNre(obs.nre_exe || obs.nre || (cursistaInfo ? (cursistaInfo.nre_exe || cursistaInfo.nre_tutor) : '')) || 'NRE Não Identificado';
-      const modalidade = obs.modalidade || (cursistaInfo ? cursistaInfo.modalidade : null) || 'Docentes';
-      const rawComp = obs.componente || (cursistaInfo ? cursistaInfo.componente : null) || 'Geral';
+      if ((!emailCursista.includes('@') || emailCursista.includes('sim') || emailCursista.includes('não') || emailCursista.includes('nao')) && nomeCursista.includes('@')) {
+        if (!obsRealizada || obsRealizada === 'Sim') {
+          obsRealizada = rawObs.email_cursista || 'Sim, a observação foi realizada.';
+        }
+        emailCursista = nomeCursista.replace(/^[-:\s]+/, '').toLowerCase();
+        if (tutorTecnicoObs && !tutorTecnicoObs.toLowerCase().includes('tutor') && !tutorTecnicoObs.toLowerCase().includes('técnico') && !tutorTecnicoObs.toLowerCase().includes('formador')) {
+          nomeCursista = tutorTecnicoObs;
+          tutorTecnicoObs = '';
+          if (quemObservou === tutorTecnicoObs) quemObservou = 'Formador';
+        } else {
+          nomeCursista = '';
+        }
+      }
+
+      emailCursista = emailCursista.replace(/^[-:\s]+/, '');
+      nomeCursista = nomeCursista.replace(/^[-:\s]+/, '');
+
+      const cursistaInfo = cursistasMap.get(emailCursista);
+      if ((!nomeCursista || nomeCursista.includes('@')) && cursistaInfo) {
+        nomeCursista = cursistaInfo.nome_cursista || cursistaInfo.nome || nomeCursista;
+      }
+
+      const nre = normalizeNre(rawObs.nre_exe || rawObs.nre || (cursistaInfo ? (cursistaInfo.nre_exe || cursistaInfo.nre_tutor) : '')) || 'NRE Não Identificado';
+      let modalidade = rawObs.modalidade || (cursistaInfo ? cursistaInfo.modalidade : null) || 'Docentes';
+      if (modalidade.toLowerCase().includes('feedback') || modalidade.toLowerCase().includes('diálogo') || modalidade.toLowerCase().includes('dialogo')) {
+        modalidade = cursistaInfo?.modalidade || 'Docentes';
+      }
+      if (modalidade.toUpperCase().includes('GESTORA') || modalidade.toUpperCase().includes('PEDAGOG')) {
+        modalidade = 'Equipe Gestora';
+      }
+      const rawComp = rawObs.componente || (cursistaInfo ? cursistaInfo.componente : null) || 'Geral';
       const componente = normalizeComponente(rawComp);
-      const anoFormativo = obs.ano_formativo || '1º ANO';
-      const isRealizada = obs.is_realizada ?? (obs.observacao_realizada ? obs.observacao_realizada.toLowerCase().includes('sim') : true);
-      const semestre = getSemestre(obs);
+      const anoFormativo = rawObs.ano_formativo || '1º ANO';
+      const isRealizada = rawObs.is_realizada ?? (obsRealizada ? obsRealizada.toLowerCase().includes('sim') : true);
+      const semestre = getSemestre(rawObs);
 
       return {
-        ...obs,
+        ...rawObs,
+        email_cursista: emailCursista,
+        nome_cursista: nomeCursista || 'Cursista',
+        tutor_tecnico_observador: tutorTecnicoObs,
+        quem_observou: quemObservou,
+        observacao_realizada: obsRealizada,
         semestre,
         nre_exe: nre,
         modalidade,
         componente,
         ano_formativo: anoFormativo,
         is_realizada: isRealizada,
-        cat_planejamento: parseLevel(obs.nivel_planejamento),
-        cat_pratica: parseLevel(obs.nivel_pratica)
+        cat_planejamento: parseLevel(rawObs.nivel_planejamento),
+        cat_pratica: parseLevel(rawObs.nivel_pratica)
       };
     });
   }, [observacoes, cursistasMap]);

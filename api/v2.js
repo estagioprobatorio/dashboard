@@ -43,12 +43,20 @@ const podeGerenciar = (user, funcaoAlvo) =>
   user.funcao === 'superadmin' || (user.funcao === 'admin' && !['superadmin', 'admin'].includes(funcaoAlvo));
 
 /** Resolve o usuário (cursista) alvo de um registro: o próprio cursista, ou por e-mail para a equipe. */
-async function alvoCursista(user, email) {
+async function alvoCursista(user, email, nome = null) {
   if (user.funcao === 'cursista') return user.id;
   const em = lowerEmail(email);
-  if (!em) return null;
-  const r = await query('SELECT id FROM usuario WHERE email_inst = ?', [em]);
-  return r.length ? r[0].id : null;
+  if (!em) return user.id;
+  let r = await query('SELECT id FROM usuario WHERE email_inst = ?', [em]);
+  if (!r.length) {
+    try {
+      await query('INSERT INTO usuario (email_inst, nome, funcao) VALUES (?, ?, ?)',
+        [em, s(nome) || em.split('@')[0].replace(/[._]/g, ' ').toUpperCase(), 'cursista']
+      );
+      r = await query('SELECT id FROM usuario WHERE email_inst = ?', [em]);
+    } catch (e) {}
+  }
+  return r.length ? r[0].id : user.id;
 }
 
 export default async function handler(req, res) {
@@ -56,7 +64,8 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(204).end();
 
   const body = req.body && typeof req.body === 'object' ? req.body : {};
-  const action = (req.query && req.query.action) || body.action || 'ping';
+  let action = (req.query && req.query.action) || body.action || 'ping';
+  if (action === 'undefined' || action === 'null' || !action) action = 'ping';
 
   try {
     if (action === 'ping' || action === 'health') {
@@ -177,8 +186,7 @@ export default async function handler(req, res) {
     if (action === 'insert_intencao') {
       exigeFuncao(user, ...STAFF, 'cursista');
       const d = body.data || {};
-      const alvo = await alvoCursista(user, d.email_cursista || d.email);
-      if (!alvo) throw new HttpError(400, 'Cursista não identificado.');
+      const alvo = await alvoCursista(user, d.email_cursista || d.email, d.nome_cursista);
       const lf = d.linha_funcional ? String(d.linha_funcional).trim() : null;
       let v = null;
       if (lf) {
@@ -204,7 +212,26 @@ export default async function handler(req, res) {
         `INSERT INTO intencao_matricula (usuario_id, vinculo_id, componente, opcao_turno, opcao_modalidade, observacao) VALUES (?,?,?,?,?,?)`,
         [alvo, v ? v.id : null, s(d.componente), s(d.turnoPretendido || d.opcao_turno), s(d.horarioPretendido || d.opcao_modalidade), s(obsTexto)]
       );
+
+      // Redundância para a tabela intencao_matricula_2027 (se existir no esquema)
+      try {
+        const cgmIdent = d.cgm_lf || (d.cgm_cursista ? `${d.cgm_cursista}_${lf || 1}` : d.cgm);
+        await query(
+          `INSERT INTO intencao_matricula_2027 (cgm, nome_cursista, email, componente, opcao_turno, opcao_modalidade, observacao) VALUES (?,?,?,?,?,?,?)`,
+          [s(cgmIdent), s(d.nome_cursista), s(d.email_cursista || d.email), s(d.componente), s(d.turnoPretendido || d.opcao_turno), s(d.horarioPretendido || d.opcao_modalidade), s(obsTexto)]
+        );
+      } catch (eTab2) {}
+
       return res.status(200).json({ status: 'success' });
+    }
+
+    if (action === 'reset_intencoes_2027' || action === 'limpar_intencoes_2027') {
+      exigeFuncao(user, 'superadmin', 'admin');
+      const del1 = await query('DELETE FROM intencao_matricula').catch(() => ({ affectedRows: 0 }));
+      const del2 = await query('DELETE FROM intencao_matricula_2027').catch(() => ({ affectedRows: 0 }));
+      const tot = (del1.affectedRows || 0) + (del2.affectedRows || 0);
+      await audit(user.id, 'reset_intencoes_2027', 'intencao_matricula', null, { deletados: tot });
+      return res.status(200).json({ status: 'success', deletados: tot });
     }
 
     if (action === 'update_cursista') {
@@ -301,7 +328,10 @@ export default async function handler(req, res) {
 
     throw new HttpError(400, `Ação desconhecida: ${action}`);
   } catch (err) {
-    if (err instanceof HttpError) return res.status(err.status).json({ error: err.message });
+    if (err instanceof HttpError) {
+      console.warn(`[API v2 4xx] status=${err.status} action='${action}' msg=${err.message}`);
+      return res.status(err.status).json({ error: err.message, action });
+    }
     console.error(`[API v2] action=${action}:`, err);
     return res.status(500).json({ error: 'Erro interno do servidor.' }); // sem vazar detalhes
   }

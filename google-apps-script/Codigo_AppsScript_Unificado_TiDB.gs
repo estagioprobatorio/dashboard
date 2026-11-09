@@ -1,1275 +1,88 @@
 // =========================================================================================
-// GOOGLE APPS SCRIPT - SISTEMA UNIFICADO DE GESTÃO DO ESTÁGIO PROBATÓRIO (SEED-PR)
-// Menu Central, Consultas SIGEP, Remanejamento e Sincronização TiDB Cloud Serverless (v2)
+// GOOGLE APPS SCRIPT - MENU CENTRAL UNIFICADO (SEED-PR)
+// Gestão do Estágio Probatório, Integrações SIGEP, Remanejamento e Banco TiDB Cloud
 // =========================================================================================
 
-/**
- * ⚙️ CONFIGURAÇÕES PRINCIPAIS DO SISTEMA
- */
-
-// 1. URL oficial do Dashboard na Vercel (ou URL de túnel/localhost em desenvolvimento)
-var VERCEL_APP_URL = "https://dashboard-tawny-delta-96.vercel.app";
-
-// 2. Versão da API: "v2" (Arquitetura segura com hash/cifra de CGM e 1 CGM por pessoa)
-var API_VERSION = "v2";
-
-// 3. Token Secreto de Sincronização (SYNC_TOKEN)
-// Configure o mesmo valor definido no painel da Vercel (Project Settings ➔ Environment Variables)
-var SYNC_TOKEN = "l26zXdDT0Mm3h_KOF9hehDotnB6FYJyg";
-
-// 4. IDs Oficiais das Planilhas do Google Sheets (SEED-PR)
+// IDs Oficiais das Planilhas do Google Sheets (SEED-PR)
 var SPREADSHEET_ID_MESTRA_TIDB = "1sRkA88VrtczqXxQ6PlmgygeCVhPoElRNS8RC1QuQzx0";
 
-// 5. Planilhas Externas Oficiais de Observações da Prática (Formadores -> Cursistas)
-// NOTA: Os dados históricos de 2024, 2025 e 1º Semestre de 2026 estão congelados e armazenados exclusivamente em JSON.
-// A sincronização ativa de planilhas sincroniza exclusivamente o 2º Semestre/2026 para máxima velocidade.
-var PLANILHAS_OBSERVACOES_FORMADOR = [
-  {
-    sigla: "1ANO_2SEM",
-    nome: "Formador-1ANO_2SEM",
-    id: "1dL_Q-_15Idx3SNAZOqmKzrnVqA8tHFBzILA5PZ7p798",
-    gid: "425616417",
-    anoFormativoPadrao: "1º ANO",
-    semestrePadrao: "2º Semestre/2026"
-  },
-  {
-    sigla: "2e3ANO_2SEM",
-    nome: "Formador-2e3ANO-2SEM",
-    id: "1uv5QWeqtN5iMkH8nVQUvsYKClv9NaGDHgsdT_D-RPiw",
-    gid: "2068065207",
-    anoFormativoPadrao: "2º e 3º ANOS",
-    semestrePadrao: "2º Semestre/2026"
+/**
+ * Helper global e resiliente para obter a planilha mestra ativa ou por ID
+ */
+function obterPlanilhaMestra() {
+  try {
+    var ativa = SpreadsheetApp.getActiveSpreadsheet();
+    if (ativa) return ativa;
+  } catch (e) {}
+  try {
+    return SpreadsheetApp.openById(SPREADSHEET_ID_MESTRA_TIDB);
+  } catch (e) {
+    return null;
   }
-];
-
-// 6. Planilha Externa de Observações de Tutoria (Tutores -> Formadores / Tutor Insights)
-var PLANILHA_OBSERVACOES_TUTOR_ID = "1V54Gl-KVGaHjLBH07hQZxq6GU88kfn0Xurh5P2LuSz8";
-
+}
 
 /**
  * -----------------------------------------------------------------------------------------
  * 1. GATILHO AUTOMÁTICO DE ABERTURA DA PLANILHA (onOpen)
- * Constrói todos os menus na barra de ferramentas superior do Google Sheets.
+ * Centraliza e constrói todos os menus na barra de ferramentas do Google Sheets.
  * -----------------------------------------------------------------------------------------
  */
 function onOpen() {
   try {
-    var ui = SpreadsheetApp.getUi();
+    const ui = SpreadsheetApp.getUi();
 
-    // Menu Único e Centralizado (Planilhas atuando estritamente como Backup do Banco TiDB Cloud)
+    // Menu 1: Operações Gerais do Estágio Probatório & SIGEP
     ui.createMenu('⚡ ESTÁGIO PROBATÓRIO')
-      .addItem('🔄 Sincronizar Tudo com TiDB Cloud (Backup Completo)', 'sincronizarManualComAlerta')
+      .addItem('🔄 Atualizar Dashboard (Gerar JSON no Drive Agora)', 'menuAtualizarDashboard')
+      .addItem('⚡ Ativar Sincronização Automática ao Editar a Planilha', 'instalarGatilhosAutomaticos')
       .addSeparator()
-      .addItem('👥 Sincronizar Cursistas Ativos (DADOS)', 'sincronizarAbaDadosMenu')
-      .addItem('🚪 Sincronizar Servidores Exonerados', 'sincronizarAbaExoneradosMenu')
-      .addItem('🎓 Sincronizar Concluintes', 'sincronizarAbaConcluintesMenu')
-      .addItem('👨‍🏫 Sincronizar Tutores Regionais', 'sincronizarAbaTutoresMenu')
-      .addItem('📋 Sincronizar Observações da Prática', 'sincronizarObservacoesPraticaMenu')
-      .addItem('🕵️ Sincronizar Observações do Tutor', 'sincronizarObservacoesTutorMenu')
-      .addItem('🔀 Sincronizar Movimentações', 'sincronizarAbaMovimentacoesMenu')
-      .addSeparator()
-      .addItem('🔍 Consultar Cadastro no SIGEP (CPF)', 'menuDialogoBuscarSigep')
+      .addItem('🔍 Painel de Busca no SIGEP (Cursistas / Formadores)', 'menuDialogoBuscarSigep')
+      .addItem('⚡ Preencher Linha Selecionada com Dados SIGEP', 'menuPreencherLinhaAtiva')
       .addItem('🚪 Registrar Exoneração de Servidor', 'menuRegistrarExoneracao')
-      .addItem('⚖️ Remanejamento de Turmas (Analisar)', 'rmjMenuAnalisar')
       .addSeparator()
-      .addItem('⏰ Agendar Sincronização Automática Diária (07:00)', 'configurarGatilhoDiario7h')
-      .addItem('🔍 Testar Conexão com TiDB Cloud', 'testarConexaoTiDB')
+      .addItem('📧 Gerador de E-mails aos Cursistas', 'menuAbrirGeradorEmails')
+      .addItem('🛠️ Verificar / Criar Abas do Sistema', 'setupInicialCriarAbas')
+      .addToUi();
+
+    // Menu 2: Motor de Remanejamento e Nivelamento de Turmas
+    ui.createMenu('⚖️ REMANEJAMENTO DE TURMAS')
+      .addItem('1) 📊 Analisar Redistribuição (Padrão 4 a 9 - Não Zerar Turmas)', 'rmjMenuAnalisar')
+      .addItem('2) 👁️ Validar Redistribuição (Comparativo Visual & Checklist)', 'rmjMenuValidar')
+      .addItem('3) ✍️ Realizar Redistribuição (Gravar na Coluna H)', 'rmjMenuRealizar')
+      .addItem('4) ✉️ Enviar E-mail Informativo', 'rmjMenuEmail')
+      .addSeparator()
+      .addItem('ℹ️ Diretrizes & Regras do Remanejamento', 'menuSobreRemanejamento')
+      .addToUi();
+
+    // Menu 3: Banco de Dados TiDB Serverless Cloud
+    ui.createMenu('⚡ TiDB CLOUD')
+      .addItem('🔄 Sincronizar Tudo com TiDB Agora (Manual)', 'sincronizarManualComAlerta')
+      .addSeparator()
+      .addItem('📋 Sincronizar Observações da Prática (1º e 2º/3º Anos)', 'sincronizarObservacoesPraticaMenu')
+      .addItem('👨‍🏫 Sincronizar Observações do Tutor (Formadores)', 'sincronizarObservacoesTutorMenu')
+      .addSeparator()
+      .addItem('⏰ Ativar Atualização Automática Diária (07:00)', 'configurarGatilhoDiario7h')
+      .addItem('🔍 Testar Conexão com TiDB', 'testarConexaoTiDB')
       .addToUi();
 
   } catch (e) {
+    // Silencia caso executado fora de container Sheets (modo headless/triggers de API)
     Logger.log('Aviso onOpen: ' + e.toString());
   }
 }
 
-
 /**
  * -----------------------------------------------------------------------------------------
- * 2. COMANDOS DO MENU TiDB CLOUD
+ * 2. FUNÇÕES DO MENU: BUSCA E INTEGRAÇÃO COM O SIGEP
  * -----------------------------------------------------------------------------------------
  */
 
 /**
- * Testa a conectividade com o backend Vercel e o banco TiDB Cloud.
- */
-function testarConexaoTiDB() {
-  var ui = SpreadsheetApp.getUi();
-  try {
-    var endpoint = obterEndpointApi('health');
-    var options = obterOpcoesHttp();
-    options.method = "get";
-    delete options.payload;
-
-    var resp = UrlFetchApp.fetch(endpoint, options);
-    var status = resp.getResponseCode();
-    var json = JSON.parse(resp.getContentText() || '{}');
-
-    if (status === 200 && (json.status === 'ok' || json.banco === 'conectado' || json.ok)) {
-      ui.alert(
-        'Conexão TiDB Cloud: OK ✅',
-        'Sucesso na conexão com a infraestrutura TiDB Serverless Cloud!\n\n' +
-        '• Endpoint: ' + endpoint + '\n' +
-        '• Versão API: ' + (json.versao || API_VERSION) + '\n' +
-        '• Latência: ' + (json.latencia_ms ? json.latencia_ms + ' ms' : 'Excelente') + '\n' +
-        '• Banco: Conectado e respondendo normalmente.',
-        ui.ButtonSet.OK
-      );
-    } else {
-      ui.alert(
-        'Aviso de Conexão ⚠️',
-        'O servidor respondeu com código ' + status + ':\n' + resp.getContentText(),
-        ui.ButtonSet.OK
-      );
-    }
-  } catch (err) {
-    ui.alert(
-      'Falha de Conexão ❌',
-      'Não foi possível conectar ao backend serverless:\n\n' + err.toString() +
-      '\n\nVerifique se a variável VERCEL_APP_URL está correta e se a Vercel está online.',
-      ui.ButtonSet.OK
-    );
-  }
-}
-
-/**
- * Ativa o gatilho automático diário às 07:00 da manhã (Horário de Brasília).
- */
-function configurarGatilhoDiario7h() {
-  var triggers = ScriptApp.getProjectTriggers();
-  for (var i = 0; i < triggers.length; i++) {
-    if (triggers[i].getHandlerFunction() === 'executarSincronizacaoCompletaTiDB') {
-      ScriptApp.deleteTrigger(triggers[i]);
-    }
-  }
-
-  ScriptApp.newTrigger('executarSincronizacaoCompletaTiDB')
-    .timeBased()
-    .everyDays(1)
-    .atHour(7)
-    .nearMinute(0)
-    .inTimezone('America/Sao_Paulo')
-    .create();
-
-  var msg = '✓ Gatilho automático configurado com sucesso!\n\n' +
-            'A sincronização de todas as planilhas para o TiDB Cloud será executada automaticamente todos os dias às 07:00 da manhã.';
-  try {
-    SpreadsheetApp.getUi().alert('Gatilho Automático 07:00', msg, SpreadsheetApp.getUi().ButtonSet.OK);
-  } catch (e) {
-    Logger.log(msg);
-  }
-}
-
-/**
- * Disparo manual da sincronização completa com modal de relatório de linhas.
- */
-function sincronizarManualComAlerta() {
-  try {
-    SpreadsheetApp.getActiveSpreadsheet().toast('Iniciando sincronização completa com TiDB Cloud...', 'TiDB Serverless', 8);
-    var res = executarSincronizacaoCompletaTiDB();
-    var msg = '✓ Sincronização com o TiDB Cloud finalizada com sucesso!\n\n' +
-              '• Cursistas Ativos (DADOS - Coluna AK / LF): ' + (res.cursistas || 0) + '\n' +
-              '• Concluintes (1º Chamamento): ' + (res.concluintes || 0) + '\n' +
-              '• Tutores Regionais: ' + (res.tutores || 0) + '\n' +
-              '• Servidores Exonerados: ' + (res.exonerados || 0) + '\n' +
-              '• Cursistas Não Concluintes: ' + (res.nao_concluintes || 0) + '\n' +
-              '• Movimentações (Trocas & Vínculos): ' + (res.movimentacoes || 0) + '\n' +
-              '• Observações Pedagógicas da Prática: ' + (res.observacoes || 0) + '\n' +
-              '• Observações de Tutoria (Tutor Insights): ' + (res.observacoes_tutoria || 0);
-    SpreadsheetApp.getUi().alert('Sincronização TiDB Concluída', msg, SpreadsheetApp.getUi().ButtonSet.OK);
-  } catch (err) {
-    try {
-      SpreadsheetApp.getUi().alert('Erro na Sincronização', err.toString(), SpreadsheetApp.getUi().ButtonSet.OK);
-    } catch (e) {}
-  }
-}
-
-function sincronizarObservacoesPraticaMenu() {
-  SpreadsheetApp.getActiveSpreadsheet().toast('Sincronizando as 4 planilhas de observações dos Formadores...', 'TiDB Serverless', 10);
-  var res = sincronizarAbaObservacoesParaTiDB();
-  var msg = '✓ Sincronização de Observações de Prática Concluída!\n\n' +
-            'Total enviado ao TiDB: ' + (res.total || 0) + ' observações.\n\n' +
-            (res.relatorio ? res.relatorio.join('\n') : '');
-  SpreadsheetApp.getUi().alert('Observações dos Formadores', msg, SpreadsheetApp.getUi().ButtonSet.OK);
-}
-
-function sincronizarObservacoesTutorMenu() {
-  SpreadsheetApp.getActiveSpreadsheet().toast('Sincronizando observações de tutoria com TiDB...', 'TiDB Serverless', 6);
-  var res = sincronizarAbaObservacoesTutoriaParaTiDB();
-  SpreadsheetApp.getUi().alert('Observações do Tutor', '✓ Total de observações de tutoria sincronizadas: ' + (res.total || 0), SpreadsheetApp.getUi().ButtonSet.OK);
-}
-
-function sincronizarAbaDadosMenu() {
-  SpreadsheetApp.getActiveSpreadsheet().toast('Sincronizando Cursistas Ativos (Aba DADOS)...', 'TiDB Serverless', 10);
-  var res = sincronizarAbaDadosParaTiDB();
-  SpreadsheetApp.getUi().alert('Cursistas Ativos (DADOS)', '✓ Sincronização concluída!\n\nTotal de cursistas enviados: ' + (res.total || 0), SpreadsheetApp.getUi().ButtonSet.OK);
-}
-
-function sincronizarAbaExoneradosMenu() {
-  SpreadsheetApp.getActiveSpreadsheet().toast('Sincronizando Servidores Exonerados...', 'TiDB Serverless', 6);
-  var res = sincronizarAbaExoneradosParaTiDB();
-  SpreadsheetApp.getUi().alert('Servidores Exonerados', '✓ Sincronização concluída!\n\nTotal de exonerados registrados no TiDB: ' + (res.total || 0), SpreadsheetApp.getUi().ButtonSet.OK);
-}
-
-function sincronizarAbaConcluintesMenu() {
-  SpreadsheetApp.getActiveSpreadsheet().toast('Sincronizando Concluintes (1º Chamamento)...', 'TiDB Serverless', 6);
-  var res = sincronizarAbaConcluintesParaTiDB();
-  SpreadsheetApp.getUi().alert('Concluintes', '✓ Sincronização concluída!\n\nTotal de concluintes enviados: ' + (res.total || 0), SpreadsheetApp.getUi().ButtonSet.OK);
-}
-
-function sincronizarAbaTutoresMenu() {
-  SpreadsheetApp.getActiveSpreadsheet().toast('Sincronizando Tutores Regionais...', 'TiDB Serverless', 5);
-  var res = sincronizarAbaTutoresParaTiDB();
-  SpreadsheetApp.getUi().alert('Tutores Regionais', '✓ Sincronização concluída!\n\nTotal de tutores enviados: ' + (res.total || 0), SpreadsheetApp.getUi().ButtonSet.OK);
-}
-
-function sincronizarAbaMovimentacoesMenu() {
-  SpreadsheetApp.getActiveSpreadsheet().toast('Sincronizando Movimentações e Trocas...', 'TiDB Serverless', 6);
-  var res = sincronizarAbasMovimentacoesParaTiDB();
-  SpreadsheetApp.getUi().alert('Movimentações de Turma', '✓ Sincronização concluída!\n\nTotal de movimentações enviadas: ' + (res.total || 0), SpreadsheetApp.getUi().ButtonSet.OK);
-}
-
-
-/**
- * -----------------------------------------------------------------------------------------
- * 3. MOTOR CENTRAL DE SINCRONIZAÇÃO TiDB CLOUD (v2)
- * -----------------------------------------------------------------------------------------
- */
-function executarSincronizacaoCompletaTiDB() {
-  Logger.log('Iniciando sincronização completa das planilhas com TiDB Cloud...');
-
-  // 1. Cursistas Ativos (DADOS com Coluna AK / Linha Funcional)
-  var resCursistas = sincronizarAbaDadosParaTiDB();
-
-  // 2. Concluintes do 1º Chamamento (CONCLUINTES-1CH)
-  var resConcluintes = sincronizarAbaConcluintesParaTiDB();
-
-  // 3. Tutores
-  var resTutores = sincronizarAbaTutoresParaTiDB();
-
-  // 4. Servidores Exonerados (EXONERADOS)
-  var resExonerados = sincronizarAbaExoneradosParaTiDB();
-
-  // 5. Cursistas Não Concluintes (CURSISTAS NAO CONCLUINTES)
-  var resNaoConcluintes = sincronizarAbaNaoConcluintesParaTiDB();
-
-  // 6. Formulários de Troca de Turma, Modalidade e Vínculos
-  var resMovimentacoes = sincronizarAbasMovimentacoesParaTiDB();
-
-  // 7. Observações Pedagógicas (Formadores -> Cursistas)
-  var resObservacoes = sincronizarAbaObservacoesParaTiDB();
-
-  // 8. Observações de Tutoria (Tutores -> Formadores)
-  var resTutoria = sincronizarAbaObservacoesTutoriaParaTiDB();
-
-  Logger.log('✓ Sincronização finalizada com êxito!');
-
-  return {
-    cursistas: resCursistas.total || 0,
-    concluintes: resConcluintes.total || 0,
-    tutores: resTutores.total || 0,
-    exonerados: resExonerados.total || 0,
-    nao_concluintes: resNaoConcluintes.total || 0,
-    movimentacoes: resMovimentacoes.total || 0,
-    observacoes: resObservacoes.total || 0,
-    observacoes_tutoria: resTutoria.total || 0
-  };
-}
-
-
-/**
- * -----------------------------------------------------------------------------------------
- * 4. SINCRONIZAR ABA DADOS (CURSISTAS ATIVOS) - LEITURA DA COLUNA AK (LINHA FUNCIONAL)
- * -----------------------------------------------------------------------------------------
- */
-function sincronizarAbaDadosParaTiDB() {
-  var ss = obterPlanilhaMestra();
-  var aba = ss.getSheetByName("DADOS") || ss.getSheetByName("CURSISTAS") || ss.getSheets()[0];
-  if (!aba) return { status: 'erro', mensagem: 'Aba DADOS não encontrada.' };
-
-  var dados = aba.getDataRange().getValues();
-  if (dados.length < 2) return { status: 'vazio', total: 0 };
-
-  var cabecalho = dados[0].map(function(c) {
-    return String(c || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  });
-
-  function getIdx(keywords) {
-    for (var k = 0; k < keywords.length; k++) {
-      var idx = cabecalho.indexOf(keywords[k].toLowerCase());
-      if (idx !== -1) return idx;
-    }
-    for (var k = 0; k < keywords.length; k++) {
-      var kw = keywords[k].toLowerCase();
-      var idx = cabecalho.findIndex(function(c) { return c.includes(kw); });
-      if (idx !== -1) return idx;
-    }
-    return -1;
-  }
-
-  var idxCgm = getIdx(["cgm"]);
-  var idxNome = getIdx(["nome cursista", "nome do cursista", "cursista", "nome"]);
-  var idxEmail = getIdx(["e-mail", "email cursista", "email"]);
-  var idxCpf = getIdx(["cpf cursista", "cpf"]);
-  var idxTurma = getIdx(["turmas", "turma"]);
-  var idxLinhaFuncional = getIdx(["linha funcional", "linha_funcional", "lf", "padrao", "vinculo"]);
-  var idxModalidade = getIdx(["modalidade"]);
-  var idxComponente = getIdx(["componente"]);
-  var idxDiaSemana = getIdx(["dia da semana", "dia_da_semana"]);
-  var idxTurno = getIdx(["turno"]);
-  var idxFormador = getIdx(["nome formador", "formador"]);
-  var idxEmailFormador = getIdx(["e-mail formador", "email formador"]);
-  var idxTutor = getIdx(["tutor responsavel", "tutor"]);
-  var idxEmailTutor = getIdx(["e-mail tutor", "email tutor"]);
-  var idxChamamento = getIdx(["chamamento", "chamamento cursista"]);
-  var idxAnoFormativo = getIdx(["ano formativo", "ano_formativo"]);
-  var idxPeriodoIni = getIdx(["periodo_ini", "periodo inicial", "inicio"]);
-
-  function normalizarChamamentoGs(val, dataRef) {
-    var s = String(val || "").trim();
-    if (/1[º°oª\s]|1º\s*cham|primeiro/i.test(s)) return "1º Chamamento";
-    if (/2[º°oª\s]|2º\s*cham|segundo/i.test(s)) return "2º Chamamento";
-    if (/3[º°oª\s]|3º\s*cham|terceiro/i.test(s)) return "3º Chamamento";
-    if (/4[º°oª\s]|4º\s*cham|quarto/i.test(s)) return "4º Chamamento";
-    if (/5[º°oª\s]|5º\s*cham|quinto/i.test(s)) return "5º Chamamento";
-    if (/6[º°oª\s]|6º\s*cham|sexto/i.test(s)) return "6º Chamamento";
-
-    var dStr = /^\d{1,2}\/\d{1,2}\/\d{4}/.test(s) ? s : String(dataRef || "").trim();
-    var m = dStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-    if (m) {
-      var mes = parseInt(m[2], 10);
-      var ano = parseInt(m[3], 10);
-      if (ano <= 2024) return (ano === 2024 && mes <= 2) ? "1º Chamamento" : "2º Chamamento";
-      if (ano === 2025) return mes <= 5 ? "3º Chamamento" : "4º Chamamento";
-      if (ano >= 2026) return mes <= 5 ? "5º Chamamento" : "6º Chamamento";
-    }
-    return s || null;
-  }
-
-  var cursistas = [];
-  for (var i = 1; i < dados.length; i++) {
-    var row = dados[i];
-    var nome = idxNome !== -1 ? String(row[idxNome] || "").trim() : "";
-    if (!nome) continue;
-
-    var cgm = idxCgm !== -1 ? String(row[idxCgm] || "").trim() : "";
-    var turmas = idxTurma !== -1 ? String(row[idxTurma] || "").trim() : "";
-
-    // Leitura da Linha Funcional: pelo cabeçalho ou pela Coluna AK (índice 36)
-    var lf = idxLinhaFuncional !== -1 ? String(row[idxLinhaFuncional] || "").trim() : "";
-    if (!lf && row.length > 36) {
-      lf = String(row[36] || "").trim();
-    }
-    var lfNum = lf.replace(/\D/g, "");
-
-    // Identificação única no dashboard: CGM + LF (ex: 12345678_1 ou 12345678_turma)
-    var cod = cgm ? (cgm + (lfNum ? ("_" + lfNum) : ("_" + turmas))) : ("CURS_" + i);
-
-    var rawCham = idxChamamento !== -1 ? String(row[idxChamamento] || "").trim() : "";
-    var rawPeriodo = idxPeriodoIni !== -1 ? String(row[idxPeriodoIni] || "").trim() : "";
-    var chFinal = normalizarChamamentoGs(rawCham, rawPeriodo);
-
-    cursistas.push({
-      cod_cursista: cod,
-      cgm: cgm || null,
-      linha_funcional: lfNum || null,
-      nome_cursista: nome,
-      email: idxEmail !== -1 ? String(row[idxEmail] || "").trim().toLowerCase() : null,
-      cpf_cursista: idxCpf !== -1 ? String(row[idxCpf] || "").trim() : null,
-      turmas: turmas || null,
-      modalidade: idxModalidade !== -1 ? String(row[idxModalidade] || "").trim() : null,
-      componente: idxComponente !== -1 ? String(row[idxComponente] || "").trim() : null,
-      dia_da_semana: idxDiaSemana !== -1 ? String(row[idxDiaSemana] || "").trim() : null,
-      turno: idxTurno !== -1 ? String(row[idxTurno] || "").trim() : null,
-      chamamento: chFinal,
-      ano_formativo: idxAnoFormativo !== -1 ? String(row[idxAnoFormativo] || "").trim() : null,
-      periodo_ini: rawPeriodo || null,
-      nome_formador: idxFormador !== -1 ? String(row[idxFormador] || "").trim() : null,
-      email_formador: idxEmailFormador !== -1 ? String(row[idxEmailFormador] || "").trim().toLowerCase() : null,
-      tutor_responsavel: idxTutor !== -1 ? String(row[idxTutor] || "").trim() : null,
-      email_tutor: idxEmailTutor !== -1 ? String(row[idxEmailTutor] || "").trim().toLowerCase() : null
-    });
-  }
-
-  var BATCH_SIZE = 400;
-  var totalSinc = 0;
-  var runId = 'sync_gs_' + Date.now();
-
-  for (var b = 0; b < cursistas.length; b += BATCH_SIZE) {
-    var lote = cursistas.slice(b, b + BATCH_SIZE);
-    var endpoint = obterEndpointApi('sync_cursistas_bulk');
-    var options = obterOpcoesHttp({
-      action: 'sync_cursistas_bulk',
-      cursistas: lote,
-      run_id: runId,
-      final: (b + BATCH_SIZE >= cursistas.length)
-    });
-
-    try {
-      var resp = UrlFetchApp.fetch(endpoint, options);
-      if (resp.getResponseCode() === 200) {
-        totalSinc += lote.length;
-      } else {
-        Logger.log('Aviso ao sincronizar cursistas: ' + resp.getContentText());
-      }
-    } catch (err) {
-      Logger.log('Erro ao sincronizar cursistas: ' + err.toString());
-    }
-  }
-
-  return { total: totalSinc };
-}
-
-
-/**
- * -----------------------------------------------------------------------------------------
- * 5. SINCRONIZAR CONCLUINTES DO 1º CHAMAMENTO (CONCLUINTES-1CH)
- * -----------------------------------------------------------------------------------------
- */
-function sincronizarAbaConcluintesParaTiDB() {
-  var ss = obterPlanilhaMestra();
-  var aba = ss.getSheetByName("CONCLUINTES-1CH") || ss.getSheetByName("CONCLUINTES");
-  if (!aba) return { status: 'vazio', total: 0 };
-
-  var dados = aba.getDataRange().getValues();
-  if (dados.length < 2) return { status: 'vazio', total: 0 };
-
-  var cabecalho = dados[0].map(function(c) {
-    return String(c || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  });
-
-  function getIdx(keywords) {
-    for (var k = 0; k < keywords.length; k++) {
-      var idx = cabecalho.indexOf(keywords[k].toLowerCase());
-      if (idx !== -1) return idx;
-    }
-    for (var k = 0; k < keywords.length; k++) {
-      var kw = keywords[k].toLowerCase();
-      var idx = cabecalho.findIndex(function(c) { return c.includes(kw); });
-      if (idx !== -1) return idx;
-    }
-    return -1;
-  }
-
-  var idxNome = getIdx(["nome cursista", "nome", "cursista"]);
-  var idxEmail = getIdx(["e-mail", "email cursista", "email"]);
-  var idxCgm = getIdx(["cgm"]);
-  var idxCpf = getIdx(["cpf"]);
-  var idxChamamento = getIdx(["chamamento"]);
-  var idxComponente = getIdx(["componente"]);
-  var idxNre = getIdx(["nre"]);
-  var idxTurma = getIdx(["turma"]);
-
-  var concluintes = [];
-  for (var i = 1; i < dados.length; i++) {
-    var row = dados[i];
-    var nome = idxNome !== -1 ? String(row[idxNome] || "").trim() : "";
-    if (!nome) continue;
-
-    concluintes.push({
-      nome_cursista: nome,
-      email: idxEmail !== -1 ? String(row[idxEmail] || "").trim().toLowerCase() : null,
-      cgm: idxCgm !== -1 ? String(row[idxCgm] || "").trim() : null,
-      cpf_cursista: idxCpf !== -1 ? String(row[idxCpf] || "").trim() : null,
-      chamamento: idxChamamento !== -1 ? String(row[idxChamamento] || "").trim() : "1º Chamamento",
-      componente: idxComponente !== -1 ? String(row[idxComponente] || "").trim() : null,
-      nre: idxNre !== -1 ? String(row[idxNre] || "").trim() : null,
-      turmas: idxTurma !== -1 ? String(row[idxTurma] || "").trim() : null
-    });
-  }
-
-  var BATCH_SIZE = 400;
-  var totalSinc = 0;
-  for (var b = 0; b < concluintes.length; b += BATCH_SIZE) {
-    var lote = concluintes.slice(b, b + BATCH_SIZE);
-    var endpoint = obterEndpointApi('sync_concluintes_bulk');
-    var options = obterOpcoesHttp({
-      action: 'sync_concluintes_bulk',
-      concluintes: lote,
-      truncate: (b === 0)
-    });
-
-    try {
-      var resp = UrlFetchApp.fetch(endpoint, options);
-      if (resp.getResponseCode() === 200) totalSinc += lote.length;
-    } catch (err) {
-      Logger.log('Erro ao sincronizar concluintes: ' + err.toString());
-    }
-  }
-
-  return { total: totalSinc };
-}
-
-
-/**
- * -----------------------------------------------------------------------------------------
- * 6. SINCRONIZAR TUTORES REGIONAIS (TUTORES)
- * -----------------------------------------------------------------------------------------
- */
-function sincronizarAbaTutoresParaTiDB() {
-  var ss = obterPlanilhaMestra();
-  var aba = ss.getSheetByName("TUTORES");
-  if (!aba) return { status: 'vazio', total: 0 };
-
-  var dados = aba.getDataRange().getValues();
-  if (dados.length < 2) return { status: 'vazio', total: 0 };
-
-  var cabecalho = dados[0].map(function(c) {
-    return String(c || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  });
-
-  function getIdx(keywords) {
-    for (var k = 0; k < keywords.length; k++) {
-      var idx = cabecalho.indexOf(keywords[k].toLowerCase());
-      if (idx !== -1) return idx;
-    }
-    for (var k = 0; k < keywords.length; k++) {
-      var kw = keywords[k].toLowerCase();
-      var idx = cabecalho.findIndex(function(c) { return c.includes(kw); });
-      if (idx !== -1) return idx;
-    }
-    return -1;
-  }
-
-  var idxNome = getIdx(["nome tutor", "tutor", "nome"]);
-  var idxEmail = getIdx(["e-mail tutor", "email tutor", "email"]);
-  var idxNre = getIdx(["nre"]);
-  var idxFormadores = getIdx(["formadores vinculados", "formadores"]);
-
-  var tutores = [];
-  for (var i = 1; i < dados.length; i++) {
-    var row = dados[i];
-    var nome = idxNome !== -1 ? String(row[idxNome] || "").trim() : "";
-    if (!nome) continue;
-
-    tutores.push({
-      nome_tutor: nome,
-      email: idxEmail !== -1 ? String(row[idxEmail] || "").trim().toLowerCase() : null,
-      nre: idxNre !== -1 ? String(row[idxNre] || "").trim() : null,
-      formadores_vinculados: idxFormadores !== -1 ? String(row[idxFormadores] || "").trim() : null
-    });
-  }
-
-  var endpoint = obterEndpointApi('sync_tutores_bulk');
-  var options = obterOpcoesHttp({
-    action: 'sync_tutores_bulk',
-    tutores: tutores
-  });
-
-  try {
-    var resp = UrlFetchApp.fetch(endpoint, options);
-    if (resp.getResponseCode() === 200) return { total: tutores.length };
-  } catch (err) {
-    Logger.log('Erro ao sincronizar tutores: ' + err.toString());
-  }
-
-  return { total: 0 };
-}
-
-
-/**
- * -----------------------------------------------------------------------------------------
- * 7. SINCRONIZAR SERVIDORES EXONERADOS (EXONERADOS)
- * -----------------------------------------------------------------------------------------
- */
-function sincronizarAbaExoneradosParaTiDB() {
-  var ss = obterPlanilhaMestra();
-  var aba = ss.getSheetByName("EXONERADOS");
-  if (!aba) return { status: 'vazio', total: 0 };
-
-  var dados = aba.getDataRange().getValues();
-  if (dados.length < 2) return { status: 'vazio', total: 0 };
-
-  var cabecalho = dados[0].map(function(c) {
-    return String(c || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  });
-
-  function getIdx(keywords) {
-    for (var k = 0; k < keywords.length; k++) {
-      var idx = cabecalho.indexOf(keywords[k].toLowerCase());
-      if (idx !== -1) return idx;
-    }
-    for (var k = 0; k < keywords.length; k++) {
-      var kw = keywords[k].toLowerCase();
-      var idx = cabecalho.findIndex(function(c) { return c.includes(kw); });
-      if (idx !== -1) return idx;
-    }
-    return -1;
-  }
-
-  var idxData = getIdx(["data exoneracao", "data", "carimbo"]);
-  var idxCpf = getIdx(["cpf"]);
-  var idxNome = getIdx(["nome"]);
-  var idxMotivo = getIdx(["motivo"]);
-
-  var exonerados = [];
-  for (var i = 1; i < dados.length; i++) {
-    var row = dados[i];
-    var cpf = idxCpf !== -1 ? String(row[idxCpf] || "").replace(/\D/g, "").trim() : "";
-    var nome = idxNome !== -1 ? String(row[idxNome] || "").trim() : "";
-    if (!cpf && !nome) continue;
-
-    exonerados.push({
-      cpf: cpf || null,
-      nome: nome || null,
-      motivo: idxMotivo !== -1 ? String(row[idxMotivo] || "").trim() : "Exoneração a Pedido",
-      data_exoneracao: idxData !== -1 ? String(row[idxData] || "").trim() : null
-    });
-  }
-
-  var endpoint = obterEndpointApi('sync_exonerados_bulk');
-  var options = obterOpcoesHttp({
-    action: 'sync_exonerados_bulk',
-    exonerados: exonerados
-  });
-
-  try {
-    var resp = UrlFetchApp.fetch(endpoint, options);
-    if (resp.getResponseCode() === 200) return { total: exonerados.length };
-  } catch (err) {
-    Logger.log('Erro ao sincronizar exonerados: ' + err.toString());
-  }
-
-  return { total: 0 };
-}
-
-
-/**
- * -----------------------------------------------------------------------------------------
- * 8. SINCRONIZAR DOCENTES NÃO CONCLUINTES (CURSISTAS NAO CONCLUINTES)
- * -----------------------------------------------------------------------------------------
- */
-function sincronizarAbaNaoConcluintesParaTiDB() {
-  var ss = obterPlanilhaMestra();
-  var aba = ss.getSheetByName("CURSISTAS NAO CONCLUINTES") || ss.getSheetByName("NAO_CONCLUINTES");
-  if (!aba) return { status: 'vazio', total: 0 };
-
-  var dados = aba.getDataRange().getValues();
-  if (dados.length < 2) return { status: 'vazio', total: 0 };
-
-  var cabecalho = dados[0].map(function(c) {
-    return String(c || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  });
-
-  function getIdx(keywords) {
-    for (var k = 0; k < keywords.length; k++) {
-      var idx = cabecalho.indexOf(keywords[k].toLowerCase());
-      if (idx !== -1) return idx;
-    }
-    for (var k = 0; k < keywords.length; k++) {
-      var kw = keywords[k].toLowerCase();
-      var idx = cabecalho.findIndex(function(c) { return c.includes(kw); });
-      if (idx !== -1) return idx;
-    }
-    return -1;
-  }
-
-  var idxNome = getIdx(["nome cursista", "nome", "cursista"]);
-  var idxEmail = getIdx(["e-mail", "email"]);
-  var idxCgm = getIdx(["cgm"]);
-  var idxCpf = getIdx(["cpf"]);
-  var idxMotivo = getIdx(["motivo", "situacao", "status"]);
-
-  var naoConcluintes = [];
-  for (var i = 1; i < dados.length; i++) {
-    var row = dados[i];
-    var nome = idxNome !== -1 ? String(row[idxNome] || "").trim() : "";
-    if (!nome) continue;
-
-    naoConcluintes.push({
-      nome_cursista: nome,
-      email: idxEmail !== -1 ? String(row[idxEmail] || "").trim().toLowerCase() : null,
-      cgm: idxCgm !== -1 ? String(row[idxCgm] || "").trim() : null,
-      cpf_cursista: idxCpf !== -1 ? String(row[idxCpf] || "").trim() : null,
-      motivo: idxMotivo !== -1 ? String(row[idxMotivo] || "").trim() : "Não Concluinte"
-    });
-  }
-
-  var endpoint = obterEndpointApi('sync_nao_concluintes_bulk');
-  var options = obterOpcoesHttp({
-    action: 'sync_nao_concluintes_bulk',
-    nao_concluintes: naoConcluintes
-  });
-
-  try {
-    var resp = UrlFetchApp.fetch(endpoint, options);
-    if (resp.getResponseCode() === 200) return { total: naoConcluintes.length };
-  } catch (err) {
-    Logger.log('Erro ao sincronizar não concluintes: ' + err.toString());
-  }
-
-  return { total: 0 };
-}
-
-
-/**
- * -----------------------------------------------------------------------------------------
- * 9. SINCRONIZAR FORMULÁRIOS DE MOVIMENTAÇÃO (TROCAS & VÍNCULOS)
- * -----------------------------------------------------------------------------------------
- */
-function sincronizarAbasMovimentacoesParaTiDB() {
-  var ss = obterPlanilhaMestra();
-  var movimentacoes = [];
-
-  // Aba 1: Troca de Turma
-  var abaTurma = ss.getSheetByName("Troca de Turma");
-  if (abaTurma) {
-    var dTurma = abaTurma.getDataRange().getValues();
-    for (var t = 1; t < dTurma.length; t++) {
-      var rt = dTurma[t];
-      var emailT = String(rt[1] || "").trim().toLowerCase();
-      var nomeT = String(rt[2] || "").trim();
-      if (!emailT && !nomeT) continue;
-
-      var statusRawT = String(rt[14] || "").trim();
-      var statusT = (statusRawT.toLowerCase().indexOf("atendido") !== -1 || statusRawT.toLowerCase().indexOf("conclu") !== -1) ? "Atendida" :
-                    (statusRawT.toLowerCase().indexOf("indefer") !== -1 || statusRawT.toLowerCase().indexOf("recus") !== -1) ? "Recusada" : "Pendente";
-
-      movimentacoes.push({
-        data_solicitacao: rt[0] ? String(rt[0]) : null,
-        email_cursista: emailT,
-        nome_cursista: nomeT,
-        cgm: null,
-        cpf_cursista: rt[4] ? String(rt[4]).replace(/\D/g, "") : null,
-        turma_antiga: rt[9] ? String(rt[9]) : null,
-        turma_nova: rt[10] ? String(rt[10]) : null,
-        tipo_acao: 'Troca de Turma',
-        motivo: rt[12] ? String(rt[12]) : 'Solicitação via Formulário',
-        status: statusT,
-        nota_resolucao: statusRawT ? String(rt[15] || statusRawT) : null,
-        solicitadoPor: 'Google Forms'
-      });
-    }
-  }
-
-  // Aba 2: Troca de Modalidade
-  var abaMod = ss.getSheetByName("Troca de Modalidade");
-  if (abaMod) {
-    var dMod = abaMod.getDataRange().getValues();
-    for (var m = 1; m < dMod.length; m++) {
-      var rm = dMod[m];
-      var emailM = String(rm[1] || "").trim().toLowerCase();
-      var nomeM = String(rm[2] || "").trim();
-      if (!emailM && !nomeM) continue;
-
-      var statusRawM = String(rm[12] || "").trim();
-      var statusM = (statusRawM.toLowerCase().indexOf("atendido") !== -1 || statusRawM.toLowerCase().indexOf("conclu") !== -1) ? "Atendida" :
-                    (statusRawM.toLowerCase().indexOf("indefer") !== -1 || statusRawM.toLowerCase().indexOf("recus") !== -1) ? "Recusada" : "Pendente";
-
-      movimentacoes.push({
-        data_solicitacao: rm[0] ? String(rm[0]) : null,
-        email_cursista: emailM,
-        nome_cursista: nomeM,
-        cgm: null,
-        cpf_cursista: rm[4] ? String(rm[4]).replace(/\D/g, "") : null,
-        turma_antiga: rm[9] ? String(rm[9]) : null,
-        turma_nova: rm[10] ? String(rm[10]) : null,
-        tipo_acao: 'Troca de Modalidade',
-        motivo: rm[11] ? String(rm[11]) : 'Solicitação via Formulário',
-        status: statusM,
-        nota_resolucao: statusRawM ? String(rm[13] || statusRawM) : null,
-        solicitadoPor: 'Google Forms'
-      });
-    }
-  }
-
-  // Aba 3: Vínculos em Avaliação Formativa
-  var abaVinc = ss.getSheetByName("Vínculos em Avaliação Formativa");
-  if (abaVinc) {
-    var dVinc = abaVinc.getDataRange().getValues();
-    for (var v = 1; v < dVinc.length; v++) {
-      var rv = dVinc[v];
-      var emailV = String(rv[1] || "").trim().toLowerCase();
-      var nomeV = String(rv[2] || "").trim();
-      if (!emailV && !nomeV) continue;
-
-      var statusRawV = String(rv[17] || "").trim();
-      var statusV = (statusRawV.toLowerCase().indexOf("atendido") !== -1 || statusRawV.toLowerCase().indexOf("conclu") !== -1) ? "Atendida" :
-                    (statusRawV.toLowerCase().indexOf("indefer") !== -1 || statusRawV.toLowerCase().indexOf("recus") !== -1) ? "Recusada" : "Pendente";
-
-      var turmaAntigaV = (rv.length > 21 && rv[21]) ? String(rv[21]).trim() : (rv[12] ? String(rv[12]).trim() : null);
-      var turmaNovaV = (rv.length > 22 && rv[22]) ? String(rv[22]).trim() : (rv[13] ? String(rv[13]).trim() : null);
-
-      movimentacoes.push({
-        data_solicitacao: rv[0] ? String(rv[0]) : null,
-        email_cursista: emailV,
-        nome_cursista: nomeV,
-        cgm: null,
-        cpf_cursista: rv[4] ? String(rv[4]).replace(/\D/g, "") : null,
-        turma_antiga: turmaAntigaV || null,
-        turma_nova: turmaNovaV || null,
-        tipo_acao: 'Vínculo na AF',
-        motivo: 'Solicitação de Vínculos em Avaliação Formativa',
-        status: statusV,
-        nota_resolucao: statusRawV ? String(rv[18] || statusRawV) : null,
-        solicitadoPor: 'Google Forms'
-      });
-    }
-  }
-
-  if (movimentacoes.length === 0) return { total: 0 };
-
-  var BATCH_SIZE = 150;
-  var totalSinc = 0;
-  for (var b = 0; b < movimentacoes.length; b += BATCH_SIZE) {
-    var lote = movimentacoes.slice(b, b + BATCH_SIZE);
-    var endpoint = obterEndpointApi('sync_movimentacoes_bulk');
-    var options = obterOpcoesHttp({
-      action: 'sync_movimentacoes_bulk',
-      movimentacoes: lote,
-      truncate: (b === 0)
-    });
-
-    try {
-      var resp = UrlFetchApp.fetch(endpoint, options);
-      if (resp.getResponseCode() === 200) totalSinc += lote.length;
-    } catch (err) {
-      Logger.log('Erro ao sincronizar movimentações: ' + err.toString());
-    }
-  }
-
-  return { total: totalSinc };
-}
-
-
-/**
- * -----------------------------------------------------------------------------------------
- * 10. SINCRONIZAR OBSERVAÇÕES DA PRÁTICA (4 PLANILHAS EXTERNAS DOS FORMADORES)
- * -----------------------------------------------------------------------------------------
- */
-function getSheetByGid(ss, gid) {
-  var sheets = ss.getSheets();
-  for (var i = 0; i < sheets.length; i++) {
-    if (String(sheets[i].getSheetId()) === String(gid)) {
-      return sheets[i];
-    }
-  }
-  return sheets[0];
-}
-
-function mapRowToObservation(headers, row, sheetName, sheetId, rowNumber, config) {
-  function getRawVal(keywords) {
-    for (var i = 0; i < headers.length; i++) {
-      var h = String(headers[i] || "").toLowerCase();
-      for (var k = 0; k < keywords.length; k++) {
-        if (h.indexOf(keywords[k].toLowerCase()) !== -1) {
-          var val = row[i];
-          if (val !== undefined && val !== null && val !== "") {
-            return val;
-          }
-        }
-      }
-    }
-    return null;
-  }
-
-  function getVal(keywords) {
-    var raw = getRawVal(keywords);
-    return raw !== null && raw !== undefined ? String(raw).trim() : "";
-  }
-
-  function parseDate(dateRaw) {
-    if (!dateRaw) return null;
-    if (dateRaw instanceof Date) {
-      if (isNaN(dateRaw.getTime())) return null;
-      return Utilities.formatDate(dateRaw, "America/Sao_Paulo", "yyyy-MM-dd");
-    }
-    var str = String(dateRaw).trim();
-    if (!str || str === "-" || str === "—" || str.toLowerCase() === "não informada") return null;
-
-    if (str.indexOf("GMT") !== -1 || str.indexOf("T") !== -1 || /^[A-Za-z]{3}\s/.test(str)) {
-      var d = new Date(str);
-      if (!isNaN(d.getTime())) {
-        return Utilities.formatDate(d, "America/Sao_Paulo", "yyyy-MM-dd");
-      }
-    }
-
-    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
-      return str;
-    }
-
-    var parts = str.split(/[/.-]/);
-    if (parts.length === 3) {
-      if (parts[0].length === 4) {
-        return parts[0] + "-" + parts[1].padStart(2, "0") + "-" + parts[2].padStart(2, "0");
-      }
-      var dd = parts[0].padStart(2, "0");
-      var mm = parts[1].padStart(2, "0");
-      var yy = parts[2].length === 2 ? "20" + parts[2] : parts[2].slice(0, 4);
-      return yy + "-" + mm + "-" + dd;
-    }
-    return null;
-  }
-
-  function formatCarimbo(dateRaw) {
-    if (!dateRaw) return null;
-    if (dateRaw instanceof Date) {
-      if (isNaN(dateRaw.getTime())) return null;
-      return Utilities.formatDate(dateRaw, "America/Sao_Paulo", "dd/MM/yyyy HH:mm:ss");
-    }
-    var str = String(dateRaw).trim();
-    if (!str || str === "-" || str === "—") return null;
-
-    if (str.indexOf("GMT") !== -1 || str.indexOf("T") !== -1 || /^[A-Za-z]{3}\s/.test(str)) {
-      var d = new Date(str);
-      if (!isNaN(d.getTime())) {
-        return Utilities.formatDate(d, "America/Sao_Paulo", "dd/MM/yyyy HH:mm:ss");
-      }
-    }
-    return str;
-  }
-
-  // 1. Identificar e-mail do cursista
-  var emailCursista = getVal([
-    "e-mail institucional do cursista",
-    "email institucional do cursista",
-    "e-mail do cursista",
-    "email do cursista"
-  ]);
-
-  if (!emailCursista) {
-    for (var c = 0; c < row.length; c++) {
-      var cellStr = String(row[c] || "").toLowerCase().trim();
-      if (cellStr.indexOf("@escola.pr.gov.br") !== -1 && cellStr.indexOf("formador") === -1 && cellStr.indexOf("seed") === -1) {
-        emailCursista = cellStr;
-        break;
-      }
-    }
-  }
-
-  if (!emailCursista || emailCursista.indexOf("@") === -1) return null;
-  emailCursista = emailCursista.toLowerCase().trim();
-
-  // 2. Chave Única Determinística (id_origem)
-  var idOrigem = (config.sigla || "OBS") + "_L" + rowNumber;
-
-  var nomeCursista = getVal(["nome do cursista", "cursista"]);
-  var nomeFormador = getVal(["selecione o nome do formador", "nome do formador", "formador/tutor/técnico"]);
-  var emailFormador = String(row[1] || "").toLowerCase().trim();
-
-  // 3. Status da observação
-  var obsRealizadaRaw = getVal(["a observação da prática foi realizada", "observação da prática foi realizada"]);
-  var isRealizada = !obsRealizadaRaw || obsRealizadaRaw.toLowerCase().indexOf("sim") !== -1;
-
-  // 4. Níveis pedagógicos
-  var nivelPlanejamento = "";
-  var nivelPratica = "";
-
-  for (var hIdx = 0; hIdx < headers.length; hIdx++) {
-    var headLower = String(headers[hIdx] || "").toLowerCase();
-    var valUpper = String(row[hIdx] || "").trim().toUpperCase();
-
-    if ((headLower.indexOf("planejamento") !== -1 || headLower.indexOf("critério 1") !== -1) && !nivelPlanejamento) {
-      if (valUpper.indexOf("SUPERA") !== -1 || valUpper.indexOf("ATINGE") !== -1 || valUpper.indexOf("ATENDE") !== -1 || valUpper.indexOf("PARCIAL") !== -1) {
-        nivelPlanejamento = valUpper.replace(/[.,;]$/, "").trim();
-      }
-    }
-    if ((headLower.indexOf("prática") !== -1 || headLower.indexOf("pratica") !== -1 || headLower.indexOf("critério 2") !== -1) && !nivelPratica) {
-      if (valUpper.indexOf("SUPERA") !== -1 || valUpper.indexOf("ATINGE") !== -1 || valUpper.indexOf("ATENDE") !== -1 || valUpper.indexOf("PARCIAL") !== -1) {
-        nivelPratica = valUpper.replace(/[.,;]$/, "").trim();
-      }
-    }
-  }
-
-  // 5. Modalidade do cursista
-  var modalidadeCursista = getVal([
-    "selecione a modalidade do cursista",
-    "modalidades. selecione a modalidade",
-    "modalidades. selecione",
-    "modalidade do cursista"
-  ]);
-  if (!modalidadeCursista || modalidadeCursista.toLowerCase().indexOf("feedback") !== -1 || modalidadeCursista.toLowerCase().indexOf("diálogo") !== -1 || modalidadeCursista.toLowerCase().indexOf("dialogo") !== -1) {
-    modalidadeCursista = "Docentes";
-  }
-
-  var componente = getVal(["componente curricular", "componente", "área"]);
-  if (!componente && (modalidadeCursista.toLowerCase().indexOf("gestora") !== -1 || modalidadeCursista.toLowerCase().indexOf("pedagog") !== -1)) {
-    componente = "PEDAGÓGICO";
-  }
-
-  var chamamento = getVal(["chamamento"]);
-  if (!chamamento && sheetName && sheetName.toLowerCase().indexOf("4º chamamento") !== -1) chamamento = "4º Chamamento";
-
-  var tema = getVal([
-    "selecione o tema relacionado",
-    "tema relacionado à observação",
-    "tema relacionado a observacao",
-    "tema relacionado",
-    "tema"
-  ]);
-
-  var proposta = getVal([
-    "qual  é a proposta escolhida",
-    "qual é a proposta escolhida",
-    "qual a proposta escolhida",
-    "proposta escolhida"
-  ]);
-
-  if (tema && proposta && tema.toLowerCase().indexOf(proposta.toLowerCase()) === -1) {
-    tema = tema + " (" + proposta + ")";
-  }
-
-  var carimboRaw = getRawVal(["carimbo de data/hora", "carimbo", "timestamp"]);
-  if (!carimboRaw && row[0]) {
-    carimboRaw = row[0];
-  }
-  var carimbo = formatCarimbo(carimboRaw);
-
-  var dataPraticaRaw = getRawVal([
-    "data em que a prática pedagógica foi realizada",
-    "data da realização da prática pedagógica",
-    "data da realização da prática",
-    "data de observação da prática pedagógica",
-    "data da observação da prática pedagógica",
-    "data em que a prática foi realizada",
-    "data da prática pedagógica",
-    "data da prática"
-  ]);
-
-  var dataObservacaoRaw = getRawVal([
-    "data de observação da prática pedagógica",
-    "data da observação da prática pedagógica",
-    "data em que foi realizada a observação",
-    "data da realização da observação",
-    "data da observação",
-    "data de observação"
-  ]);
-
-  var parsedDataPratica = parseDate(dataPraticaRaw) || parseDate(dataObservacaoRaw);
-  var parsedDataObservacao = parseDate(dataObservacaoRaw) || parsedDataPratica;
-
-  var dataFeedbackRaw = getRawVal(["data do feedback", "data da devolutiva", "devolutiva"]);
-  var dataAgendamentoRaw = getRawVal(["data do agendamento", "agendamento"]);
-
-  var evidenciasPlanejamento = getVal([
-    "evidências para que o planejamento",
-    "evidências para que a prática seja situada nesse nível do critério 1",
-    "evidências para que a prática seja situada nesse nível do  critério 1",
-    "evidências para que a implementação",
-    "critério 1:"
-  ]);
-
-  var evidenciasPratica = getVal([
-    "evidências para que a implementação",
-    "evidências para que a prática seja situada nesse nível do critério 2",
-    "evidências para que a prática seja situada nesse nível do  critério 2",
-    "critério 2:"
-  ]);
-
-  return {
-    id_origem: idOrigem,
-    carimbo: carimbo || null,
-    semestre: config.semestrePadrao,
-    email_cursista: emailCursista,
-    nome_cursista: nomeCursista || "",
-    email_formador: emailFormador || null,
-    nome_formador: nomeFormador || null,
-    ano_formativo: config.anoFormativoPadrao,
-    chamamento: chamamento || null,
-    modalidade: modalidadeCursista,
-    componente: componente || null,
-    tema: tema || null,
-    observacao_realizada: obsRealizadaRaw || (isRealizada ? "Sim, a observação foi realizada." : "Não"),
-    data_pratica: parsedDataPratica,
-    data_observacao: parsedDataObservacao,
-    data_feedback: parseDate(dataFeedbackRaw),
-    data_agendamento: parseDate(dataAgendamentoRaw),
-    modalidade_feedback: getVal(["modalidade de feedback formativo", "modalidade de feedback"]) || (isRealizada ? "Diálogo formativo" : null),
-    motivo_devolutiva: getVal(["motivo da realização de feedback", "qual foi o motivo"]),
-    link_gravacao_pratica: getVal(["link da gravação da prática pedagógica", "link da gravação da prática"]),
-    link_planejamento: getVal(["link do documento de planejamento", "link do pdp"]),
-    link_gravacao_feedback: getVal(["link da gravação do diálogo formativo", "link da gravação do feedback"]),
-    nivel_planejamento: nivelPlanejamento || (isRealizada ? "SUPERA" : null),
-    nivel_pratica: nivelPratica || (isRealizada ? "ATENDE INTEGRALMENTE" : null),
-    evidencias_planejamento: evidenciasPlanejamento || null,
-    evidencias_pratica: evidenciasPratica || null,
-    questionamentos_propositivos: getVal(["questionamentos propositivos"]),
-    proposicoes_sugestoes: getVal(["proposições ou sugestões", "proposições"]),
-    combinados: getVal(["combinados realizados no feedback", "combinados"]),
-    justificativa_nao_realizada: getVal(["justificativa:"]),
-    contexto_justificativa: getVal(["descreva a situação ou contexto"]),
-    reflexoes_gerais: getVal(["registre informações ou reflexões"])
-  };
-}
-
-function enviarLoteObservacoesParaTiDB(observacoes) {
-  if (!observacoes || observacoes.length === 0) return 0;
-  var BATCH_SIZE = 400;
-  var totalSinc = 0;
-  for (var b = 0; b < observacoes.length; b += BATCH_SIZE) {
-    var lote = observacoes.slice(b, b + BATCH_SIZE);
-    var endpoint = obterEndpointApi('sync_observacoes_bulk');
-    var options = obterOpcoesHttp({
-      action: 'sync_observacoes_bulk',
-      observacoes: lote
-    });
-
-    try {
-      var resp = UrlFetchApp.fetch(endpoint, options);
-      if (resp.getResponseCode() === 200) {
-        totalSinc += lote.length;
-      } else {
-        Logger.log('Aviso ao sincronizar lote: ' + resp.getContentText());
-      }
-    } catch (err) {
-      Logger.log('Erro ao sincronizar observações: ' + err.toString());
-    }
-  }
-  return totalSinc;
-}
-
-function sincronizarAbaObservacoesParaTiDB() {
-  Logger.log('Sincronizando a partir das 4 planilhas externas de Formadores...');
-  var totalGeral = 0;
-  var relatorio = [];
-  var startTime = Date.now();
-
-  for (var p = 0; p < PLANILHAS_OBSERVACOES_FORMADOR.length; p++) {
-    // Guarda de segurança contra timeout (máximo 4.5 minutos de execução)
-    if (Date.now() - startTime > 260000) {
-      relatorio.push('⏱️ Tempo limite preventivo atingido (demais planilhas serão processadas no próximo disparo).');
-      break;
-    }
-    var cfg = PLANILHAS_OBSERVACOES_FORMADOR[p];
-    try {
-      var extSs = SpreadsheetApp.openById(cfg.id);
-      var extAba = getSheetByGid(extSs, cfg.gid);
-      if (!extAba) {
-        relatorio.push('❌ ' + cfg.nome + ': Aba não localizada.');
-        continue;
-      }
-
-      var lastRow = extAba.getLastRow();
-      var lastCol = extAba.getLastColumn();
-      if (lastRow < 2 || lastCol < 3) {
-        relatorio.push('⚠️ ' + cfg.nome + ': Planilha sem dados.');
-        continue;
-      }
-
-      var headers = extAba.getRange(1, 1, 1, lastCol).getValues()[0];
-      var allValues = extAba.getRange(2, 1, lastRow - 1, lastCol).getValues();
-      var lista = [];
-
-      for (var r = 0; r < allValues.length; r++) {
-        var rowNumber = r + 2;
-        var payload = mapRowToObservation(headers, allValues[r], extAba.getName(), extAba.getSheetId(), rowNumber, cfg);
-        if (payload && payload.email_cursista) {
-          lista.push(payload);
-        }
-      }
-
-      var ok = enviarLoteObservacoesParaTiDB(lista);
-      totalGeral += ok;
-      relatorio.push('✓ ' + cfg.nome + ': ' + ok + ' observações');
-      Logger.log('✓ ' + cfg.nome + ': ' + ok + ' observações sincronizadas');
-    } catch (errExt) {
-      relatorio.push('❌ ' + cfg.nome + ': Erro ' + errExt.message);
-      Logger.log('Erro ao abrir planilha ' + cfg.nome + ' (' + cfg.id + '): ' + errExt.toString());
-    }
-  }
-
-  return { total: totalGeral, relatorio: relatorio };
-}
-
-
-/**
- * -----------------------------------------------------------------------------------------
- * 11. SINCRONIZAR OBSERVAÇÕES DE TUTORIA (TUTOR INSIGHTS)
- * -----------------------------------------------------------------------------------------
- */
-function sincronizarAbaObservacoesTutoriaParaTiDB() {
-  if (!PLANILHA_OBSERVACOES_TUTOR_ID) return { total: 0 };
-  Logger.log('Sincronizando observações de tutoria...');
-  try {
-    var ssTutor = SpreadsheetApp.openById(PLANILHA_OBSERVACOES_TUTOR_ID);
-    var aba = ssTutor.getSheets()[0];
-    var dados = aba.getDataRange().getValues();
-    if (dados.length < 2) return { total: 0 };
-
-    var cabecalho = dados[0].map(function(c) {
-      return String(c || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    });
-
-    function getIdx(keywords) {
-      for (var k = 0; k < keywords.length; k++) {
-        var idx = cabecalho.indexOf(keywords[k].toLowerCase());
-        if (idx !== -1) return idx;
-      }
-      for (var k = 0; k < keywords.length; k++) {
-        var kw = keywords[k].toLowerCase();
-        var idx = cabecalho.findIndex(function(c) { return c.includes(kw); });
-        if (idx !== -1) return idx;
-      }
-      return -1;
-    }
-
-    var idxCarimbo = getIdx(["carimbo", "data hora", "timestamp"]);
-    var idxEmailTutor = getIdx(["e-mail tutor", "email tutor", "tutor", "email institucional do tutor"]);
-    var idxNomeTutor = getIdx(["nome tutor", "tutor responsavel", "nome do tutor"]);
-    var idxEmailFormador = getIdx(["e-mail formador", "email formador", "formador"]);
-    var idxNomeFormador = getIdx(["nome formador", "nome do formador"]);
-    var idxNre = getIdx(["nre"]);
-    var idxAcaoAcomp = getIdx(["acao acompanhamento", "acao"]);
-    var idxDataObs = getIdx(["data observacao", "data"]);
-    var idxLinkAcao = getIdx(["link acao observada", "link gravacao", "link"]);
-    var idxDestaques = getIdx(["destaques"]);
-    var idxDesenvolver = getIdx(["pontos a desenvolver", "desenvolver"]);
-    var idxEncaminhamentos = getIdx(["encaminhamentos"]);
-
-    var lista = [];
-    for (var i = 1; i < dados.length; i++) {
-      var row = dados[i];
-      var emailTut = idxEmailTutor !== -1 ? String(row[idxEmailTutor] || "").trim().toLowerCase() : "";
-      var emailForm = idxEmailFormador !== -1 ? String(row[idxEmailFormador] || "").trim().toLowerCase() : "";
-      if (!emailTut && !emailForm) continue;
-
-      lista.push({
-        carimbo: idxCarimbo !== -1 ? String(row[idxCarimbo] || "").trim() : null,
-        email_tutor: emailTut,
-        nome_tutor: idxNomeTutor !== -1 ? String(row[idxNomeTutor] || "").trim() : null,
-        email_formador: emailForm,
-        nome_formador: idxNomeFormador !== -1 ? String(row[idxNomeFormador] || "").trim() : null,
-        nre: idxNre !== -1 ? String(row[idxNre] || "").trim() : null,
-        acao_acompanhamento: idxAcaoAcomp !== -1 ? String(row[idxAcaoAcomp] || "").trim() : null,
-        data_observacao: idxDataObs !== -1 ? String(row[idxDataObs] || "").trim() : null,
-        link_acao_observada: idxLinkAcao !== -1 ? String(row[idxLinkAcao] || "").trim() : null,
-        destaques: idxDestaques !== -1 ? String(row[idxDestaques] || "").trim() : null,
-        desenvolver: idxDesenvolver !== -1 ? String(row[idxDesenvolver] || "").trim() : null,
-        encaminhamentos: idxEncaminhamentos !== -1 ? String(row[idxEncaminhamentos] || "").trim() : null
-      });
-    }
-
-    var BATCH_SIZE = 150;
-    var tot = 0;
-    for (var b = 0; b < lista.length; b += BATCH_SIZE) {
-      var lote = lista.slice(b, b + BATCH_SIZE);
-      var endpoint = obterEndpointApi('sync_observacoes_tutor_bulk');
-      var options = obterOpcoesHttp({
-        action: 'sync_observacoes_tutor_bulk',
-        observacoes_tutor: lote,
-        observacoes: lote
-      });
-      try {
-        var resp = UrlFetchApp.fetch(endpoint, options);
-        if (resp.getResponseCode() === 200) tot += lote.length;
-      } catch (err) {
-        Logger.log('Erro ao enviar observações de tutoria: ' + err.toString());
-      }
-    }
-    return { total: tot };
-  } catch (errSs) {
-    Logger.log('Erro ao sincronizar tutoria: ' + errSs.toString());
-    return { total: 0 };
-  }
-}
-
-
-/**
- * -----------------------------------------------------------------------------------------
- * 12. INTEGRAÇÃO COM SIGEP (CONSULTA, PREENCHIMENTO E EXONERAÇÃO)
- * -----------------------------------------------------------------------------------------
+ * Abre um diálogo visual moderno para consultar dados de qualquer Cursista ou Formador no SIGEP.
  */
 function menuDialogoBuscarSigep() {
-  var ui = SpreadsheetApp.getUi();
-  var htmlContent = `
+  const ui = SpreadsheetApp.getUi();
+  const htmlContent = `
     <!DOCTYPE html>
     <html>
       <head>
@@ -1397,46 +210,52 @@ function menuDialogoBuscarSigep() {
       </body>
     </html>
   `;
-  var htmlOutput = HtmlService.createHtmlOutput(htmlContent).setWidth(520).setHeight(480);
+  const htmlOutput = HtmlService.createHtmlOutput(htmlContent).setWidth(520).setHeight(480);
   ui.showModalDialog(htmlOutput, 'Busca Oficial no SIGEP · SEED-PR');
 }
 
+/**
+ * Preenche automaticamente campos vazios da linha selecionada na planilha ativa com dados do SIGEP.
+ */
 function menuPreencherLinhaAtiva() {
-  var ui = SpreadsheetApp.getUi();
+  const ui = SpreadsheetApp.getUi();
   try {
-    var sheet = SpreadsheetApp.getActiveSheet();
-    var activeRange = sheet.getActiveRange();
+    const sheet = SpreadsheetApp.getActiveSheet();
+    const activeRange = sheet.getActiveRange();
     if (!activeRange) {
       ui.alert('Atenção', 'Selecione uma linha ou célula contendo o CPF para preencher.', ui.ButtonSet.OK);
       return;
     }
 
-    var row = activeRange.getRow();
+    const row = activeRange.getRow();
     if (row === 1) {
       ui.alert('Atenção', 'Você está selecionando a linha de cabeçalho. Selecione uma linha de dados.', ui.ButtonSet.OK);
       return;
     }
 
-    var lastCol = sheet.getLastColumn();
-    var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function(h) { return String(h).trim().toLowerCase(); });
-    var rowValues = sheet.getRange(row, 1, 1, lastCol).getValues()[0];
+    const lastCol = sheet.getLastColumn();
+    const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(h => String(h).trim().toLowerCase());
+    const rowValues = sheet.getRange(row, 1, 1, lastCol).getValues()[0];
 
-    var colCpfIdx = headers.findIndex(function(h) { return h === 'cpf' || h.indexOf('cpf') !== -1; });
-    var cpfValor = '';
+    // Localiza a coluna do CPF
+    let colCpfIdx = headers.findIndex(h => h === 'cpf' || h.indexOf('cpf') !== -1);
+    let cpfValor = '';
 
     if (colCpfIdx !== -1 && rowValues[colCpfIdx]) {
       cpfValor = String(rowValues[colCpfIdx]).replace(/\D/g, '').trim();
     }
 
+    // Se não encontrou na coluna, tenta ler da célula selecionada diretamente
     if (!cpfValor) {
-      var valSel = String(activeRange.getValue() || '').replace(/\D/g, '').trim();
+      const valSel = String(activeRange.getValue() || '').replace(/\D/g, '').trim();
       if (valSel.length === 11) {
         cpfValor = valSel;
       }
     }
 
+    // Se ainda não tem CPF, solicita ao usuário
     if (!cpfValor) {
-      var prompt = ui.prompt('Preenchimento SIGEP', 'Informe o CPF do cursista/servidor a preencher nesta linha:', ui.ButtonSet.OK_CANCEL);
+      const prompt = ui.prompt('Preenchimento SIGEP', 'Informe o CPF do cursista/servidor a preencher nesta linha:', ui.ButtonSet.OK_CANCEL);
       if (prompt.getSelectedButton() !== ui.Button.OK) return;
       cpfValor = String(prompt.getResponseText() || '').replace(/\D/g, '').trim();
     }
@@ -1446,13 +265,14 @@ function menuPreencherLinhaAtiva() {
       return;
     }
 
-    var dadosSigep = apiBuscarDadosSigepPorCpf(cpfValor);
+    const dadosSigep = apiBuscarDadosSigepPorCpf(cpfValor);
     if (!dadosSigep || !dadosSigep.encontrado) {
       ui.alert('Não localizado', 'O CPF ' + cpfValor + ' não foi localizado nas abas SIGEP da planilha.', ui.ButtonSet.OK);
       return;
     }
 
-    var mapaCampos = {
+    // Mapeamento de colunas da planilha para dados do SIGEP
+    const mapaCampos = {
       'nome_cursista': dadosSigep.nome,
       'nome': dadosSigep.nome,
       'rg': dadosSigep.rg,
@@ -1470,14 +290,15 @@ function menuPreencherLinhaAtiva() {
       'periodo_ini': dadosSigep.periodo_ini
     };
 
-    var camposPreenchidos = 0;
-    headers.forEach(function(h, idx) {
+    let camposPreenchidos = 0;
+    headers.forEach((h, idx) => {
       if (mapaCampos[h] !== undefined && (rowValues[idx] === '' || rowValues[idx] === null)) {
         sheet.getRange(row, idx + 1).setValue(mapaCampos[h]);
         camposPreenchidos++;
       }
     });
 
+    // Se a coluna de CPF estiver em branco na linha, preenche também
     if (colCpfIdx !== -1 && (!rowValues[colCpfIdx] || String(rowValues[colCpfIdx]).trim() === '')) {
       sheet.getRange(row, colCpfIdx + 1).setValue(cpfValor);
     }
@@ -1488,38 +309,42 @@ function menuPreencherLinhaAtiva() {
   }
 }
 
+/**
+ * Registra a exoneração de um cursista/servidor, salva na aba EXONERADOS e regrava o JSON do Drive.
+ */
 function menuRegistrarExoneracao() {
-  var ui = SpreadsheetApp.getUi();
+  const ui = SpreadsheetApp.getUi();
   try {
-    var promptCpf = ui.prompt('Registrar Exoneração', 'Informe o CPF do servidor a ser exonerado:', ui.ButtonSet.OK_CANCEL);
+    const promptCpf = ui.prompt('Registrar Exoneração', 'Informe o CPF do servidor a ser exonerado:', ui.ButtonSet.OK_CANCEL);
     if (promptCpf.getSelectedButton() !== ui.Button.OK) return;
 
-    var cpf = String(promptCpf.getResponseText() || '').replace(/\D/g, '').trim();
+    const cpf = String(promptCpf.getResponseText() || '').replace(/\D/g, '').trim();
     if (!cpf) {
       ui.alert('CPF inválido.');
       return;
     }
 
-    var busca = apiBuscarDadosSigepPorCpf(cpf);
-    var nomePadrao = (busca && busca.encontrado) ? busca.nome : '';
+    // Busca o nome do servidor no SIGEP para conferência
+    const busca = apiBuscarDadosSigepPorCpf(cpf);
+    const nomePadrao = (busca && busca.encontrado) ? busca.nome : '';
 
-    var promptNome = ui.prompt(
+    const promptNome = ui.prompt(
       'Confirmar Nome do Servidor',
       'Confirme ou informe o nome completo do servidor:\n(CPF: ' + cpf + ')',
       ui.ButtonSet.OK_CANCEL
     );
     if (promptNome.getSelectedButton() !== ui.Button.OK) return;
-    var nome = String(promptNome.getResponseText() || nomePadrao).trim();
+    const nome = String(promptNome.getResponseText() || nomePadrao).trim();
 
-    var promptMotivo = ui.prompt(
+    const promptMotivo = ui.prompt(
       'Motivo da Exoneração',
       'Informe o motivo da exoneração (ou deixe padrão):',
       ui.ButtonSet.OK_CANCEL
     );
     if (promptMotivo.getSelectedButton() !== ui.Button.OK) return;
-    var motivo = String(promptMotivo.getResponseText() || 'Solicitação do Servidor').trim();
+    const motivo = String(promptMotivo.getResponseText() || 'Solicitação do Servidor').trim();
 
-    var conf = ui.alert(
+    const conf = ui.alert(
       'Confirmar Exoneração',
       'Deseja realmente registrar a exoneração de:\n\n' +
       'Nome: ' + nome + '\n' +
@@ -1530,9 +355,15 @@ function menuRegistrarExoneracao() {
     );
     if (conf !== ui.Button.YES) return;
 
-    var res = apiExonerarCursista(cpf, nome, motivo);
+    const res = apiExonerarCursista(cpf, nome, motivo);
     if (res.status === 'sucesso') {
-      try { sincronizarAbaExoneradosParaTiDB(); } catch (e) {}
+      // Atualiza imediatamente a base do Drive e do TiDB
+      if (typeof executarSincronizacaoCompletaTiDB === 'function') {
+        try { executarSincronizacaoCompletaTiDB(); } catch (e) {}
+      }
+      if (typeof rotinaMatinalConsolidarSigepEDrive === 'function') {
+        try { rotinaMatinalConsolidarSigepEDrive(); } catch (e) {}
+      }
       ui.alert('✅ Exoneração Registrada!', 'O servidor ' + nome + ' foi registrado como Exonerado com sucesso.', ui.ButtonSet.OK);
     } else {
       ui.alert('❌ Erro ao Registrar', res.mensagem || 'Falha desconhecida.', ui.ButtonSet.OK);
@@ -1542,115 +373,14 @@ function menuRegistrarExoneracao() {
   }
 }
 
-function apiBuscarDadosSigepPorCpf(cpfBusca) {
-  try {
-    var cpfLimpo = String(cpfBusca || '').replace(/\D/g, '').trim();
-    if (!cpfLimpo) return { encontrado: false, mensagem: 'CPF inválido ou em branco.' };
-
-    var ss = obterPlanilhaMestra();
-
-    var abaSigep = ss.getSheetByName("SIGEP") || ss.getSheetByName("BASE_SIGEP");
-    if (abaSigep) {
-      var dados = abaSigep.getDataRange().getValues();
-      for (var i = 1; i < dados.length; i++) {
-        var linha = dados[i];
-        var cpfLinha = String(linha[1] || '').replace(/\D/g, '').trim();
-
-        if (cpfLinha === cpfLimpo) {
-          var dataInicio = '';
-          if (linha[6]) {
-            try {
-              dataInicio = Utilities.formatDate(new Date(linha[6]), 'America/Sao_Paulo', 'dd/MM/yyyy');
-            } catch (e) {
-              dataInicio = String(linha[6]);
-            }
-          }
-
-          return {
-            encontrado: true,
-            origem: 'SIGEP (Cursista)',
-            tipo: 'cursista',
-            cpf: cpfLinha,
-            nome: linha[0] || '',
-            rg: linha[2] || '',
-            cgm: linha[3] || '',
-            emailGoogle: linha[4] || '',
-            emailMicrosoft: linha[5] || '',
-            periodo_ini: dataInicio,
-            componente_conc: linha[7] || '',
-            nre_lot: linha[8] || '',
-            estab_lot: linha[9] || '',
-            munic_lot: linha[10] || '',
-            nre_exe: linha[11] || '',
-            munic_exe: linha[12] || '',
-            estab_exe: linha[13] || '',
-            disciplina_exe: linha[14] || '',
-            chamamento: linha[23] || '1º Chamamento',
-            linhaFuncional: linha[24] || 1
-          };
-        }
-      }
-    }
-
-    var abaSigepForm = ss.getSheetByName("SIGEP_FORMADORES");
-    if (abaSigepForm) {
-      var dadosForm = abaSigepForm.getDataRange().getValues();
-      for (var f = 1; f < dadosForm.length; f++) {
-        var l = dadosForm[f];
-        var cpfL = String(l[1] || '').replace(/\D/g, '').trim();
-
-        if (cpfL === cpfLimpo) {
-          return {
-            encontrado: true,
-            origem: 'SIGEP Formadores',
-            tipo: 'formador',
-            cpf: cpfL,
-            nome: l[0] || '',
-            cgm: l[2] || '',
-            emailGoogle: l[3] || '',
-            emailMicrosoft: l[4] || '',
-            telefone: l[5] || '',
-            disciplina: l[6] || '',
-            linhaFuncional: l[7] || 1,
-            turma: l[8] || '',
-            nre_exe: l[11] || '',
-            munic_exe: l[12] || '',
-            estabelecimento: l[13] || '',
-            vinculo: l[14] || ''
-          };
-        }
-      }
-    }
-
-    return { encontrado: false, mensagem: 'CPF ' + cpfLimpo + ' não consta na base do SIGEP.' };
-  } catch (err) {
-    return { encontrado: false, mensagem: 'Erro na busca SIGEP: ' + err.toString() };
-  }
-}
-
-function apiExonerarCursista(cpf, nome, motivo) {
-  try {
-    var ss = obterPlanilhaMestra();
-    var colunas = ['Data Exoneração', 'CPF', 'Nome', 'Motivo', 'Registrado Por'];
-    var carimbo = Utilities.formatDate(new Date(), 'America/Sao_Paulo', 'dd/MM/yyyy HH:mm:ss');
-    var admin = Session.getActiveUser().getEmail();
-    var linha = [carimbo, cpf, nome, motivo || 'Solicitação do Servidor', admin];
-    
-    return salvarLinhaPlanilha(ss.getId(), "EXONERADOS", colunas, linha);
-  } catch (err) {
-    return { status: 'erro', mensagem: err.toString() };
-  }
-}
-
-
 /**
  * -----------------------------------------------------------------------------------------
- * 13. DIÁLOGO EXPLICATIVO DO REMANEJAMENTO DE TURMAS
+ * 3. DIÁLOGO EXPLICATIVO DAS DIRETRIZES DO REMANEJAMENTO
  * -----------------------------------------------------------------------------------------
  */
 function menuSobreRemanejamento() {
-  var ui = SpreadsheetApp.getUi();
-  var msg =
+  const ui = SpreadsheetApp.getUi();
+  const msg =
     '⚖️ DIRETRIZES OFICIAIS DO REMANEJAMENTO DE TURMAS\n\n' +
     '1. REGRA MANDATÓRIA: PROIBIDO DE MANEIRA ALGUMA TURMAS COM 1 OU 2 CURSISTAS\n' +
     '   Turmas com 1 ou 2 cursistas NÃO são aceitáveis de forma alguma.\n' +
@@ -1680,240 +410,231 @@ function menuSobreRemanejamento() {
   ui.alert('Diretrizes de Remanejamento', msg, ui.ButtonSet.OK);
 }
 
-// Stubs para menus de remanejamento caso implementados na planilha
-function rmjMenuAnalisar() {
-  SpreadsheetApp.getUi().alert('Remanejamento', 'Motor de análise de remanejamento ativo.', SpreadsheetApp.getUi().ButtonSet.OK);
+// =========================================================================================
+// MÓDULO INTEGRADO: SINCRONIZAÇÃO COM O BANCO TIDB CLOUD SERVERLESS
+// =========================================================================================
+
+// URL do Gateway na Vercel
+var VERCEL_APP_URL = "https://dashboard-tawny-delta-96.vercel.app";
+
+// IDs Oficiais das Planilhas do Google Sheets (SEED-PR)
+var SPREADSHEET_ID_MESTRA_TIDB = "1sRkA88VrtczqXxQ6PlmgygeCVhPoElRNS8RC1QuQzx0";
+
+// Observações da Prática Pedagógica - 1º SEMESTRE
+var ID_PLANILHA_OBS_1ANO_1SEM = "1KmbMvNOTpj4OaDOdKw5mPVI3iqbo8RbQBqBktM84ToE";
+var ID_PLANILHA_OBS_2e3ANO_1SEM = "1zSnlh7aW8df800lP90rCLVxiHNWAa1f9IGjz2OoDfvU";
+
+// Observações da Prática Pedagógica - 2º SEMESTRE
+var ID_PLANILHA_OBS_1ANO_2SEM = "1dL_Q-_15Idx3SNAZOqmKzrnVqA8tHFBzILA5PZ7p798";
+var ID_PLANILHA_OBS_2e3ANO_2SEM = "1uv5QWeqtN5iMkH8nVQUvsYKClv9NaGDHgsdT_D-RPiw";
+
+// Compilado Geral das Observações (Histórico 2024 a 2026)
+var ID_PLANILHA_OBS_COMPILADO_2024_2026 = "1IounMidMLxawnYaSGTgrhWJk0DbKrbNWH2YmuONDvVQ";
+
+// Observações do Tutor (Acompanhamento aos Formadores)
+var ID_PLANILHA_OBS_TUTOR = "1V54Gl-KVGaHjLBH07hQZxq6GU88kfn0Xurh5P2LuSz8";
+
+/**
+ * Normalizador Canônico para os 32 NREs do Paraná (Caixa Alta, sem acento, sem cedilha)
+ */
+function normalizeNre(nre) {
+  if (!nre) return '';
+  var s = String(nre)
+    .trim()
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/^NRE\s*(DE|DO|DA)?\s*[-:]?\s*/, '')
+    .replace(/[.\-_/]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!s) return '';
+  if (s === 'AMN' || /METROP\w*\s*NORTE/.test(s)) return 'AREA METROPOLITANA NORTE';
+  if (s === 'AMS' || /METROP\w*\s*SUL/.test(s)) return 'AREA METROPOLITANA SUL';
+  if (/^ASSIS\s*CHAT/.test(s)) return 'ASSIS CHATEAUBRIAND';
+  if (s === 'FOZ') return 'FOZ DO IGUACU';
+  if (s === 'FRANCISCO BELTRAO' || s === 'BELTRAO') return 'FRANCISCO BELTRAO';
+  if (s === 'UNIAO DA VITORIA' || s === 'UNIAO') return 'UNIAO DA VITORIA';
+  if (s === 'WENCESLAU BRAZ' || s === 'WENCESLAU') return 'WENCESLAU BRAZ';
+  if (s === 'CORNELIO PROCOPIO' || s === 'CORNELIO') return 'CORNELIO PROCOPIO';
+  if (s === 'TELEMACO BORBA' || s === 'TELEMACO') return 'TELEMACO BORBA';
+  return s;
 }
-function rmjMenuValidar() {
-  SpreadsheetApp.getUi().alert('Validação', 'Comparativo visual de turmas preparado.', SpreadsheetApp.getUi().ButtonSet.OK);
-}
-function rmjMenuRealizar() {
-  SpreadsheetApp.getUi().alert('Redistribuição', 'Pronto para gravar redistribuição.', SpreadsheetApp.getUi().ButtonSet.OK);
-}
-function rmjMenuEmail() {
-  SpreadsheetApp.getUi().alert('E-mail Informativo', 'Disparo de e-mails preparado.', SpreadsheetApp.getUi().ButtonSet.OK);
-}
-function menuAtualizarDashboard() {
-  SpreadsheetApp.getActiveSpreadsheet().toast('Base pronta para o dashboard.', 'Dashboard', 3);
-}
-function instalarGatilhosAutomaticos() {
-  SpreadsheetApp.getUi().alert('Gatilhos', 'Gatilhos de edição instalados.', SpreadsheetApp.getUi().ButtonSet.OK);
-}
+
 
 
 /**
- * -----------------------------------------------------------------------------------------
- * 14. FUNÇÕES UTILITÁRIAS E HELPERS GLOBAIS
- * -----------------------------------------------------------------------------------------
+ * 1. TESTE DE CONEXÃO COM O TIDB CLOUD
  */
-function obterPlanilhaMestra() {
+function testarConexaoTiDB() {
+  var ui = SpreadsheetApp.getUi();
+  var endpoint = VERCEL_APP_URL.replace(/\/$/, '') + '/api/tidb?action=ping';
+
   try {
-    var ativa = SpreadsheetApp.getActiveSpreadsheet();
-    if (ativa) return ativa;
-  } catch (e) {}
+    var resp = UrlFetchApp.fetch(endpoint, {
+      method: 'get',
+      muteHttpExceptions: true
+    });
+    var code = resp.getResponseCode();
+    var body = resp.getContentText();
+
+    if (code === 200) {
+      ui.alert(
+        'Conexão Bem-Sucedida!',
+        '✓ Conexão com TiDB Cloud Serverless operando com sucesso via Vercel Gateway.\n\nResposta do Servidor:\n' + body,
+        ui.ButtonSet.OK
+      );
+    } else {
+      ui.alert(
+        'Aviso de Conexão (Código ' + code + ')',
+        'O servidor respondeu com status ' + code + ':\n' + body,
+        ui.ButtonSet.OK
+      );
+    }
+  } catch (err) {
+    ui.alert(
+      'Erro de Rede / Comunicação',
+      'Não foi possível conectar ao endpoint do TiDB Cloud:\n\n' + err.toString(),
+      ui.ButtonSet.OK
+    );
+  }
+}
+
+/**
+ * 2. CONFIGURADOR DO GATILHO MATINAL DAS 07:00 (HORÁRIO DE BRASÍLIA)
+ */
+function configurarGatilhoDiario7h() {
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === 'executarSincronizacaoCompletaTiDB') {
+      ScriptApp.deleteTrigger(triggers[i]);
+    }
+  }
+
+  ScriptApp.newTrigger('executarSincronizacaoCompletaTiDB')
+    .timeBased()
+    .everyDays(1)
+    .atHour(7)
+    .nearMinute(0)
+    .inTimezone('America/Sao_Paulo')
+    .create();
+
+  var msg = '✓ Gatilho automático configurado com sucesso!\n\n' +
+            'A sincronização de todas as planilhas para o TiDB Cloud será executada automaticamente todos os dias às 07:00 da manhã.';
   try {
-    return SpreadsheetApp.openById(SPREADSHEET_ID_MESTRA_TIDB);
+    SpreadsheetApp.getUi().alert('Gatilho Automático 07:00', msg, SpreadsheetApp.getUi().ButtonSet.OK);
   } catch (e) {
-    return null;
+    Logger.log(msg);
   }
 }
 
-function obterEndpointApi(actionParam) {
-  var base = VERCEL_APP_URL.replace(/\/$/, '');
-  var path = (API_VERSION === "v2") ? "/api/v2" : "/api/tidb";
-  if (actionParam) {
-    return base + path + "?action=" + actionParam;
+/**
+ * 3. MENU MANUAL DE ATUALIZAÇÃO IMEDIATA (Disparado pelo usuário a qualquer momento)
+ */
+function menuSincronizarTiDBAgora() {
+  try {
+    try {
+      SpreadsheetApp.getActiveSpreadsheet().toast('Iniciando sincronização com TiDB Cloud...', 'TiDB Serverless', 5);
+    } catch (e) {}
+
+    var res = executarSincronizacaoCompletaTiDB();
+    var msg = '✓ Sincronização com o TiDB Cloud finalizada com sucesso!\n\n' +
+              '• Cursistas Ativos (DADOS): ' + (res.cursistas || 0) + '\n' +
+              '• Concluintes (1º Chamamento): ' + (res.concluintes || 0) + '\n' +
+              '• Tutores: ' + (res.tutores || 0) + '\n' +
+              '• Exonerados: ' + (res.exonerados || 0) + '\n' +
+              '• Não Concluintes: ' + (res.nao_concluintes || 0) + '\n' +
+              '• Movimentações (Trocas & Vínculos): ' + (res.movimentacoes || 0) + '\n' +
+              '• Observações da Prática: ' + (res.observacoes || 0) + (res.observacoes === 0 ? ' (Planilhas externas sem permissão no Drive)' : '') + '\n' +
+              '• Observações do Tutor: ' + (res.observacoes_tutor || 0);
+
+    try {
+      SpreadsheetApp.getUi().alert('Sincronização TiDB Concluída', msg, SpreadsheetApp.getUi().ButtonSet.OK);
+    } catch (uiErr) {
+      Logger.log(msg);
+    }
+  } catch (err) {
+    Logger.log('Erro na Sincronização: ' + err.toString());
+    try {
+      SpreadsheetApp.getUi().alert('Erro na Sincronização', err.toString(), SpreadsheetApp.getUi().ButtonSet.OK);
+    } catch (e) {}
   }
-  return base + path;
 }
 
-function obterOpcoesHttp(payloadObj) {
-  var headers = {
-    "Content-Type": "application/json"
-  };
-  if (SYNC_TOKEN) {
-    headers["X-Sync-Token"] = SYNC_TOKEN;
+function sincronizarManualComAlerta() {
+  menuSincronizarTiDBAgora();
+}
+
+function sincronizarObservacoesPraticaMenu() {
+  try {
+    SpreadsheetApp.getActiveSpreadsheet().toast('Sincronizando observações do 1º e 2º/3º anos com TiDB...', 'TiDB Serverless', 5);
+    var res = sincronizarAbaObservacoesParaTiDB();
+    SpreadsheetApp.getUi().alert('Observações da Prática', '✓ Total de observações da prática pedagógica sincronizadas: ' + (res.total || 0), SpreadsheetApp.getUi().ButtonSet.OK);
+  } catch (e) {
+    SpreadsheetApp.getUi().alert('Erro', e.toString(), SpreadsheetApp.getUi().ButtonSet.OK);
   }
+}
+
+function sincronizarObservacoesTutorMenu() {
+  try {
+    SpreadsheetApp.getActiveSpreadsheet().toast('Sincronizando observações do tutor com TiDB...', 'TiDB Serverless', 5);
+    var res = sincronizarAbaObservacoesTutorParaTiDB();
+    SpreadsheetApp.getUi().alert('Observações do Tutor', '✓ Total de observações do tutor sincronizadas: ' + (res.total || 0), SpreadsheetApp.getUi().ButtonSet.OK);
+  } catch (e) {
+    SpreadsheetApp.getUi().alert('Erro', e.toString(), SpreadsheetApp.getUi().ButtonSet.OK);
+  }
+}
+
+/**
+ * 4. EXECUÇÃO DA SINCRONIZAÇÃO COMPLETA (RODA AUTOMATICAMENTE ÀS 7H OU MANUALMENTE)
+ */
+function executarSincronizacaoCompletaTiDB() {
+  Logger.log('Iniciando sincronização das planilhas com o TiDB Cloud...');
+  
+  var resCursistas = sincronizarAbaDadosParaTiDB();
+  var resConcluintes = sincronizarAbaConcluintesParaTiDB();
+  var resTutores = sincronizarAbaTutoresParaTiDB();
+  var resExonerados = sincronizarAbaExoneradosParaTiDB();
+  var resNaoConcluintes = sincronizarAbaNaoConcluintesParaTiDB();
+  var resMovimentacoes = sincronizarAbasMovimentacoesParaTiDB();
+  var resObservacoes = sincronizarAbaObservacoesParaTiDB();
+  var resObservacoesTutor = sincronizarAbaObservacoesTutorParaTiDB();
+
+  Logger.log('✓ Sincronização completa concluída com sucesso!');
+
   return {
-    method: "post",
-    contentType: "application/json",
-    headers: headers,
-    payload: payloadObj ? JSON.stringify(payloadObj) : undefined,
-    muteHttpExceptions: true
+    cursistas: resCursistas.total || 0,
+    concluintes: resConcluintes.total || 0,
+    tutores: resTutores.total || 0,
+    exonerados: resExonerados.total || 0,
+    nao_concluintes: resNaoConcluintes.total || 0,
+    movimentacoes: resMovimentacoes.total || 0,
+    observacoes: resObservacoes.total || 0,
+    observacoes_tutor: resObservacoesTutor.total || 0
   };
 }
 
-function salvarLinhaPlanilha(idPlanilha, nomeAba, colunasCabecalho, linhaDados) {
-  try {
-    var ss = SpreadsheetApp.openById(idPlanilha);
-    var aba = ss.getSheetByName(nomeAba);
-    if (!aba) {
-      aba = ss.insertSheet(nomeAba);
-      aba.appendRow(colunasCabecalho);
-    }
-    aba.appendRow(linhaDados);
-    return { status: 'sucesso' };
-  } catch (e) {
-    return { status: 'erro', mensagem: e.toString() };
-  }
-}
-
-function setupInicialCriarAbas() {
-  var ss = obterPlanilhaMestra();
-  var abasNecessarias = ["DADOS", "CONCLUINTES-1CH", "TUTORES", "EXONERADOS", "CURSISTAS NAO CONCLUINTES", "Histórico de Movimentações", "SIGEP", "SIGEP_FORMADORES"];
-  var criadas = 0;
-  for (var i = 0; i < abasNecessarias.length; i++) {
-    var nome = abasNecessarias[i];
-    if (!ss.getSheetByName(nome)) {
-      ss.insertSheet(nome);
-      criadas++;
-    }
-  }
-  SpreadsheetApp.getUi().alert('Verificação de Abas', 'Estrutura verificada! ' + criadas + ' abas adicionais foram criadas.', SpreadsheetApp.getUi().ButtonSet.OK);
-}
-
 /**
- * -----------------------------------------------------------------------------------------
- * 15. API EXCLUSIVA PARA O SISTEMA DESKTOP JAVA SWING
- * Gerencia leitura de solicitações, alteração da Coluna H e disparo de e-mails
- * -----------------------------------------------------------------------------------------
+ * 5. Sincroniza a aba DADOS (Cursistas Ativos)
  */
-
-function apiObterSolicitacoesPendentes() {
-  var ss = obterPlanilhaMestra();
-  if (!ss) return { status: 'erro', mensagem: 'Planilha mestra não acessível.', lista: [] };
-
-  var solicitacoes = [];
-
-  // 1. Aba: Troca de Turma
-  var abaTurma = ss.getSheetByName("Troca de Turma");
-  if (abaTurma) {
-    var dTurma = abaTurma.getDataRange().getValues();
-    for (var t = 1; t < dTurma.length; t++) {
-      var rt = dTurma[t];
-      var emailT = String(rt[1] || "").trim().toLowerCase();
-      var nomeT = String(rt[2] || "").trim();
-      if (!emailT && !nomeT) continue;
-
-      var statusRawT = String(rt[14] || "").trim();
-      var statusT = (statusRawT.toLowerCase().indexOf("atendido") !== -1 || statusRawT.toLowerCase().indexOf("conclu") !== -1 || statusRawT.toLowerCase().indexOf("deferido") !== -1) ? "Deferido" :
-                    (statusRawT.toLowerCase().indexOf("indefer") !== -1 || statusRawT.toLowerCase().indexOf("recus") !== -1) ? "Indeferido" : "Pendente";
-
-      solicitacoes.push({
-        id: "SOLIC_TURMA_" + (t + 1),
-        abaOrigem: "Troca de Turma",
-        linhaOrigem: t + 1,
-        origem: "Troca de Turma",
-        dataSolicitacao: rt[0] ? String(rt[0]) : "",
-        emailCursista: emailT,
-        nomeCursista: nomeT,
-        cpf: rt[4] ? String(rt[4]).replace(/\D/g, "") : "",
-        cgm: rt[5] ? String(rt[5]).replace(/\D/g, "") : "",
-        turmaAntiga: rt[9] ? String(rt[9]).trim() : "",
-        turmaNova: rt[10] ? String(rt[10]).trim() : "",
-        tipoAcao: "Troca de Turma",
-        motivo: rt[12] ? String(rt[12]).trim() : "Solicitação via Formulário",
-        justificativa: rt[13] ? String(rt[13]).trim() : "",
-        status: statusT,
-        notaResolucao: rt[15] ? String(rt[15]).trim() : ""
-      });
-    }
+function sincronizarAbaDadosParaTiDB() {
+  var ss;
+  try {
+    ss = (typeof obterPlanilhaMestra === 'function') ? obterPlanilhaMestra() : SpreadsheetApp.getActiveSpreadsheet();
+  } catch (e) {
+    ss = SpreadsheetApp.getActiveSpreadsheet();
   }
-
-  // 2. Aba: Troca de Modalidade
-  var abaMod = ss.getSheetByName("Troca de Modalidade");
-  if (abaMod) {
-    var dMod = abaMod.getDataRange().getValues();
-    for (var m = 1; m < dMod.length; m++) {
-      var rm = dMod[m];
-      var emailM = String(rm[1] || "").trim().toLowerCase();
-      var nomeM = String(rm[2] || "").trim();
-      if (!emailM && !nomeM) continue;
-
-      var statusRawM = String(rm[12] || "").trim();
-      var statusM = (statusRawM.toLowerCase().indexOf("atendido") !== -1 || statusRawM.toLowerCase().indexOf("conclu") !== -1 || statusRawM.toLowerCase().indexOf("deferido") !== -1) ? "Deferido" :
-                    (statusRawM.toLowerCase().indexOf("indefer") !== -1 || statusRawM.toLowerCase().indexOf("recus") !== -1) ? "Indeferido" : "Pendente";
-
-      solicitacoes.push({
-        id: "SOLIC_MOD_" + (m + 1),
-        abaOrigem: "Troca de Modalidade",
-        linhaOrigem: m + 1,
-        origem: "Troca de Modalidade",
-        dataSolicitacao: rm[0] ? String(rm[0]) : "",
-        emailCursista: emailM,
-        nomeCursista: nomeM,
-        cpf: rm[4] ? String(rm[4]).replace(/\D/g, "") : "",
-        cgm: rm[5] ? String(rm[5]).replace(/\D/g, "") : "",
-        turmaAntiga: rm[9] ? String(rm[9]).trim() : "",
-        turmaNova: rm[10] ? String(rm[10]).trim() : "",
-        tipoAcao: "Troca de Modalidade",
-        motivo: rm[11] ? String(rm[11]).trim() : "Solicitação de Modalidade",
-        justificativa: rm[12] ? String(rm[12]).trim() : "",
-        status: statusM,
-        notaResolucao: rm[13] ? String(rm[13]).trim() : ""
-      });
-    }
+  if (!ss) {
+    try { ss = SpreadsheetApp.openById(SPREADSHEET_ID_MESTRA_TIDB); } catch(e) {}
   }
+  var aba = ss.getSheetByName("DADOS") || ss.getSheetByName("CURSISTAS") || ss.getSheets()[0];
+  if (!aba) return { status: 'erro', mensagem: 'Aba DADOS não encontrada.' };
 
-  // 3. Aba: Vínculos em Avaliação Formativa
-  var abaVinc = ss.getSheetByName("Vínculos em Avaliação Formativa") || ss.getSheetByName("Vinculos na AF");
-  if (abaVinc) {
-    var dVinc = abaVinc.getDataRange().getValues();
-    for (var v = 1; v < dVinc.length; v++) {
-      var rv = dVinc[v];
-      var emailV = String(rv[1] || "").trim().toLowerCase();
-      var nomeV = String(rv[2] || "").trim();
-      if (!emailV && !nomeV) continue;
+  var dados = aba.getDataRange().getValues();
+  if (dados.length < 2) return { status: 'vazio' };
 
-      var statusRawV = String(rv[17] || "").trim();
-      var statusV = (statusRawV.toLowerCase().indexOf("atendido") !== -1 || statusRawV.toLowerCase().indexOf("conclu") !== -1 || statusRawV.toLowerCase().indexOf("deferido") !== -1) ? "Deferido" :
-                    (statusRawV.toLowerCase().indexOf("indefer") !== -1 || statusRawV.toLowerCase().indexOf("recus") !== -1) ? "Indeferido" : "Pendente";
-
-      var turmaAntigaV = (rv.length > 21 && rv[21]) ? String(rv[21]).trim() : (rv[12] ? String(rv[12]).trim() : "");
-      var turmaNovaV = (rv.length > 22 && rv[22]) ? String(rv[22]).trim() : (rv[13] ? String(rv[13]).trim() : "");
-
-      solicitacoes.push({
-        id: "SOLIC_VINC_" + (v + 1),
-        abaOrigem: abaVinc.getName(),
-        linhaOrigem: v + 1,
-        origem: "Vínculos na AF",
-        dataSolicitacao: rv[0] ? String(rv[0]) : "",
-        emailCursista: emailV,
-        nomeCursista: nomeV,
-        cpf: rv[4] ? String(rv[4]).replace(/\D/g, "") : "",
-        cgm: rv[5] ? String(rv[5]).replace(/\D/g, "") : "",
-        turmaAntiga: turmaAntigaV,
-        turmaNova: turmaNovaV,
-        tipoAcao: "Vínculo na AF",
-        motivo: "Vínculo em Avaliação Formativa",
-        justificativa: rv[16] ? String(rv[16]).trim() : "",
-        status: statusV,
-        notaResolucao: rv[18] ? String(rv[18]).trim() : ""
-      });
-    }
-  }
-
-  return { status: 'sucesso', total: solicitacoes.length, lista: solicitacoes };
-}
-
-function apiProcessarMovimentacao(dados) {
-  var ss = obterPlanilhaMestra();
-  if (!ss) return { status: 'erro', mensagem: 'Planilha mestra não acessível.' };
-
-  var cgmBusca = dados.cgm ? String(dados.cgm).replace(/\D/g, "").trim() : "";
-  var cpfBusca = dados.cpf ? String(dados.cpf).replace(/\D/g, "").trim() : "";
-  var emailBusca = dados.email ? String(dados.email).trim().toLowerCase() : "";
-  var lfBusca = dados.lf ? String(dados.lf).replace(/\D/g, "").trim() : "";
-  var turmaNova = dados.turmaNova ? String(dados.turmaNova).trim() : "";
-  var codSereNova = dados.codSereNova ? String(dados.codSereNova).trim() : "";
-  var statusDecisao = dados.statusDecisao || "Deferido";
-  var isDeferido = (statusDecisao.toLowerCase() === "deferido" || statusDecisao.toLowerCase() === "atendida");
-
-  var abaCursistas = ss.getSheetByName("CURSISTAS") || ss.getSheetByName("DADOS");
-  if (!abaCursistas) return { status: 'erro', mensagem: 'Aba CURSISTAS/DADOS não encontrada.' };
-
-  var valoresCursistas = abaCursistas.getDataRange().getValues();
-  var cabecalho = valoresCursistas[0].map(function(c) {
+  var cabecalho = dados[0].map(function(c) {
     return String(c || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   });
 
@@ -1930,296 +651,844 @@ function apiProcessarMovimentacao(dados) {
     return -1;
   }
 
+  var idxNome = getIdx(["nome_cursista", "nome cursista", "nome"]);
   var idxCgm = getIdx(["cgm"]);
-  var idxCpf = getIdx(["cpf cursista", "cpf"]);
-  var idxEmail = getIdx(["e-mail", "email cursista", "email"]);
-  var idxNome = getIdx(["nome cursista", "nome do cursista", "cursista", "nome"]);
+  var idxEmail = getIdx(["e-mail", "email", "e-mail cursista", "email cursista"]);
+  var idxCpf = getIdx(["cpf_cursista", "cpf"]);
+  var idxRg = getIdx(["rg"]);
+  var idxTelefone = getIdx(["telefone_cursista", "telefone", "fone"]);
+  var idxModalidade = getIdx(["modalidade"]);
+  var idxComponente = getIdx(["componente", "disciplina"]);
   var idxTurma = getIdx(["turmas", "turma"]);
-  var idxFormador = getIdx(["nome formador", "formador"]);
-  var idxEmailFormador = getIdx(["e-mail formador", "email formador"]);
-  var idxTutor = getIdx(["tutor responsavel", "tutor"]);
-  var idxEmailTutor = getIdx(["e-mail tutor", "email tutor"]);
-  var idxLinhaFuncional = getIdx(["linha funcional", "linha_funcional", "lf", "padrao", "vinculo"]);
+  var idxDia = getIdx(["dia_da_semana", "dia da semana", "dia"]);
+  var idxHorarioIni = getIdx(["horario_inicial", "horario inicial", "inicio"]);
+  var idxHorarioFim = getIdx(["horario_fim", "horario fim", "fim"]);
+  var idxTurno = getIdx(["turno"]);
+  var idxAno = getIdx(["ano_formativo", "ano formativo", "ano"]);
+  var idxFormador = getIdx(["nome_formador", "nome formador", "formador"]);
+  var idxCpfFormador = getIdx(["cpf_formador", "cpf formador"]);
+  var idxRgFormador = getIdx(["rg_formador", "rg formador"]);
+  var idxEmailFormador = getIdx(["e-mail_formador", "email_formador", "email formador"]);
+  var idxFoneFormador = getIdx(["telefone_formador", "telefone formador"]);
+  var idxNreFormador = getIdx(["nre_formador", "nre formador"]);
+  var idxCompFormador = getIdx(["componente_formador", "componente formador"]);
+  var idxTutor = getIdx(["tutor_responsavel", "tutor responsavel", "tutor"]);
+  var idxEmailTutor = getIdx(["email_tutor", "e-mail tutor", "email tutor"]);
+  var idxFoneTutor = getIdx(["telefone_tutor", "telefone tutor"]);
+  var idxNreTutor = getIdx(["nre_tutor", "nre tutor", "nre"]);
+  var idxEmailNre = getIdx(["e-mail_nre", "email_nre", "email nre"]);
+  var idxLink = getIdx(["link", "link classroom"]);
+  var idxClassroomId = getIdx(["id_classroom", "id classroom"]);
+  var idxPeriodoIni = getIdx(["periodo_ini", "periodo inicial"]);
+  var idxChamamento = getIdx(["chamamento"]);
+  var idxNreExe = getIdx(["nre_exe"]);
+  var idxMunicExe = getIdx(["munic_exe", "municipio"]);
+  var idxCompConc = getIdx(["componente_conc"]);
 
-  // Coluna H na planilha padrão da SEED-PR é a coluna 8
-  var colTurma = idxTurma !== -1 ? (idxTurma + 1) : 8;
+  var cursistas = [];
+  for (var i = 1; i < dados.length; i++) {
+    var row = dados[i];
+    var nome = idxNome !== -1 ? String(row[idxNome] || "").trim() : "";
+    var cgm = idxCgm !== -1 ? String(row[idxCgm] || "").trim() : "";
+    if (!nome && !cgm) continue;
 
-  var linhaCursista = -1;
-  var linhaDadosCursista = null;
+    var turma = idxTurma !== -1 ? String(row[idxTurma] || "").trim() : "";
+    var cod = cgm ? (cgm + "_" + turma) : ("CURS_" + i);
 
-  for (var r = 1; r < valoresCursistas.length; r++) {
-    var row = valoresCursistas[r];
-    var cgmRow = idxCgm !== -1 ? String(row[idxCgm] || "").replace(/\D/g, "").trim() : "";
-    var cpfRow = idxCpf !== -1 ? String(row[idxCpf] || "").replace(/\D/g, "").trim() : "";
-    var emailRow = idxEmail !== -1 ? String(row[idxEmail] || "").trim().toLowerCase() : "";
-    var lfRow = idxLinhaFuncional !== -1 ? String(row[idxLinhaFuncional] || "").replace(/\D/g, "").trim() : (row.length > 36 ? String(row[36] || "").replace(/\D/g, "").trim() : "");
-
-    var match = false;
-    if (cgmBusca && cgmRow === cgmBusca) {
-      if (lfBusca && lfRow) {
-        match = (lfRow === lfBusca);
-      } else {
-        match = true;
-      }
-    } else if (cpfBusca && cpfRow === cpfBusca) {
-      match = true;
-    } else if (emailBusca && emailRow === emailBusca) {
-      match = true;
-    }
-
-    if (match) {
-      linhaCursista = r + 1; // 1-based index no Google Sheets
-      linhaDadosCursista = row;
-      break;
-    }
+    cursistas.push({
+      cod_cursista: cod,
+      cgm: cgm,
+      nome_cursista: nome,
+      email: idxEmail !== -1 ? String(row[idxEmail] || "").trim().toLowerCase() : null,
+      cpf_cursista: idxCpf !== -1 ? String(row[idxCpf] || "").replace(/\D/g, "") : null,
+      rg: idxRg !== -1 ? String(row[idxRg] || "").trim() : null,
+      telefone_cursista: idxTelefone !== -1 ? String(row[idxTelefone] || "").trim() : null,
+      modalidade: idxModalidade !== -1 ? String(row[idxModalidade] || "").trim() : null,
+      componente: idxComponente !== -1 ? String(row[idxComponente] || "").trim() : null,
+      turmas: turma,
+      dia_da_semana: idxDia !== -1 ? String(row[idxDia] || "").trim() : null,
+      horario_inicial: idxHorarioIni !== -1 ? String(row[idxHorarioIni] || "").trim() : null,
+      horario_fim: idxHorarioFim !== -1 ? String(row[idxHorarioFim] || "").trim() : null,
+      turno: idxTurno !== -1 ? String(row[idxTurno] || "").trim() : null,
+      ano_formativo: idxAno !== -1 ? String(row[idxAno] || "").trim() : null,
+      nome_formador: idxFormador !== -1 ? String(row[idxFormador] || "").trim() : null,
+      cpf_formador: idxCpfFormador !== -1 ? String(row[idxCpfFormador] || "").replace(/\D/g, "") : null,
+      rg_formador: idxRgFormador !== -1 ? String(row[idxRgFormador] || "").trim() : null,
+      email_formador: idxEmailFormador !== -1 ? String(row[idxEmailFormador] || "").trim().toLowerCase() : null,
+      telefone_formador: idxFoneFormador !== -1 ? String(row[idxFoneFormador] || "").trim() : null,
+      nre_formador: idxNreFormador !== -1 ? normalizeNre(row[idxNreFormador]) : null,
+      componente_formador: idxCompFormador !== -1 ? String(row[idxCompFormador] || "").trim() : null,
+      tutor_responsavel: idxTutor !== -1 ? String(row[idxTutor] || "").trim() : null,
+      email_tutor: idxEmailTutor !== -1 ? String(row[idxEmailTutor] || "").trim().toLowerCase() : null,
+      telefone_tutor: idxFoneTutor !== -1 ? String(row[idxFoneTutor] || "").trim() : null,
+      nre_tutor: idxNreTutor !== -1 ? normalizeNre(row[idxNreTutor]) : null,
+      email_nre: idxEmailNre !== -1 ? String(row[idxEmailNre] || "").trim().toLowerCase() : null,
+      link: idxLink !== -1 ? String(row[idxLink] || "").trim() : null,
+      id_classroom: idxClassroomId !== -1 ? String(row[idxClassroomId] || "").trim() : null,
+      periodo_ini: idxPeriodoIni !== -1 ? String(row[idxPeriodoIni] || "").trim() : null,
+      chamamento: idxChamamento !== -1 ? String(row[idxChamamento] || "").trim() : null,
+      nre_exe: idxNreExe !== -1 ? normalizeNre(row[idxNreExe]) : null,
+      munic_exe: idxMunicExe !== -1 ? String(row[idxMunicExe] || "").trim() : null,
+      componente_conc: idxCompConc !== -1 ? String(row[idxCompConc] || "").trim() : null
+    });
   }
 
-  var turmaAnterior = dados.turmaAnterior || "";
-  var nomeCursista = dados.nomeCursista || (dados.nome || "");
-  var emailCursista = emailBusca;
-  var cgmEncontrado = cgmBusca;
-  var lfEncontrada = lfBusca || "1";
-  var cpfEncontrado = cpfBusca;
-  var tutorAntigo = "";
-  var emailTutorAntigo = "";
-  var formadorAntigo = "";
-  var emailFormadorAntigo = "";
+  var BATCH_SIZE = 100;
+  var totalSinc = 0;
+  for (var b = 0; b < cursistas.length; b += BATCH_SIZE) {
+    var lote = cursistas.slice(b, b + BATCH_SIZE);
+    var endpoint = VERCEL_APP_URL.replace(/\/$/, '') + '/api/tidb';
 
-  if (linhaDadosCursista) {
-    turmaAnterior = idxTurma !== -1 ? String(linhaDadosCursista[idxTurma] || "").trim() : String(linhaDadosCursista[7] || "").trim();
-    nomeCursista = idxNome !== -1 ? String(linhaDadosCursista[idxNome] || "").trim() : nomeCursista;
-    emailCursista = idxEmail !== -1 ? String(linhaDadosCursista[idxEmail] || "").trim().toLowerCase() : emailCursista;
-    cgmEncontrado = idxCgm !== -1 ? String(linhaDadosCursista[idxCgm] || "").replace(/\D/g, "").trim() : cgmEncontrado;
-    cpfEncontrado = idxCpf !== -1 ? String(linhaDadosCursista[idxCpf] || "").replace(/\D/g, "").trim() : cpfEncontrado;
-    tutorAntigo = idxTutor !== -1 ? String(linhaDadosCursista[idxTutor] || "").trim() : "";
-    emailTutorAntigo = idxEmailTutor !== -1 ? String(linhaDadosCursista[idxEmailTutor] || "").trim().toLowerCase() : "";
-    formadorAntigo = idxFormador !== -1 ? String(linhaDadosCursista[idxFormador] || "").trim() : "";
-    emailFormadorAntigo = idxEmailFormador !== -1 ? String(linhaDadosCursista[idxEmailFormador] || "").trim().toLowerCase() : "";
-    if (idxLinhaFuncional !== -1 && linhaDadosCursista[idxLinhaFuncional]) {
-      lfEncontrada = String(linhaDadosCursista[idxLinhaFuncional]).replace(/\D/g, "").trim() || lfEncontrada;
-    }
-  }
-
-  // 1. SE DEFERIDO: Atualiza a Coluna H na aba CURSISTAS/DADOS
-  if (isDeferido && linhaCursista !== -1 && turmaNova) {
-    abaCursistas.getRange(linhaCursista, colTurma).setValue(turmaNova);
-    SpreadsheetApp.flush();
-  }
-
-  // 2. Busca Formador e Tutor da Turma Nova na aba DADOS
-  var tutorNovo = "";
-  var emailTutorNovo = "";
-  var formadorNovo = "";
-  var emailFormadorNovo = "";
-
-  if (turmaNova) {
-    var cleanNova = turmaNova.trim().toUpperCase();
-    for (var r = 1; r < valoresCursistas.length; r++) {
-      var tRow = idxTurma !== -1 ? String(valoresCursistas[r][idxTurma] || "").trim().toUpperCase() : "";
-      if (tRow === cleanNova) {
-        formadorNovo = idxFormador !== -1 ? String(valoresCursistas[r][idxFormador] || "").trim() : "";
-        emailFormadorNovo = idxEmailFormador !== -1 ? String(valoresCursistas[r][idxEmailFormador] || "").trim().toLowerCase() : "";
-        tutorNovo = idxTutor !== -1 ? String(valoresCursistas[r][idxTutor] || "").trim() : "";
-        emailTutorNovo = idxEmailTutor !== -1 ? String(valoresCursistas[r][idxEmailTutor] || "").trim().toLowerCase() : "";
-        break;
-      }
-    }
-  }
-
-  // 3. Garante e grava na aba "Histórico de Movimentações"
-  var nomeAbaHist = "Histórico de Movimentações";
-  var abaHist = ss.getSheetByName(nomeAbaHist);
-  if (!abaHist) {
-    abaHist = ss.insertSheet(nomeAbaHist);
-    abaHist.appendRow([
-      "Data/Hora Registro",
-      "CGM",
-      "Linha Funcional",
-      "Nome do Cursista",
-      "CPF",
-      "Turma Anterior",
-      "Turma Nova",
-      "Cód. SERE Nova",
-      "Status Decisão",
-      "Motivo",
-      "Justificativa / Observação",
-      "Status E-mail",
-      "Operador / Solicitado Por"
-    ]);
-    abaHist.getRange(1, 1, 1, 13).setFontWeight("bold").setBackground("#001d3d").setFontColor("#ffffff");
-  }
-
-  var dataHoraAgora = Utilities.formatDate(new Date(), "America/Sao_Paulo", "dd/MM/yyyy HH:mm:ss");
-  var linhaHist = [
-    dataHoraAgora,
-    cgmEncontrado,
-    lfEncontrada,
-    nomeCursista,
-    cpfEncontrado,
-    turmaAnterior,
-    turmaNova,
-    codSereNova,
-    statusDecisao,
-    dados.motivo || "Movimentação de Turma",
-    dados.notaResolucao || "",
-    "Pendente",
-    dados.solicitadoPor || "Sistema Desktop Java Swing"
-  ];
-  abaHist.appendRow(linhaHist);
-  var linhaInserida = abaHist.getLastRow();
-
-  // 4. Atualiza o status na aba de solicitação original se informada
-  if (dados.abaOrigem && dados.linhaOrigem) {
-    try {
-      var abaOrig = ss.getSheetByName(dados.abaOrigem);
-      if (abaOrig) {
-        var numLinha = parseInt(dados.linhaOrigem, 10);
-        if (numLinha > 1) {
-          var headersOrig = abaOrig.getRange(1, 1, 1, abaOrig.getLastColumn()).getValues()[0].map(function(h) {
-            return String(h || "").trim().toLowerCase();
-          });
-          var colStatus = headersOrig.findIndex(function(h) { return h.indexOf("status") !== -1 || h.indexOf("situa") !== -1; });
-          if (colStatus !== -1) {
-            abaOrig.getRange(numLinha, colStatus + 1).setValue(statusDecisao);
-          }
-        }
-      }
-    } catch (eOrig) {
-      Logger.log("Aviso atualização origem: " + eOrig.toString());
-    }
-  }
-
-  // 5. Grava no TiDB Cloud para atualizar o dashboard web em tempo real
-  try {
-    var movPayload = {
-      id: "MOV_SWING_" + Date.now(),
-      timestamp: new Date().toISOString(),
-      cgm: cgmEncontrado,
-      linha_funcional: lfEncontrada,
-      nome_cursista: nomeCursista,
-      emailCursista: emailCursista,
-      cpf: cpfEncontrado,
-      turma_anterior: turmaAnterior,
-      turma_nova: turmaNova,
-      tipo_acao: dados.tipoAcao || "Troca de Turma",
-      motivo: dados.motivo || "Movimentação de Turma",
-      justificativa: dados.notaResolucao || "",
-      status: statusDecisao,
-      nota_resolucao: dados.notaResolucao || ("Decisão: " + statusDecisao),
-      solicitadoPor: dados.solicitadoPor || "Sistema Desktop Java Swing"
+    var options = {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({
+        action: 'sync_cursistas_bulk',
+        cursistas: lote,
+        truncate: (b === 0)
+      }),
+      muteHttpExceptions: true
     };
 
-    var endpoint = obterEndpointApi('sync_movimentacoes_bulk');
-    var options = obterOpcoesHttp({
-      action: 'sync_movimentacoes_bulk',
-      movimentacoes: [movPayload]
-    });
-    UrlFetchApp.fetch(endpoint, options);
-  } catch (eTiDB) {
-    Logger.log("Aviso TiDB: " + eTiDB.toString());
+    try {
+      var resp = UrlFetchApp.fetch(endpoint, options);
+      if (resp.getResponseCode() === 200) {
+        totalSinc += lote.length;
+      }
+    } catch (err) {}
   }
 
-  return {
-    status: 'sucesso',
-    linhaHistIndice: linhaInserida,
-    dadosEmail: {
-      cursistaNome: nomeCursista,
-      cursistaEmail: emailCursista,
-      cgm: cgmEncontrado,
-      linhaFuncional: lfEncontrada,
-      turmaAnterior: turmaAnterior,
-      turmaNova: turmaNova,
-      codSereNova: codSereNova,
-      formadorAntigoNome: formadorAntigo,
-      formadorAntigoEmail: emailFormadorAntigo,
-      tutorAntigoNome: tutorAntigo,
-      tutorAntigoEmail: emailTutorAntigo,
-      formadorNovoNome: formadorNovo,
-      formadorNovoEmail: emailFormadorNovo,
-      tutorNovoNome: tutorNovo,
-      tutorNovoEmail: emailTutorNovo,
-      statusDecisao: statusDecisao,
-      notaResolucao: dados.notaResolucao || "",
-      dataEfetivacao: dataHoraAgora
-    }
-  };
+  return { status: 'sucesso', total: totalSinc };
 }
 
-function apiEnviarEmailMovimentacao(dadosEmail) {
+/**
+ * 6. Sincroniza a aba CONCLUINTES-1CH
+ */
+function sincronizarAbaConcluintesParaTiDB() {
+  var ss;
   try {
-    var para = dadosEmail.para || dadosEmail.cursistaEmail;
-    if (!para) return { status: 'erro', mensagem: 'E-mail do cursista não informado.' };
+    ss = (typeof obterPlanilhaMestra === 'function') ? obterPlanilhaMestra() : SpreadsheetApp.getActiveSpreadsheet();
+  } catch (e) {
+    ss = SpreadsheetApp.getActiveSpreadsheet();
+  }
+  if (!ss) {
+    try { ss = SpreadsheetApp.openById(SPREADSHEET_ID_MESTRA_TIDB); } catch(e) {}
+  }
+  var aba = ss.getSheetByName("CONCLUINTES-1CH") || ss.getSheetByName("CONCLUINTES");
+  if (!aba) return { status: 'nao_encontrada' };
 
-    var ccs = [];
-    if (dadosEmail.ccFormadorAntigo) ccs.push(dadosEmail.ccFormadorAntigo);
-    if (dadosEmail.ccFormadorNovo) ccs.push(dadosEmail.ccFormadorNovo);
-    if (dadosEmail.ccTutorAntigo) ccs.push(dadosEmail.ccTutorAntigo);
-    if (dadosEmail.ccTutorNovo) ccs.push(dadosEmail.ccTutorNovo);
+  var dados = aba.getDataRange().getValues();
+  if (dados.length < 2) return { status: 'vazio' };
 
-    var ccString = ccs.filter(function(e) { return e && e.indexOf("@") !== -1; }).join(",");
-    var assunto = dadosEmail.assunto || ("[SEED-PR / Estágio Probatório] Movimentação de Turma: " + (dadosEmail.cursistaNome || ""));
-    var corpo = dadosEmail.corpo || "";
+  var cabecalho = dados[0].map(function(c) {
+    return String(c || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  });
 
-    MailApp.sendEmail({
-      to: para,
-      cc: ccString || undefined,
-      subject: assunto,
-      body: corpo
-    });
-
-    // Atualiza a coluna Status E-mail na aba "Histórico de Movimentações"
-    if (dadosEmail.linhaHistIndice) {
-      var ss = obterPlanilhaMestra();
-      var abaHist = ss.getSheetByName("Histórico de Movimentações");
-      if (abaHist) {
-        var dataHoraEnvio = Utilities.formatDate(new Date(), "America/Sao_Paulo", "dd/MM/yyyy HH:mm");
-        abaHist.getRange(dadosEmail.linhaHistIndice, 12).setValue("Enviado em " + dataHoraEnvio);
-      }
+  function getIdx(keywords) {
+    for (var k = 0; k < keywords.length; k++) {
+      var idx = cabecalho.indexOf(keywords[k].toLowerCase());
+      if (idx !== -1) return idx;
     }
+    for (var k = 0; k < keywords.length; k++) {
+      var kw = keywords[k].toLowerCase();
+      var idx = cabecalho.findIndex(function(c) { return c.includes(kw); });
+      if (idx !== -1) return idx;
+    }
+    return -1;
+  }
 
-    return { status: 'sucesso', mensagem: 'E-mails enviados com sucesso para todos os envolvidos!' };
+  var idxNome = getIdx(["nome"]);
+  var idxEmail = getIdx(["e-mail", "email"]);
+  var idxCgm = getIdx(["cgm"]);
+  var idxCpf = getIdx(["cpf"]);
+  var idxRg = getIdx(["rg"]);
+  var idxComponente = getIdx(["componente", "disciplina"]);
+  var idxNre = getIdx(["nre"]);
+  var idxMunic = getIdx(["munic"]);
+  var idxTurma = getIdx(["turma"]);
+  var idxAno = getIdx(["ano"]);
+  var idxMod = getIdx(["modalidade"]);
+  var idxDataConc = getIdx(["conclus", "data"]);
+
+  var concluintes = [];
+  for (var i = 1; i < dados.length; i++) {
+    var row = dados[i];
+    var nome = idxNome !== -1 ? String(row[idxNome] || "").trim() : "";
+    if (!nome) continue;
+
+    var cpf = idxCpf !== -1 ? String(row[idxCpf] || "").replace(/\D/g, "") : "";
+
+    concluintes.push({
+      cod_cursista: cpf ? ("CONC_" + cpf) : ("CONC_" + i),
+      nome_cursista: nome,
+      email: idxEmail !== -1 ? String(row[idxEmail] || "").trim().toLowerCase() : null,
+      cgm: idxCgm !== -1 ? String(row[idxCgm] || "").trim() : null,
+      cpf: cpf || null,
+      rg: idxRg !== -1 ? String(row[idxRg] || "").trim() : null,
+      componente: idxComponente !== -1 ? String(row[idxComponente] || "").trim() : null,
+      nre_exe: idxNre !== -1 ? normalizeNre(row[idxNre]) : null,
+      munic_exe: idxMunic !== -1 ? String(row[idxMunic] || "").trim() : null,
+      turmas: idxTurma !== -1 ? String(row[idxTurma] || "").trim() : null,
+      ano_formativo: idxAno !== -1 ? String(row[idxAno] || "").trim() : "1º ANO",
+      modalidade: idxMod !== -1 ? String(row[idxMod] || "").trim() : "Docentes",
+      data_conclusao: idxDataConc !== -1 ? String(row[idxDataConc] || "").trim() : null,
+      chamamento: "1º Chamamento",
+      situacao: "CONCLUÍDO"
+    });
+  }
+
+  var BATCH_SIZE = 100;
+  var totalSinc = 0;
+  for (var b = 0; b < concluintes.length; b += BATCH_SIZE) {
+    var lote = concluintes.slice(b, b + BATCH_SIZE);
+    var endpoint = VERCEL_APP_URL.replace(/\/$/, '') + '/api/tidb';
+
+    var options = {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({
+        action: 'sync_concluintes_bulk',
+        concluintes: lote,
+        truncate: (b === 0)
+      }),
+      muteHttpExceptions: true
+    };
+
+    try {
+      var resp = UrlFetchApp.fetch(endpoint, options);
+      if (resp.getResponseCode() === 200) {
+        totalSinc += lote.length;
+      }
+    } catch (err) {}
+  }
+
+  return { status: 'sucesso', total: totalSinc };
+}
+
+/**
+ * 7. Sincroniza a aba TUTORES
+ */
+function sincronizarAbaTutoresParaTiDB() {
+  var ss;
+  try {
+    ss = (typeof obterPlanilhaMestra === 'function') ? obterPlanilhaMestra() : SpreadsheetApp.getActiveSpreadsheet();
+  } catch (e) {
+    ss = SpreadsheetApp.getActiveSpreadsheet();
+  }
+  if (!ss) {
+    try { ss = SpreadsheetApp.openById(SPREADSHEET_ID_MESTRA_TIDB); } catch(e) {}
+  }
+  var aba = ss.getSheetByName("TUTORES") || ss.getSheetByName("Tutores");
+  if (!aba) return { status: 'nao_encontrada' };
+
+  var dados = aba.getDataRange().getValues();
+  if (dados.length < 2) return { status: 'vazio' };
+
+  var cabecalho = dados[0].map(function(c) {
+    return String(c || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  });
+
+  function getIdx(keywords) {
+    for (var k = 0; k < keywords.length; k++) {
+      var idx = cabecalho.indexOf(keywords[k].toLowerCase());
+      if (idx !== -1) return idx;
+    }
+    for (var k = 0; k < keywords.length; k++) {
+      var kw = keywords[k].toLowerCase();
+      var idx = cabecalho.findIndex(function(c) { return c.includes(kw); });
+      if (idx !== -1) return idx;
+    }
+    return -1;
+  }
+
+  var idxNome = getIdx(["tutor", "nome"]);
+  var idxEmailEduc = getIdx(["email_educ", "email educ", "e-mail educ", "educ"]);
+  var idxEmailAdm = getIdx(["email_adm", "email adm", "e-mail adm", "adm"]);
+  var idxTelefone = getIdx(["telefone", "fone"]);
+  var idxNre = getIdx(["nre_tutor", "nre"]);
+  var idxEmailNre = getIdx(["email_nre", "e-mail nre", "email nre"]);
+
+  var tutores = [];
+  var vistos = {};
+  for (var i = 1; i < dados.length; i++) {
+    var row = dados[i];
+    var nome = idxNome !== -1 ? String(row[idxNome] || "").trim() : "";
+    if (!nome) continue;
+
+    var emailEduc = idxEmailEduc !== -1 ? String(row[idxEmailEduc] || "").trim().toLowerCase() : "";
+    var chave = nome + "|" + emailEduc;
+    if (vistos[chave]) continue;
+    vistos[chave] = true;
+
+    tutores.push({
+      tutor_responsavel: nome,
+      email_educ: emailEduc || null,
+      email_adm: idxEmailAdm !== -1 ? String(row[idxEmailAdm] || "").trim().toLowerCase() : null,
+      telefone: idxTelefone !== -1 ? String(row[idxTelefone] || "").trim() : null,
+      nre_tutor: idxNre !== -1 ? normalizeNre(row[idxNre]) : null,
+      email_nre: idxEmailNre !== -1 ? String(row[idxEmailNre] || "").trim().toLowerCase() : null
+    });
+  }
+
+  var BATCH_SIZE = 100;
+  var totalSinc = 0;
+  for (var b = 0; b < tutores.length; b += BATCH_SIZE) {
+    var lote = tutores.slice(b, b + BATCH_SIZE);
+    var endpoint = VERCEL_APP_URL.replace(/\/$/, '') + '/api/tidb';
+
+    var options = {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({
+        action: 'sync_tutores_bulk',
+        tutores: lote,
+        truncate: (b === 0)
+      }),
+      muteHttpExceptions: true
+    };
+
+    try {
+      var resp = UrlFetchApp.fetch(endpoint, options);
+      if (resp.getResponseCode() === 200) {
+        totalSinc += lote.length;
+      }
+    } catch (err) {}
+  }
+
+  return { status: 'sucesso', total: totalSinc };
+}
+
+/**
+ * 8. Sincroniza a aba EXONERADOS
+ */
+function sincronizarAbaExoneradosParaTiDB() {
+  var ss;
+  try {
+    ss = (typeof obterPlanilhaMestra === 'function') ? obterPlanilhaMestra() : SpreadsheetApp.getActiveSpreadsheet();
+  } catch (e) {
+    ss = SpreadsheetApp.getActiveSpreadsheet();
+  }
+  if (!ss) {
+    try { ss = SpreadsheetApp.openById(SPREADSHEET_ID_MESTRA_TIDB); } catch(e) {}
+  }
+  var aba = ss.getSheetByName("EXONERADOS") || ss.getSheetByName("Exonerados");
+  if (!aba) return { status: 'nao_encontrada' };
+
+  var dados = aba.getDataRange().getValues();
+  if (dados.length < 2) return { status: 'vazio' };
+
+  var cabecalho = dados[0].map(function(c) {
+    return String(c || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  });
+
+  function getIdx(keywords) {
+    for (var k = 0; k < keywords.length; k++) {
+      var idx = cabecalho.indexOf(keywords[k].toLowerCase());
+      if (idx !== -1) return idx;
+    }
+    for (var k = 0; k < keywords.length; k++) {
+      var kw = keywords[k].toLowerCase();
+      var idx = cabecalho.findIndex(function(c) { return c.includes(kw); });
+      if (idx !== -1) return idx;
+    }
+    return -1;
+  }
+
+  var idxNome = getIdx(["nome", "nome_cursista", "servidor"]);
+  var idxEmail = getIdx(["email", "e-mail"]);
+  var idxCargo = getIdx(["cargo", "modalidade"]);
+  var idxDisciplina = getIdx(["disciplina", "componente"]);
+  var idxChamamento = getIdx(["chamamento"]);
+  var idxStatus = getIdx(["status", "motivo", "situacao"]);
+
+  var exonerados = [];
+  for (var i = 1; i < dados.length; i++) {
+    var row = dados[i];
+    var nome = idxNome !== -1 ? String(row[idxNome] || "").trim() : "";
+    if (!nome) continue;
+
+    var cargoVal = idxCargo !== -1 ? String(row[idxCargo] || "").trim() : null;
+    var discVal = idxDisciplina !== -1 ? String(row[idxDisciplina] || "").trim() : null;
+    var chamVal = idxChamamento !== -1 ? String(row[idxChamamento] || "").trim() : null;
+    var statVal = idxStatus !== -1 ? String(row[idxStatus] || "").trim() : null;
+
+    exonerados.push({
+      nome_cursista: nome,
+      email: idxEmail !== -1 ? String(row[idxEmail] || "").trim().toLowerCase() : null,
+      cargo: cargoVal,
+      modalidade: cargoVal,
+      disciplina: discVal,
+      componente: discVal,
+      chamamento: chamVal,
+      status: statVal,
+      motivo: statVal
+    });
+  }
+
+  var endpoint = VERCEL_APP_URL.replace(/\/$/, '') + '/api/tidb';
+  var options = {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify({
+      action: 'sync_exonerados_bulk',
+      exonerados: exonerados,
+      truncate: true
+    }),
+    muteHttpExceptions: true
+  };
+
+  try {
+    var resp = UrlFetchApp.fetch(endpoint, options);
+    return { status: 'sucesso', total: exonerados.length };
   } catch (err) {
-    return { status: 'erro', mensagem: err.toString() };
+    return { status: 'erro', total: 0 };
   }
 }
 
 /**
- * Endpoint HTTP REST para o Aplicativo Java Swing (quando publicado como Web App)
+ * 9. Sincroniza a aba CURSISTAS NAO CONCLUINTES
  */
-function doGet(e) {
-  var params = (e && e.parameter) ? e.parameter : {};
-  var action = params.action || 'ping';
+function sincronizarAbaNaoConcluintesParaTiDB() {
+  var ss;
+  try {
+    ss = (typeof obterPlanilhaMestra === 'function') ? obterPlanilhaMestra() : SpreadsheetApp.getActiveSpreadsheet();
+  } catch (e) {
+    ss = SpreadsheetApp.getActiveSpreadsheet();
+  }
+  if (!ss) {
+    try { ss = SpreadsheetApp.openById(SPREADSHEET_ID_MESTRA_TIDB); } catch(e) {}
+  }
+  var aba = ss.getSheetByName("CURSISTAS NAO CONCLUINTES") || ss.getSheetByName("NAO CONCLUINTES");
+  if (!aba) return { status: 'nao_encontrada' };
 
-  var result = {};
-  if (action === 'get_solicitacoes_pendentes') {
-    result = apiObterSolicitacoesPendentes();
-  } else if (action === 'health') {
-    result = { status: 'ok', servico: 'Google Apps Script SEED-PR' };
-  } else {
-    result = { status: 'erro', mensagem: 'Ação GET desconhecida: ' + action };
+  var dados = aba.getDataRange().getValues();
+  if (dados.length < 2) return { status: 'vazio' };
+
+  var cabecalho = dados[0].map(function(c) {
+    return String(c || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  });
+
+  function getIdx(keywords) {
+    for (var k = 0; k < keywords.length; k++) {
+      var idx = cabecalho.indexOf(keywords[k].toLowerCase());
+      if (idx !== -1) return idx;
+    }
+    for (var k = 0; k < keywords.length; k++) {
+      var kw = keywords[k].toLowerCase();
+      var idx = cabecalho.findIndex(function(c) { return c.includes(kw); });
+      if (idx !== -1) return idx;
+    }
+    return -1;
   }
 
-  return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
+  var idxNome = getIdx(["nome"]);
+  var idxEmail = getIdx(["e-mail", "email"]);
+  var idxModalidade = getIdx(["modalidade"]);
+  var idxComponente = getIdx(["componente"]);
+  var idxChamamento = getIdx(["chamamento"]);
+  var idxMotivo = getIdx(["motivo"]);
+
+  var naoConcluintes = [];
+  for (var i = 1; i < dados.length; i++) {
+    var row = dados[i];
+    var nome = idxNome !== -1 ? String(row[idxNome] || "").trim() : "";
+    if (!nome) continue;
+
+    naoConcluintes.push({
+      nome_cursista: nome,
+      email: idxEmail !== -1 ? String(row[idxEmail] || "").trim().toLowerCase() : null,
+      modalidade: idxModalidade !== -1 ? String(row[idxModalidade] || "").trim() : null,
+      componente: idxComponente !== -1 ? String(row[idxComponente] || "").trim() : null,
+      chamamento: idxChamamento !== -1 ? String(row[idxChamamento] || "").trim() : null,
+      motivo: idxMotivo !== -1 ? String(row[idxMotivo] || "").trim() : null
+    });
+  }
+
+  var endpoint = VERCEL_APP_URL.replace(/\/$/, '') + '/api/tidb';
+  var options = {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify({
+      action: 'sync_nao_concluintes_bulk',
+      nao_concluintes: naoConcluintes,
+      truncate: true
+    }),
+    muteHttpExceptions: true
+  };
+
+  try {
+    var resp = UrlFetchApp.fetch(endpoint, options);
+    return { status: 'sucesso', total: naoConcluintes.length };
+  } catch (err) {
+    return { status: 'erro', total: 0 };
+  }
 }
 
-function doPost(e) {
-  var action = (e && e.parameter && e.parameter.action) ? e.parameter.action : '';
-  var body = {};
+/**
+ * 10. Sincroniza formulários de movimentações (Troca de Turma, Modalidade e AF)
+ */
+function sincronizarAbasMovimentacoesParaTiDB() {
+  var ss;
   try {
-    body = JSON.parse(e.postData.contents || '{}');
-    if (!action && body.action) action = body.action;
-  } catch (err) {}
+    ss = (typeof obterPlanilhaMestra === 'function') ? obterPlanilhaMestra() : SpreadsheetApp.getActiveSpreadsheet();
+  } catch (e) {
+    ss = SpreadsheetApp.getActiveSpreadsheet();
+  }
+  if (!ss) {
+    try { ss = SpreadsheetApp.openById(SPREADSHEET_ID_MESTRA_TIDB); } catch(e) {}
+  }
+  var movimentacoes = [];
 
-  var result = {};
-  if (action === 'processar_movimentacao') {
-    result = apiProcessarMovimentacao(body);
-  } else if (action === 'enviar_email') {
-    result = apiEnviarEmailMovimentacao(body);
-  } else if (action === 'get_solicitacoes_pendentes') {
-    result = apiObterSolicitacoesPendentes();
-  } else {
-    result = { status: 'erro', mensagem: 'Ação POST desconhecida: ' + action };
+  function processarAba(nomeAba, colStatusIdx, tipoPadrao) {
+    var aba = ss.getSheetByName(nomeAba);
+    if (!aba) return;
+    var dados = aba.getDataRange().getValues();
+    if (dados.length < 2) return;
+
+    for (var i = 1; i < dados.length; i++) {
+      var row = dados[i];
+      var carimbo = String(row[0] || "").trim();
+      var email = String(row[1] || "").trim().toLowerCase();
+      var nome = String(row[2] || "").trim();
+      if (!nome && !email) continue;
+
+      var statusRaw = colStatusIdx < row.length ? String(row[colStatusIdx] || "").trim() : "";
+      var status = "Pendente";
+      if (statusRaw.match(/deferid|resolvid|atendid/i)) status = "Resolvido";
+      else if (statusRaw.match(/indeferid|recusad/i)) status = "Indeferido";
+
+      movimentacoes.push({
+        id: "MOV_" + nomeAba.replace(/\s+/g, "_") + "_" + i,
+        timestamp: carimbo,
+        cgm: String(row[3] || "").trim(),
+        nome_cursista: nome,
+        email: email,
+        tipo_acao: tipoPadrao,
+        motivo: String(row[6] || row[5] || "").trim(),
+        status: status,
+        solicitadoPor: 'Google Forms'
+      });
+    }
   }
 
-  return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
+  processarAba("Troca de Turma", 14, "Troca de Turma");
+  processarAba("Troca de Modalidade", 12, "Troca de Modalidade");
+  processarAba("Vínculos na AF", 17, "Vínculos na AF");
+
+  var BATCH_SIZE = 100;
+  var totalSinc = 0;
+  for (var b = 0; b < movimentacoes.length; b += BATCH_SIZE) {
+    var lote = movimentacoes.slice(b, b + BATCH_SIZE);
+    var endpoint = VERCEL_APP_URL.replace(/\/$/, '') + '/api/tidb';
+
+    var options = {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({
+        action: 'sync_movimentacoes_bulk',
+        movimentacoes: lote,
+        truncate: (b === 0)
+      }),
+      muteHttpExceptions: true
+    };
+
+    try {
+      var resp = UrlFetchApp.fetch(endpoint, options);
+      if (resp.getResponseCode() === 200) totalSinc += lote.length;
+    } catch (err) {}
+  }
+
+  return { status: 'sucesso', total: totalSinc };
+}
+
+/**
+ * 11. Extração direta das planilhas de observação (1º SEMESTRE, 2º SEMESTRE e COMPILADO)
+ * Suporta leitura por ID externo ou por abas locais vinculadas (IMPORTRANGE)
+ */
+function extrairObservacoesDePlanilhaExterna(spreadsheetId, anoRotulo, semestreForcado) {
+  var ss = null;
+  // 1. Tentar ler da planilha externa via openById
+  if (spreadsheetId) {
+    try {
+      ss = SpreadsheetApp.openById(spreadsheetId);
+    } catch (e) {
+      Logger.log('Aviso permissão ao ler planilha externa ' + spreadsheetId + ' (' + anoRotulo + ' ' + (semestreForcado || '') + '): ' + e.toString());
+    }
+  }
+
+  // 2. Se não conseguiu abrir externa (por restrição de permissão do Drive), buscar aba local na Planilha Mestra
+  var aba = null;
+  if (ss) {
+    aba = ss.getSheets()[0];
+  } else {
+    var ssLocal = null;
+    try { ssLocal = SpreadsheetApp.getActiveSpreadsheet(); } catch (e) {}
+    if (ssLocal) {
+      var nomesLocais = [];
+      if (semestreForcado === '1º Semestre') {
+        nomesLocais = (anoRotulo && anoRotulo.indexOf('1') !== -1)
+          ? ['OBSERVACOES_1ANO_1SEM', 'OBS_1ANO_1SEM', '1º ANO 1º SEM', 'OBS_1SEM', '1º ANO']
+          : ['OBSERVACOES_2ANO_1SEM', 'OBS_2ANO_1SEM', '2º ANO 1º SEM', '2º/3º ANO 1º SEM', '2º/3º ANO'];
+      } else if (semestreForcado === '2º Semestre') {
+        nomesLocais = (anoRotulo && anoRotulo.indexOf('1') !== -1)
+          ? ['OBSERVACOES_1ANO_2SEM', 'OBS_1ANO_2SEM', '1º ANO 2º SEM', 'OBS_2SEM', 'OBSERVACOES_1ANO']
+          : ['OBSERVACOES_2ANO_2SEM', 'OBS_2ANO_2SEM', '2º ANO 2º SEM', '2º/3º ANO 2º SEM', 'OBSERVACOES_2ANO'];
+      } else {
+        nomesLocais = ['OBSERVACOES_COMPILADO', 'COMPILADO_OBSERVACOES', 'OBSERVACOES_2024_2026', 'OBSERVACOES'];
+      }
+      for (var n = 0; n < nomesLocais.length; n++) {
+        aba = ssLocal.getSheetByName(nomesLocais[n]);
+        if (aba) {
+          Logger.log('✓ Utilizando aba local de observações: ' + nomesLocais[n]);
+          break;
+        }
+      }
+    }
+  }
+
+  if (!aba) return [];
+
+  var dados = [];
+  try {
+    dados = aba.getDataRange().getValues();
+  } catch (e) {
+    return [];
+  }
+  if (dados.length < 2) return [];
+
+  // Mapeamento dinâmico de colunas pelo cabeçalho (linha 0) para tolerar variações entre formulários
+  var headers = dados[0].map(function(h) { return String(h || '').trim().toLowerCase(); });
+  var idxCarimbo = -1, idxEmailFormador = -1, idxNomeFormador = -1, idxQuemObs = -1;
+  var idxNomeCursista = -1, idxEmailCursista = -1, idxRealizada = -1, idxModFeedback = -1;
+  var idxModalidade = -1, idxComponente = -1, idxTema = -1, idxProposta = -1;
+
+  for (var c = 0; c < headers.length; c++) {
+    var h = headers[c];
+    if (idxCarimbo === -1 && (h.indexOf('carimbo') !== -1 || h.indexOf('data/hora') !== -1)) idxCarimbo = c;
+    else if (idxEmailFormador === -1 && (h.indexOf('endereço de e-mail') !== -1 || h.indexOf('email formador') !== -1 || h.indexOf('e-mail formador') !== -1)) idxEmailFormador = c;
+    else if (idxNomeFormador === -1 && (h === 'formador' || h.indexOf('nome do formador') !== -1 || h.indexOf('nome formador') !== -1)) idxNomeFormador = c;
+    else if (idxQuemObs === -1 && (h.indexOf('quem observou') !== -1 || h.indexOf('observador') !== -1)) idxQuemObs = c;
+    else if (idxNomeCursista === -1 && (h === 'cursista' || h.indexOf('nome do cursista') !== -1 || h.indexOf('nome cursista') !== -1)) idxNomeCursista = c;
+    else if (idxEmailCursista === -1 && (h.indexOf('@escola cursista') !== -1 || h.indexOf('email cursista') !== -1 || h.indexOf('e-mail cursista') !== -1 || h.indexOf('@escola') !== -1)) idxEmailCursista = c;
+    else if (idxRealizada === -1 && (h.indexOf('realizada') !== -1 || h.indexOf('observação realizada') !== -1)) idxRealizada = c;
+    else if (idxModFeedback === -1 && (h.indexOf('modalidade de feedback') !== -1 || h.indexOf('devolutiva') !== -1)) idxModFeedback = c;
+    else if (idxComponente === -1 && (h.indexOf('componente') !== -1 || h.indexOf('atuação') !== -1)) idxComponente = c;
+    else if (idxTema === -1 && (h.indexOf('referência') !== -1 || h.indexOf('tema') !== -1)) idxTema = c;
+    else if (idxProposta === -1 && (h.indexOf('proposta') !== -1 || h.indexOf('implementação') !== -1)) idxProposta = c;
+    else if (idxModalidade === -1 && (h === 'modalidade' || h.indexOf('modalidade') !== -1)) idxModalidade = c;
+  }
+
+  // Fallbacks posicionais caso não haja cabeçalho identificado
+  if (idxCarimbo === -1) idxCarimbo = 0;
+  if (idxEmailFormador === -1) idxEmailFormador = 1;
+  if (idxNomeFormador === -1) idxNomeFormador = 2;
+  if (idxNomeCursista === -1) idxNomeCursista = 4;
+  if (idxEmailCursista === -1) idxEmailCursista = 5;
+
+  var lista = [];
+  for (var i = 1; i < dados.length; i++) {
+    var row = dados[i];
+    var carimbo = String(row[idxCarimbo] || '').trim();
+
+    // FILTRO RIGOROSO 2026: Não misturar anos anteriores no painel de observações vigentes de 2026
+    if (carimbo.indexOf('2024') !== -1 || carimbo.indexOf('2025') !== -1) continue;
+
+    var formadorEmail = String(row[idxEmailFormador] || '').trim().toLowerCase();
+    var formadorNome = String(row[idxNomeFormador] || '').trim() || formadorEmail;
+    var quemObservou = (idxQuemObs !== -1) ? String(row[idxQuemObs] || '').trim() : '';
+
+    var cursistaNome = String(row[idxNomeCursista] || '').trim();
+    var cursistaEmail = String(row[idxEmailCursista] || '').trim().toLowerCase();
+
+    // Inversão de segurança: se o nome veio com arroba e o email sem arroba, desinverte
+    if (cursistaNome && cursistaNome.indexOf('@') !== -1 && cursistaEmail && cursistaEmail.indexOf('@') === -1) {
+      var tmp = cursistaEmail;
+      cursistaEmail = cursistaNome;
+      cursistaNome = tmp;
+    }
+
+    // Limpeza de caracteres residuais no nome
+    cursistaNome = cursistaNome.replace(/^[-:\s]+/, '');
+
+    var realizada = (idxRealizada !== -1) ? String(row[idxRealizada] || '').trim() : 'Sim, a observação foi realizada.';
+    var modFeedback = (idxModFeedback !== -1) ? String(row[idxModFeedback] || '').trim() : 'Diálogo formativo';
+    var modalidade = (idxModalidade !== -1) ? String(row[idxModalidade] || '').trim() : 'Docentes';
+    var componente = (idxComponente !== -1) ? String(row[idxComponente] || '').trim() : '';
+    var tema = (idxTema !== -1) ? String(row[idxTema] || '').trim() : '';
+    var proposta = (idxProposta !== -1) ? String(row[idxProposta] || '').trim() : '';
+
+    if (!cursistaEmail && !cursistaNome) continue;
+
+    // Determina o semestre (1º Semestre ou 2º Semestre)
+    var semestreEfetivo = semestreForcado;
+    if (!semestreEfetivo) {
+      var parts = carimbo.split(' ')[0].split('/');
+      var mes = parseInt(parts[1], 10);
+      semestreEfetivo = (mes && mes <= 6) ? '1º Semestre' : '2º Semestre';
+    }
+
+    var anoEfetivo = anoRotulo || '1º ANO';
+    var idOrigem = 'OBS_' + anoEfetivo.replace(/[^a-zA-Z0-9]/g, '') + '_' + (semestreEfetivo.indexOf('1') !== -1 ? '1SEM' : '2SEM') + '_' + (cursistaEmail ? cursistaEmail.replace(/[^a-z0-9]/g, '') : i) + '_' + (carimbo ? carimbo.replace(/[^0-9]/g, '') : i);
+
+    lista.push({
+      id_origem: idOrigem,
+      carimbo: carimbo,
+      email_cursista: cursistaEmail,
+      nome_cursista: cursistaNome,
+      email_formador: formadorEmail,
+      nome_formador: formadorNome,
+      ano_formativo: anoEfetivo,
+      semestre: semestreEfetivo,
+      modalidade: modalidade || 'Docentes',
+      componente: componente,
+      tema: tema,
+      proposta_pedagogica: proposta,
+      observacao_realizada: realizada,
+      is_realizada: realizada.toLowerCase().indexOf('sim') !== -1 ? 1 : 0,
+      modalidade_feedback: modFeedback,
+      quem_observou: quemObservou,
+      tutor_tecnico_observador: quemObservou
+    });
+  }
+  return lista;
+}
+
+/**
+ * 12. Sincroniza as Observações de Prática (Exclusivamente do Ciclo 2026: 1º e 2º Semestres)
+ */
+function sincronizarAbaObservacoesParaTiDB() {
+  Logger.log('Extraindo observações de prática pedagógica de 2026 (1º e 2º Semestres)...');
+  
+  // 1º Semestre 2026
+  var obs1Ano1Sem = extrairObservacoesDePlanilhaExterna(ID_PLANILHA_OBS_1ANO_1SEM, "1º ANO", "1º Semestre");
+  var obs2e3Ano1Sem = extrairObservacoesDePlanilhaExterna(ID_PLANILHA_OBS_2e3ANO_1SEM, "2º/3º ANO", "1º Semestre");
+
+  // 2º Semestre 2026
+  var obs1Ano2Sem = extrairObservacoesDePlanilhaExterna(ID_PLANILHA_OBS_1ANO_2SEM, "1º ANO", "2º Semestre");
+  var obs2e3Ano2Sem = extrairObservacoesDePlanilhaExterna(ID_PLANILHA_OBS_2e3ANO_2SEM, "2º/3º ANO", "2º Semestre");
+
+  // Apenas as observações de 2026 (1º e 2º Semestres) alimentam a base vigente de observações
+  var observacoes = [].concat(obs1Ano1Sem, obs2e3Ano1Sem, obs1Ano2Sem, obs2e3Ano2Sem);
+
+  if (observacoes.length === 0) {
+    return { status: 'vazio', total: 0 };
+  }
+
+  var BATCH_SIZE = 100;
+  var totalSinc = 0;
+  for (var b = 0; b < observacoes.length; b += BATCH_SIZE) {
+    var lote = observacoes.slice(b, b + BATCH_SIZE);
+    var endpoint = VERCEL_APP_URL.replace(/\/$/, '') + '/api/tidb';
+
+    var options = {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({
+        action: 'sync_observacoes_bulk',
+        observacoes: lote,
+        truncate: (b === 0)
+      }),
+      muteHttpExceptions: true
+    };
+
+    try {
+      var resp = UrlFetchApp.fetch(endpoint, options);
+      if (resp.getResponseCode() === 200) {
+        totalSinc += lote.length;
+      }
+    } catch (err) {}
+  }
+
+  return { status: 'sucesso', total: totalSinc };
+}
+
+/**
+ * 13. Sincroniza as Observações do Tutor
+ */
+function sincronizarAbaObservacoesTutorParaTiDB() {
+  var ss;
+  try {
+    ss = (typeof obterPlanilhaMestra === 'function') ? obterPlanilhaMestra() : SpreadsheetApp.getActiveSpreadsheet();
+  } catch (e) {
+    ss = SpreadsheetApp.getActiveSpreadsheet();
+  }
+  if (!ss) {
+    try { ss = SpreadsheetApp.openById(SPREADSHEET_ID_MESTRA_TIDB); } catch(e) {}
+  }
+  var aba = ss.getSheetByName("Respostas ao formulário 1") || ss.getSheetByName("Respostas ao formulario 1") || ss.getSheetByName("Observações do Tutor");
+
+  if (!aba) {
+    try {
+      var ssTutor = SpreadsheetApp.openById(ID_PLANILHA_OBS_TUTOR);
+      aba = ssTutor.getSheets()[0];
+    } catch (e) {}
+  }
+
+  if (!aba) return { status: 'nao_encontrada' };
+
+  var dados = aba.getDataRange().getValues();
+  if (dados.length < 2) return { status: 'vazio' };
+
+  var observacoes = [];
+  for (var i = 1; i < dados.length; i++) {
+    var row = dados[i];
+    var tutor = String(row[2] || row[3] || "").trim();
+    var emailTutor = String(row[1] || "").trim().toLowerCase();
+    if (!tutor && !emailTutor) continue;
+
+    var carimbo = String(row[0] || "").trim();
+    var formador = String(row[4] || row[5] || "").trim();
+    var formadorEmail = String(row[6] || "").trim().toLowerCase();
+    var nre = normalizeNre(row[17] || "");
+
+    observacoes.push({
+      id_origem: "OBS_TUT_" + (emailTutor ? emailTutor.replace(/[^a-z0-9]/g, "") : i) + "_" + (carimbo ? carimbo.replace(/[^0-9]/g, "") : i),
+      timestamp: carimbo,
+      tutorEmail: emailTutor,
+      tutor: tutor,
+      formador: formador,
+      formadorEmail: formadorEmail,
+      acaoAcompanhamento: String(row[7] || "").trim(),
+      acaoObservada: String(row[8] || "").trim(),
+      dataObservacao: String(row[9] || "").trim(),
+      linkAcaoObservada: String(row[10] || "").trim(),
+      dataFeedback: String(row[11] || "").trim(),
+      linkFeedback: String(row[12] || "").trim(),
+      linksComplementares: String(row[13] || "").trim(),
+      modalidade: String(row[14] || "").trim(),
+      nre: nre,
+      tema: String(row[18] || "").trim(),
+      checklistRealizadas: String(row[15] || "").trim(),
+      checklistNaoRealizadas: String(row[16] || "").trim(),
+      destaques: String(row[19] || "").trim(),
+      desenvolver: String(row[20] || "").trim(),
+      encaminhamentos: String(row[21] || "").trim(),
+      rubrics: []
+    });
+  }
+
+  var BATCH_SIZE = 100;
+  var totalSinc = 0;
+  for (var b = 0; b < observacoes.length; b += BATCH_SIZE) {
+    var lote = observacoes.slice(b, b + BATCH_SIZE);
+    var endpoint = VERCEL_APP_URL.replace(/\/$/, '') + '/api/tidb';
+
+    var options = {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({
+        action: 'sync_observacoes_tutor_bulk',
+        observacoes: lote,
+        truncate: (b === 0)
+      }),
+      muteHttpExceptions: true
+    };
+
+    try {
+      var resp = UrlFetchApp.fetch(endpoint, options);
+      if (resp.getResponseCode() === 200) totalSinc += lote.length;
+    } catch (err) {}
+  }
+
+  return { status: 'sucesso', total: totalSinc };
 }

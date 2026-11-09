@@ -43,3 +43,6 @@ testes-estagio-main.zip
 testes-estagio-main/
 desktop-app/target/
 desktop-app/dependency-reduced-pom.xml
+
+docs/*.csv
+docs/*.xlsx

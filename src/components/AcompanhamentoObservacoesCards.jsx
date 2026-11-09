@@ -83,10 +83,18 @@ export default function AcompanhamentoObservacoesCards({
     const mapEmail = new Map();
     const mapName = new Map();
 
-    // 1. Observações vigentes de 2026
+    // 1. Observações vigentes de 2026 com saneamento dinâmico
     observacoes.forEach(obs => {
-      const email = (obs.email_cursista || '').trim().toLowerCase();
-      const nomeNorm = normalizeString(obs.nome_cursista || '');
+      let email = (obs.email_cursista || '').trim().toLowerCase();
+      let nome = (obs.nome_cursista || '').trim();
+
+      if ((!email.includes('@') || email.includes('sim') || email.includes('não') || email.includes('nao')) && nome.includes('@')) {
+        email = nome.replace(/^[-:\s]+/, '').toLowerCase();
+        nome = (obs.tutor_tecnico_observador && !obs.tutor_tecnico_observador.toLowerCase().includes('tutor') && !obs.tutor_tecnico_observador.toLowerCase().includes('formador')) ? obs.tutor_tecnico_observador : '';
+      }
+      email = email.replace(/^[-:\s]+/, '');
+      nome = nome.replace(/^[-:\s]+/, '');
+      const nomeNorm = normalizeString(nome || '');
 
       if (email) {
         if (!mapEmail.has(email)) mapEmail.set(email, []);

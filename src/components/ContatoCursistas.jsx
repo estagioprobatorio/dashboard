@@ -53,7 +53,8 @@ export default function ContatoCursistas({ data }) {
       if (!tutorFilter || item.tutor_responsavel === tutorFilter) {
         if (item.nome_formador) formadores.add(item.nome_formador);
       }
-      if (item.nre_tutor) nres.add(item.nre_tutor);
+      const nreOficial = normalizeNre(item.nre_exe || item.nre_cursista || item.nre_tutor || item.nre);
+      if (nreOficial) nres.add(nreOficial);
       if (item.modalidade) modalidades.add(item.modalidade);
       if (item.turno) turnos.add(item.turno);
       if (item.chamamento) chamamentos.add(item.chamamento);
@@ -70,6 +71,18 @@ export default function ContatoCursistas({ data }) {
       chamamentos: sortPtBR(chamamentos)
     };
   }, [data, tutorFilter]);
+
+
+  // Agrupamento consolidado de Cursistas por NRE
+  const cursistasPorNre = useMemo(() => {
+    const mapa = new Map();
+    data.forEach(item => {
+      const nre = normalizeNre(item.nre_exe || item.nre_cursista || item.nre_tutor || item.nre) || 'Outros / Não Identificado';
+      mapa.set(nre, (mapa.get(nre) || 0) + 1);
+    });
+    return Array.from(mapa.entries()).map(([nre, total]) => ({ nre, total }))
+      .sort((a, b) => b.total - a.total);
+  }, [data]);
 
   // Filtragem dos registros com ordenação alfabética
   const filteredRecords = useMemo(() => {
@@ -98,7 +111,8 @@ export default function ContatoCursistas({ data }) {
       // Filtros dropdown
       if (formadorFilter && item.nome_formador !== formadorFilter) return false;
       if (tutorFilter && item.tutor_responsavel !== tutorFilter) return false;
-      if (nreFilter && normalizeNre(item.nre_tutor || item.nre_cursista) !== nreFilter) return false;
+      const itemNre = normalizeNre(item.nre_exe || item.nre_cursista || item.nre_tutor || item.nre);
+      if (nreFilter && itemNre !== nreFilter) return false;
       if (modalidadeFilter && item.modalidade !== modalidadeFilter) return false;
       if (turnoFilter && item.turno !== turnoFilter) return false;
       if (chamamentoFilter && item.chamamento !== chamamentoFilter) return false;
@@ -216,6 +230,61 @@ export default function ContatoCursistas({ data }) {
           >
             <span>📄</span> Imprimir / PDF
           </button>
+        </div>
+      </div>
+
+
+      {/* Resumo Dinâmico: Cursistas por NRE */}
+      <div style={{ margin: '1rem 0 1.25rem', padding: '0.85rem 1rem', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#002d5c', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            🏢 Cursistas por NRE ({cursistasPorNre.length} Núcleos Regionais):
+          </span>
+          {nreFilter && (
+            <button
+              onClick={() => setNreFilter('')}
+              style={{ fontSize: '0.75rem', color: '#dc2626', background: 'transparent', border: 'none', cursor: 'pointer', fontWeight: 600 }}
+            >
+              ✕ Limpar filtro de NRE (Mostrar todos)
+            </button>
+          )}
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', maxHeight: '110px', overflowY: 'auto' }}>
+          {cursistasPorNre.map(({ nre, total }) => {
+            const isSelected = nreFilter === nre;
+            return (
+              <button
+                key={nre}
+                onClick={() => setNreFilter(isSelected ? '' : nre)}
+                style={{
+                  padding: '0.25rem 0.55rem',
+                  borderRadius: '6px',
+                  border: isSelected ? '1px solid #002d5c' : '1px solid #cbd5e1',
+                  backgroundColor: isSelected ? '#002d5c' : '#ffffff',
+                  color: isSelected ? '#ffffff' : '#1e293b',
+                  fontSize: '0.75rem',
+                  fontWeight: isSelected ? 700 : 500,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <span>{nre}</span>
+                <span style={{
+                  backgroundColor: isSelected ? 'rgba(255,255,255,0.25)' : '#e2e8f0',
+                  color: isSelected ? '#ffffff' : '#0f172a',
+                  padding: '0.1rem 0.35rem',
+                  borderRadius: '10px',
+                  fontSize: '0.7rem',
+                  fontWeight: 700
+                }}>
+                  {total}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -337,6 +406,7 @@ export default function ContatoCursistas({ data }) {
             <tr>
               <th>CGM</th>
               <th>Cursista</th>
+              <th>NRE</th>
               <th>Chamamento</th>
               <th>E-mail</th>
               <th>Turma</th>
@@ -347,7 +417,7 @@ export default function ContatoCursistas({ data }) {
           <tbody>
             {paginatedRecords.length === 0 ? (
               <tr>
-                <td colSpan="7" style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem' }}>
+                <td colSpan="8" style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem' }}>
                   Nenhum cursista encontrado.
                 </td>
               </tr>
@@ -359,6 +429,11 @@ export default function ContatoCursistas({ data }) {
                   <tr key={idx}>
                     <td style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>{item.cgm || '-'}</td>
                     <td style={{ fontWeight: 600, color: 'var(--color-primary-dark)' }}>{item.nome_cursista}</td>
+                    <td>
+                      <span className="badge" style={{ backgroundColor: '#e0f2fe', color: '#0369a1', fontWeight: 600, fontSize: '0.78rem' }}>
+                        {normalizeNre(item.nre_exe || item.nre_cursista || item.nre_tutor || item.nre) || 'SEED/PR'}
+                      </span>
+                    </td>
                     <td style={{ fontSize: '0.85rem' }}>{item.chamamento || '-'}</td>
                     <td>
                       {item['e-mail'] || item.email ? (

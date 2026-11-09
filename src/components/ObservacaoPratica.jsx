@@ -59,39 +59,74 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
 
   // Lista de observações enriquecidas com NRE, Tutor, Semestre e Componente Normalizado (somente ciclo 2026)
   const enrichedObservacoes = useMemo(() => {
-    return observacoes.filter(isObservacao2026).map(obs => {
-      const emailCursista = (obs.email_cursista || '').trim().toLowerCase();
-      const cursistaInfo = cursistasMap.get(emailCursista);
+    return observacoes.filter(isObservacao2026).map(rawObs => {
+      let emailCursista = (rawObs.email_cursista || '').trim().toLowerCase();
+      let nomeCursista = (rawObs.nome_cursista || '').trim();
+      let tutorTecnicoObs = (rawObs.tutor_tecnico_observador || '').trim();
+      let quemObservou = (rawObs.quem_observou || '').trim();
+      let obsRealizada = (rawObs.observacao_realizada || '').trim();
 
-      const tutorResponsavel = obs.tutor_responsavel || (cursistaInfo ? cursistaInfo.tutor_responsavel : null) || 'Não atribuído';
-      const emailTutor = obs.email_tutor || (cursistaInfo ? cursistaInfo.email_tutor : null) || '';
-      const nre = normalizeNre(obs.nre_exe || obs.nre || (cursistaInfo ? (cursistaInfo.nre_exe || cursistaInfo.nre_tutor) : '')) || 'NRE Não Identificado';
-      const municipio = obs.munic_exe || (cursistaInfo ? cursistaInfo.munic_exe : null) || '';
-      let modalidade = obs.modalidade || (cursistaInfo ? cursistaInfo.modalidade : null) || 'Docentes';
+      // Saneamento de inversão e colunas deslocadas (ex: e-mail no nome com hífen ou texto "sim, a observação foi realizada" no e-mail)
+      if ((!emailCursista.includes('@') || emailCursista.includes('sim') || emailCursista.includes('não') || emailCursista.includes('nao')) && nomeCursista.includes('@')) {
+        if (!obsRealizada || obsRealizada === 'Sim') {
+          obsRealizada = rawObs.email_cursista || 'Sim, a observação foi realizada.';
+        }
+        emailCursista = nomeCursista.replace(/^[-:\s]+/, '').toLowerCase();
+        if (tutorTecnicoObs && !tutorTecnicoObs.toLowerCase().includes('tutor') && !tutorTecnicoObs.toLowerCase().includes('técnico') && !tutorTecnicoObs.toLowerCase().includes('formador')) {
+          nomeCursista = tutorTecnicoObs;
+          tutorTecnicoObs = '';
+          if (quemObservou === tutorTecnicoObs) quemObservou = 'Formador';
+        } else {
+          nomeCursista = '';
+        }
+      }
+
+      // Limpeza de caracteres residuais
+      emailCursista = emailCursista.replace(/^[-:\s]+/, '');
+      nomeCursista = nomeCursista.replace(/^[-:\s]+/, '');
+
+      const cursistaInfo = cursistasMap.get(emailCursista);
+      if ((!nomeCursista || nomeCursista.includes('@')) && cursistaInfo) {
+        nomeCursista = cursistaInfo.nome_cursista || cursistaInfo.nome || nomeCursista;
+      }
+      if (nomeCursista.includes('@')) {
+        nomeCursista = nomeCursista.split('@')[0].replace(/[._-]/g, ' ').toUpperCase();
+      }
+
+      const tutorResponsavel = rawObs.tutor_responsavel || (cursistaInfo ? cursistaInfo.tutor_responsavel : null) || 'Não atribuído';
+      const emailTutor = rawObs.email_tutor || (cursistaInfo ? cursistaInfo.email_tutor : null) || '';
+      const nre = normalizeNre(rawObs.nre_exe || rawObs.nre || (cursistaInfo ? (cursistaInfo.nre_exe || cursistaInfo.nre_tutor) : '')) || 'NRE Não Identificado';
+      const municipio = rawObs.munic_exe || (cursistaInfo ? cursistaInfo.munic_exe : null) || '';
+      let modalidade = rawObs.modalidade || (cursistaInfo ? cursistaInfo.modalidade : null) || 'Docentes';
       if (modalidade.toLowerCase().includes('feedback') || modalidade.toLowerCase().includes('diálogo') || modalidade.toLowerCase().includes('dialogo')) {
         modalidade = cursistaInfo?.modalidade || 'Docentes';
       }
       if (modalidade.toUpperCase().includes('GESTORA') || modalidade.toUpperCase().includes('PEDAGOG')) {
         modalidade = 'Equipe Gestora';
       }
-      const rawComp = obs.componente || (cursistaInfo ? cursistaInfo.componente : null) || (modalidade === 'Equipe Gestora' ? 'PEDAGÓGICO' : '');
+      const rawComp = rawObs.componente || (cursistaInfo ? cursistaInfo.componente : null) || (modalidade === 'Equipe Gestora' ? 'PEDAGÓGICO' : '');
       const componente = normalizeComponente(rawComp);
-      const isRealizada = obs.is_realizada ?? (obs.observacao_realizada ? obs.observacao_realizada.toLowerCase().includes('sim') : true);
-      const semestre = getSemestre(obs);
+      const isRealizada = rawObs.is_realizada ?? (obsRealizada ? obsRealizada.toLowerCase().includes('sim') : true);
+      const semestre = getSemestre(rawObs);
 
       return {
-        ...obs,
+        ...rawObs,
+        email_cursista: emailCursista,
+        nome_cursista: nomeCursista || 'Cursista',
+        tutor_tecnico_observador: tutorTecnicoObs,
+        quem_observou: quemObservou,
+        observacao_realizada: obsRealizada,
         semestre,
         tutor_responsavel: tutorResponsavel,
         email_tutor: emailTutor,
-        nre_tutor: (cursistaInfo ? (cursistaInfo.nre_tutor || cursistaInfo.nre_exe) : null) || obs.nre_tutor || '',
+        nre_tutor: (cursistaInfo ? (cursistaInfo.nre_tutor || cursistaInfo.nre_exe) : null) || rawObs.nre_tutor || '',
         nre_exe: nre,
         munic_exe: municipio,
         modalidade: modalidade,
         componente: componente,
         is_realizada: isRealizada,
-        categoria_planejamento: parseLevel(obs.nivel_planejamento),
-        categoria_pratica: parseLevel(obs.nivel_pratica)
+        categoria_planejamento: parseLevel(rawObs.nivel_planejamento),
+        categoria_pratica: parseLevel(rawObs.nivel_pratica)
       };
     });
   }, [observacoes, cursistasMap]);

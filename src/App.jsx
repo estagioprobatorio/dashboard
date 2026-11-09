@@ -561,7 +561,7 @@ export default function App() {
           return formadorEmail === email;
         });
       }
-      // Simulação do ambiente do Tutor: exibe apenas os cursistas/formadores pertencentes a esse tutor
+      // Ambiente / Simulação do Tutor: os tutores podem ver os próprios cursistas e os cursistas pertencentes ao seu NRE
       else if (effectiveRole === 'tutor') {
         const matchingTutores = tutoresList.filter(t => 
           (t.email_educ && t.email_educ.trim().toLowerCase() === email) ||
@@ -569,10 +569,32 @@ export default function App() {
         );
         const tutorNames = new Set(matchingTutores.map(t => (t.tutor_responsavel || '').trim().toUpperCase()).filter(Boolean));
 
+        // Mapeia todos os NREs vinculados a esse tutor
+        const tutorNres = new Set();
+        matchingTutores.forEach(t => {
+          if (t.nre_tutor) tutorNres.add(normalizeNre(t.nre_tutor));
+          if (t.nre) tutorNres.add(normalizeNre(t.nre));
+        });
+        enrichedRecords.forEach(r => {
+          const tEmail = (r.email_tutor || '').trim().toLowerCase();
+          const tName = (r.tutor_responsavel || '').trim().toUpperCase();
+          if (tEmail === email || tutorNames.has(tName)) {
+            if (r.nre_tutor) tutorNres.add(normalizeNre(r.nre_tutor));
+            if (r.nre_exe) tutorNres.add(normalizeNre(r.nre_exe));
+            if (r.nre) tutorNres.add(normalizeNre(r.nre));
+          }
+        });
+
         result = enrichedRecords.filter(item => {
           const tutorEmail = (item.email_tutor || '').trim().toLowerCase();
           const tutorName = (item.tutor_responsavel || '').trim().toUpperCase();
-          return tutorEmail === email || tutorNames.has(tutorName);
+          const isProprioCursista = tutorEmail === email || tutorNames.has(tutorName);
+
+          // Cursistas pertencentes ao mesmo NRE do tutor
+          const itemNre = normalizeNre(item.nre_exe || item.nre_cursista || item.nre_tutor || item.nre);
+          const isDoMesmoNre = Boolean(itemNre && tutorNres.has(itemNre));
+
+          return isProprioCursista || isDoMesmoNre;
         });
       }
       // Cursistas (real ou simulado) veem apenas seus próprios registros

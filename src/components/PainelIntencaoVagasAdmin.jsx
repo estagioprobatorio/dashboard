@@ -1,5 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import IntencaoMatricula2027, { calcularEvolucaoCursista2027 } from './IntencaoMatricula2027';
+import { tidbService } from '../services/tidbService';
+import { driveDataService } from '../services/driveDataService';
 
 export default function PainelIntencaoVagasAdmin({ records = [], userRole, userEmail, intencoesList = [] }) {
   // Aba ativa do Painel Administrativo
@@ -25,6 +27,30 @@ export default function PainelIntencaoVagasAdmin({ records = [], userRole, userE
   // Modais
   const [cursistaSimulado, setCursistaSimulado] = useState(null);
   const [modalAtendimentoEspecial, setModalAtendimentoEspecial] = useState(null);
+  const [limpando, setLimpando] = useState(false);
+
+  const handleLimparDadosSuperadmin = async () => {
+    if (!window.confirm('⚠️ LIMPEZA GERAL DE TESTES (SUPERADMIN / ADMIN):\n\nDeseja realmente excluir TODAS as intenções de matrícula registradas para testes?\n\nEsta ação apagará os dados no TiDB Cloud, no Google Sheets e no armazenamento local de testes.')) {
+      return;
+    }
+    setLimpando(true);
+    try {
+      await tidbService.limparIntencoes2027();
+      await driveDataService.limparIntencoes2027();
+      try {
+        localStorage.removeItem('intencoes_2027_todas');
+        Object.keys(localStorage).forEach(k => {
+          if (k.startsWith('intencao_2027_')) localStorage.removeItem(k);
+        });
+      } catch (e) {}
+      alert('✓ Todos os dados de intenção de 2027 foram limpos com sucesso! A página será atualizada.');
+      window.location.reload();
+    } catch (err) {
+      alert('Erro ao limpar intenções: ' + (err.message || err));
+    } finally {
+      setLimpando(false);
+    }
+  };
 
   // 1. Unificação das Intenções (TiDB Cloud + LocalStorage Fallback) com Chave CGM_LF
   const todasIntencoes = useMemo(() => {
@@ -230,7 +256,7 @@ export default function PainelIntencaoVagasAdmin({ records = [], userRole, userE
 
     recordsComEvolucao.forEach(r => {
       if (!r.evolucao.elegivelIntencao) return;
-      const nre = r.nre_exe || r.nre || 'Não Informado';
+      const nre = normalizeNre(r.nre_exe || r.nre_cursista || r.nre_tutor || r.nre) || 'Não Informado';
       if (!mapaNre.has(nre)) {
         mapaNre.set(nre, { nre, elegiveis: 0, confirmados: 0, pendentes: 0, especiais: 0 });
       }
@@ -258,7 +284,7 @@ export default function PainelIntencaoVagasAdmin({ records = [], userRole, userE
 
     recordsComEvolucao.forEach(r => {
       if (!r.evolucao.elegivelIntencao) return;
-      const comp = (r.componente_conc || r.componente || 'Geral').toUpperCase().trim();
+      const comp = normalizeComponenteCanonical(r.componente_conc || r.componente);
       if (!mapaComp.has(comp)) {
         mapaComp.set(comp, { componente: comp, elegiveis: 0, confirmados: 0, manha: 0, tarde: 0, noite: 0, especiais: 0 });
       }
@@ -288,7 +314,7 @@ export default function PainelIntencaoVagasAdmin({ records = [], userRole, userE
     let list = recordsComEvolucao.filter(r => r.evolucao.elegivelIntencao && r.inscrito);
 
     if (filtroNre !== 'todos') {
-      list = list.filter(r => (r.nre_exe || r.nre) === filtroNre);
+      list = list.filter(r => normalizeNre(r.nre_exe || r.nre_cursista || r.nre_tutor || r.nre) === filtroNre);
     }
 
     if (filtroTurno !== 'todos') {
@@ -299,7 +325,7 @@ export default function PainelIntencaoVagasAdmin({ records = [], userRole, userE
     }
 
     if (filtroComponente !== 'todos') {
-      list = list.filter(r => (r.componente_conc || r.componente) === filtroComponente);
+      list = list.filter(r => normalizeComponenteCanonical(r.componente_conc || r.componente) === filtroComponente);
     }
 
     if (filtroEspecial !== 'todos') {
@@ -328,11 +354,11 @@ export default function PainelIntencaoVagasAdmin({ records = [], userRole, userE
     let list = recordsComEvolucao.filter(r => r.evolucao.elegivelIntencao && !r.inscrito);
 
     if (filtroNre !== 'todos') {
-      list = list.filter(r => (r.nre_exe || r.nre) === filtroNre);
+      list = list.filter(r => normalizeNre(r.nre_exe || r.nre_cursista || r.nre_tutor || r.nre) === filtroNre);
     }
 
     if (filtroComponente !== 'todos') {
-      list = list.filter(r => (r.componente_conc || r.componente) === filtroComponente);
+      list = list.filter(r => normalizeComponenteCanonical(r.componente_conc || r.componente) === filtroComponente);
     }
 
     if (busca.trim()) {

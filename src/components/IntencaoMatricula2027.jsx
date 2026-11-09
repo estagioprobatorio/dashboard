@@ -184,6 +184,7 @@ export default function IntencaoMatricula2027({
   cursista,
   records = [],
   userEmail,
+  userRole,
   isSimulacao = false,
   onIntencaoSalva,
   todosVinculos = [],
@@ -197,6 +198,9 @@ export default function IntencaoMatricula2027({
   const [showInformativoModal, setShowInformativoModal] = useState(() => {
     return sessionStorage.getItem('fechou_informativo_2027') !== 'true';
   });
+
+  const isSuperAdmin = userRole === 'superadmin' || userRole === 'admin' || isSimulacao ||
+    (userEmail && (userEmail.includes('admin') || userEmail.includes('dotti') || userEmail.includes('provenci') || userEmail.includes('pedfor')));
 
   const fecharInformativo = () => {
     sessionStorage.setItem('fechou_informativo_2027', 'true');
@@ -428,78 +432,110 @@ export default function IntencaoMatricula2027({
     setSalvando(true);
     setSucesso(false);
 
-    const email = (userEmail || cursista?.email || cursista?.['e-mail'] || '').trim().toLowerCase();
-    const cgm = String(cursista?.cgm || '').trim();
-    const lf = String(cursista?.linha_funcional || cursista?.lf || '1').trim();
-    const chaveMatricula = cgm ? `${cgm}_${lf}` : `${email}_${lf}`;
-    const nome = cursista?.nome || cursista?.nome_cursista || 'Docente Cursista';
-
-    const dadosRegistro = {
-      ...form,
-      termo_aceito: true,
-      data_aceite_termo: new Date().toISOString(),
-      id: `intencao-${chaveMatricula}-${Date.now()}`,
-      cgm_lf: chaveMatricula,
-      linha_funcional: lf,
-      nome_cursista: nome,
-      email_cursista: email,
-      cgm_cursista: cgm,
-      cpf_cursista: cursista?.cpf || cursista?.cpf_cursista || '',
-      chamamento: cursista?.chamamento || cursista?.CHAMAMENTO || '',
-      num_chamamento: evolucao.numChamamento,
-      nre: nreCursista,
-      componente: componenteCursista,
-      dia_semana_formativo: diaSemanaFixo,
-      ano_formativo_pretendido: evolucao.anoNecessario2027,
-      ano_formativo_anterior: cursista?.ano_formativo || '',
-      turma_anterior: cursista?.turmas || cursista?.turma || '',
-      decisao_duas_matriculas: isModalidadesIguais ? form.decisaoDuasMatriculas : 'independente',
-      created_at: new Date().toISOString()
-    };
-
-    // 1. Salva no TiDB Cloud Serverless
     try {
-      await tidbService.salvarIntencao2027(dadosRegistro);
-    } catch (err) {
-      console.warn('[TiDB] Erro ao salvar intenção via tidbService:', err);
-    }
+      const email = (userEmail || cursista?.email || cursista?.['e-mail'] || '').trim().toLowerCase();
+      const cgm = String(cursista?.cgm || '').trim();
+      const lf = String(cursista?.linha_funcional || cursista?.lf || '1').trim();
+      const chaveMatricula = cgm ? `${cgm}_${lf}` : `${email}_${lf}`;
+      const nome = cursista?.nome || cursista?.nome_cursista || 'Docente Cursista';
 
-    // 2. Salva via Drive Service (Google Sheets / Drive)
+      const dadosRegistro = {
+        ...form,
+        termo_aceito: true,
+        data_aceite_termo: new Date().toISOString(),
+        id: `intencao-${chaveMatricula}-${Date.now()}`,
+        cgm_lf: chaveMatricula,
+        linha_funcional: lf,
+        nome_cursista: nome,
+        email_cursista: email,
+        cgm_cursista: cgm,
+        cpf_cursista: cursista?.cpf || cursista?.cpf_cursista || '',
+        chamamento: cursista?.chamamento || cursista?.CHAMAMENTO || '',
+        num_chamamento: evolucao.numChamamento,
+        nre: nreCursista,
+        componente: componenteCursista,
+        dia_semana_formativo: diaSemanaFixo,
+        ano_formativo_pretendido: evolucao.anoNecessario2027,
+        ano_formativo_anterior: cursista?.ano_formativo || '',
+        turma_anterior: cursista?.turmas || cursista?.turma || '',
+        decisao_duas_matriculas: isModalidadesIguais ? form.decisaoDuasMatriculas : 'independente',
+        created_at: new Date().toISOString()
+      };
+
+      // 1. Salva no TiDB Cloud Serverless (com timeout protegido)
+      try {
+        await tidbService.salvarIntencao2027(dadosRegistro);
+      } catch (err) {
+        console.warn('[TiDB] Erro ao salvar intenção via tidbService:', err);
+      }
+
+      // 2. Salva via Drive Service (Google Sheets / Drive)
+      try {
+        await driveDataService.salvarIntencao2027(dadosRegistro);
+      } catch (err) {
+        console.warn('Erro ao salvar intenção via DriveService:', err);
+      }
+
+      // 3. Salva no LocalStorage com chave específica por matrícula (CGM_LF)
+      try {
+        const keyLf = `intencao_2027_${chaveMatricula}`;
+        localStorage.setItem(keyLf, JSON.stringify(dadosRegistro));
+
+        const keyLegacy = cgm ? `intencao_2027_cgm_${cgm}` : `intencao_2027_${email}`;
+        localStorage.setItem(keyLegacy, JSON.stringify(dadosRegistro));
+
+        const listaGeralRaw = localStorage.getItem('intencoes_2027_todas');
+        const listaGeral = listaGeralRaw ? JSON.parse(listaGeralRaw) : [];
+        const semDuplicata = listaGeral.filter(item => {
+          const itemKey = item.cgm_lf || (item.cgm_cursista ? `${item.cgm_cursista}_${item.linha_funcional || 1}` : null);
+          if (itemKey && itemKey === chaveMatricula) return false;
+          if (!itemKey && item.cgm_cursista === cgm && item.email_cursista === email) return false;
+          return true;
+        });
+        semDuplicata.unshift(dadosRegistro);
+        localStorage.setItem('intencoes_2027_todas', JSON.stringify(semDuplicata));
+      } catch (err) {
+        console.error(err);
+      }
+
+      setRegistroExistente(dadosRegistro);
+      if (typeof onIntencaoSalva === 'function') {
+        try { onIntencaoSalva(dadosRegistro); } catch (e) { console.warn(e); }
+      }
+      setSucesso(true);
+      setTimeout(() => setSucesso(false), 8000);
+    } catch (eGeral) {
+      console.error('[handleSalvar] Erro ao processar intenção:', eGeral);
+      alert('Aviso: Os dados foram registrados localmente.');
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  const handleLimparDadosSuperadmin = async () => {
+    if (!window.confirm('⚠️ LIMPEZA GERAL DE TESTES (SUPERADMIN / ADMIN):\n\nDeseja realmente excluir TODAS as intenções de matrícula registradas para testes?\n\nEsta ação apagará os dados no TiDB Cloud, no Google Sheets e no armazenamento local de testes.')) {
+      return;
+    }
+    setSalvando(true);
     try {
-      await driveDataService.salvarIntencao2027(dadosRegistro);
+      await tidbService.limparIntencoes2027();
+      await driveDataService.limparIntencoes2027();
+      try {
+        localStorage.removeItem('intencoes_2027_todas');
+        Object.keys(localStorage).forEach(k => {
+          if (k.startsWith('intencao_2027_')) localStorage.removeItem(k);
+        });
+      } catch (e) {}
+      setRegistroExistente(null);
+      if (typeof onIntencaoSalva === 'function') {
+        onIntencaoSalva({ _resetAll: true });
+      }
+      alert('✓ Todos os dados de intenção de 2027 foram limpos com sucesso!');
     } catch (err) {
-      console.warn('Erro ao salvar intenção via DriveService:', err);
+      alert('Erro ao limpar intenções: ' + err.message);
+    } finally {
+      setSalvando(false);
     }
-
-    // 3. Salva no LocalStorage com chave específica por matrícula (CGM_LF)
-    try {
-      const keyLf = `intencao_2027_${chaveMatricula}`;
-      localStorage.setItem(keyLf, JSON.stringify(dadosRegistro));
-
-      const keyLegacy = cgm ? `intencao_2027_cgm_${cgm}` : `intencao_2027_${email}`;
-      localStorage.setItem(keyLegacy, JSON.stringify(dadosRegistro));
-
-      const listaGeralRaw = localStorage.getItem('intencoes_2027_todas');
-      const listaGeral = listaGeralRaw ? JSON.parse(listaGeralRaw) : [];
-      const semDuplicata = listaGeral.filter(item => {
-        const itemKey = item.cgm_lf || (item.cgm_cursista ? `${item.cgm_cursista}_${item.linha_funcional || 1}` : null);
-        if (itemKey && itemKey === chaveMatricula) return false;
-        if (!itemKey && item.cgm_cursista === cgm && item.email_cursista === email) return false;
-        return true;
-      });
-      semDuplicata.unshift(dadosRegistro);
-      localStorage.setItem('intencoes_2027_todas', JSON.stringify(semDuplicata));
-    } catch (err) {
-      console.error(err);
-    }
-
-    setRegistroExistente(dadosRegistro);
-    if (typeof onIntencaoSalva === 'function') {
-      try { onIntencaoSalva(dadosRegistro); } catch (e) { console.warn(e); }
-    }
-    setSalvando(false);
-    setSucesso(true);
-    setTimeout(() => setSucesso(false), 5000);
   };
 
   const nomeExibicao = cursista?.nome || cursista?.nome_cursista || 'Docente Cursista';
@@ -1338,6 +1374,31 @@ export default function IntencaoMatricula2027({
                       }}
                     >
                       <span>🔄</span> Alternar Padrão
+                    </button>
+                  )}
+
+                  {isSuperAdmin && (
+                    <button
+                      type="button"
+                      onClick={handleLimparDadosSuperadmin}
+                      disabled={salvando}
+                      title="Exclui todas as intenções de testes no TiDB Cloud, Sheets e LocalStorage"
+                      style={{
+                        backgroundColor: '#fee2e2',
+                        color: '#b91c1c',
+                        border: '1px solid #f87171',
+                        borderRadius: '10px',
+                        padding: '0.85rem 1.25rem',
+                        fontSize: '0.88rem',
+                        fontWeight: 700,
+                        cursor: salvando ? 'not-allowed' : 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.4rem',
+                        transition: 'all 0.2s ease-in-out'
+                      }}
+                    >
+                      <span>🗑️</span> {salvando ? 'Processando...' : 'Limpar Dados de Teste (Superadmin)'}
                     </button>
                   )}
 
