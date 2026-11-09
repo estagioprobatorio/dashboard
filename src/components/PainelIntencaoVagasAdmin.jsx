@@ -4,6 +4,7 @@ import { tidbService } from '../services/tidbService';
 import { driveDataService } from '../services/driveDataService';
 import { normalizeNre } from '../utils/nreUtils';
 import { normalizeComponenteCanonical } from '../utils/componenteUtils';
+import { imprimirComprovanteIntencao2027, formatarCarimboDataHora } from '../utils/comprovanteIntencaoPrint';
 
 export default function PainelIntencaoVagasAdmin({ records = [], userRole, userEmail, intencoesList = [], onIntencaoSalva }) {
   // Aba ativa do Painel Administrativo
@@ -1138,16 +1139,58 @@ export default function PainelIntencaoVagasAdmin({ records = [], userRole, userE
               </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f1f5f9', paddingTop: '0.5rem', fontSize: '0.78rem', color: '#64748b' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', borderTop: '1px solid #f1f5f9', paddingTop: '0.5rem', fontSize: '0.78rem', color: '#64748b' }}>
               <span>Exibindo <strong>{inscricoesConfirmadasFiltradas.length}</strong> inscrições confirmadas com termo aceito</span>
-              {(filtroNre !== 'todos' || filtroTurno !== 'todos' || filtroComponente !== 'todos' || filtroEspecial !== 'todos' || busca) && (
-                <button
-                  onClick={() => { setFiltroNre('todos'); setFiltroTurno('todos'); setFiltroComponente('todos'); setFiltroEspecial('todos'); setBusca(''); }}
-                  style={{ background: 'none', border: 'none', color: '#0072bc', cursor: 'pointer', fontWeight: 700 }}
-                >
-                  Limpar Filtros
-                </button>
-              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                {(filtroNre !== 'todos' || filtroTurno !== 'todos' || filtroComponente !== 'todos' || filtroEspecial !== 'todos' || busca) && (
+                  <button
+                    onClick={() => { setFiltroNre('todos'); setFiltroTurno('todos'); setFiltroComponente('todos'); setFiltroEspecial('todos'); setBusca(''); }}
+                    style={{ background: 'none', border: 'none', color: '#0072bc', cursor: 'pointer', fontWeight: 700 }}
+                  >
+                    Limpar Filtros
+                  </button>
+                )}
+                {inscricoesConfirmadasFiltradas.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const listaPrint = inscricoesConfirmadasFiltradas.map(c => {
+                        const int = c.intencao || {};
+                        return {
+                          ...int,
+                          nome_cursista: c.nome || c.nome_cursista || int.nome_cursista,
+                          email_cursista: c.email || c['e-mail'] || int.email_cursista,
+                          cgm_cursista: c.cgm || int.cgm_cursista,
+                          linha_funcional: c.linha_funcional || int.linha_funcional || '1',
+                          cgm_lf: c.cgm_lf || int.cgm_lf || `${c.cgm}_${c.linha_funcional || 1}`,
+                          nre: c.nre_exe || c.nre || int.nre,
+                          componente: c.componente_conc || c.componente || int.componente,
+                          chamamento: c.chamamento || int.chamamento,
+                          turnoPretendido: int.turnoPretendido || int.opcao_turno,
+                          horarioPretendido: int.horarioPretendido || int.opcao_modalidade,
+                          data_aceite_termo: int.data_aceite_termo || int.created_at || int.timestamp
+                        };
+                      });
+                      imprimirComprovanteIntencao2027(listaPrint);
+                    }}
+                    style={{
+                      backgroundColor: '#002d5c',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '6px',
+                      padding: '0.4rem 0.85rem',
+                      fontSize: '0.76rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.35rem'
+                    }}
+                  >
+                    <span>🖨️</span> Imprimir Comprovantes ({inscricoesConfirmadasFiltradas.length})
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -1165,7 +1208,8 @@ export default function PainelIntencaoVagasAdmin({ records = [], userRole, userE
                     <th style={{ padding: '0.75rem 0.75rem', fontWeight: 800 }}>Horário</th>
                     <th style={{ padding: '0.75rem 0.75rem', fontWeight: 800, textAlign: 'center' }}>Atendimento Especial</th>
                     <th style={{ padding: '0.75rem 0.75rem', fontWeight: 800, textAlign: 'center' }}>Termo Aceito</th>
-                    <th style={{ padding: '0.75rem 1rem', fontWeight: 800, textAlign: 'center' }}>Data de Envio</th>
+                    <th style={{ padding: '0.75rem 0.75rem', fontWeight: 800, textAlign: 'center' }}>Carimbo Data/Hora</th>
+                    <th style={{ padding: '0.75rem 1rem', fontWeight: 800, textAlign: 'center' }}>Comprovante</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1174,7 +1218,7 @@ export default function PainelIntencaoVagasAdmin({ records = [], userRole, userE
                     const turno = int.turnoPretendido || int.opcao_turno || 'Não informado';
                     const horario = int.horarioPretendido || int.opcao_modalidade || '—';
                     const temEspecial = int.necessitaAtendimentoEspecializado === 'Sim' || !!int.descricaoAtendimentoEspecializado;
-                    const dataEnvio = int.data_aceite_termo || int.created_at;
+                    const dataEnvio = int.data_aceite_termo || int.created_at || int.timestamp;
 
                     return (
                       <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
@@ -1258,8 +1302,43 @@ export default function PainelIntencaoVagasAdmin({ records = [], userRole, userE
                             ✓ Aceito
                           </span>
                         </td>
-                        <td style={{ padding: '0.7rem 1rem', textAlign: 'center', color: '#64748b', fontSize: '0.75rem' }}>
-                          {dataEnvio ? new Date(dataEnvio).toLocaleString('pt-BR') : '—'}
+                        <td style={{ padding: '0.7rem 0.75rem', textAlign: 'center', color: '#1e3a8a', fontSize: '0.75rem', fontWeight: 700 }}>
+                          {dataEnvio ? formatarCarimboDataHora(dataEnvio) : '—'}
+                        </td>
+                        <td style={{ padding: '0.7rem 1rem', textAlign: 'center' }}>
+                          <button
+                            type="button"
+                            onClick={() => imprimirComprovanteIntencao2027({
+                              ...int,
+                              nome_cursista: cursista.nome || cursista.nome_cursista || int.nome_cursista,
+                              email_cursista: cursista.email || cursista['e-mail'] || int.email_cursista,
+                              cgm_cursista: cursista.cgm || int.cgm_cursista,
+                              linha_funcional: cursista.linha_funcional || int.linha_funcional || '1',
+                              cgm_lf: cursista.cgm_lf || int.cgm_lf || `${cursista.cgm}_${cursista.linha_funcional || 1}`,
+                              nre: cursista.nre_exe || cursista.nre || int.nre,
+                              componente: cursista.componente_conc || cursista.componente || int.componente,
+                              chamamento: cursista.chamamento || int.chamamento,
+                              turnoPretendido: turno,
+                              horarioPretendido: horario,
+                              data_aceite_termo: dataEnvio
+                            })}
+                            style={{
+                              backgroundColor: '#f1f5f9',
+                              color: '#002d5c',
+                              border: '1px solid #cbd5e1',
+                              borderRadius: '6px',
+                              padding: '0.3rem 0.65rem',
+                              fontSize: '0.74rem',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.25rem'
+                            }}
+                            title="Imprimir comprovante oficial desta matrícula"
+                          >
+                            <span>🖨️</span> Imprimir
+                          </button>
                         </td>
                       </tr>
                     );

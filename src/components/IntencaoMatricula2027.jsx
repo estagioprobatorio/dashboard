@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { supabase, isConfigured as isSupabaseConfigured } from '../supabase';
 import { driveDataService } from '../services/driveDataService';
 import { tidbService } from '../services/tidbService';
+import { imprimirComprovanteIntencao2027, formatarCarimboDataHora } from '../utils/comprovanteIntencaoPrint';
 
 /**
  * MAPEAMENTO DE DIAS DA SEMANA POR COMPONENTE CURRICULAR (BASE OFICIAL 2026)
@@ -601,6 +602,29 @@ export default function IntencaoMatricula2027({
 
   const nomeExibicao = cursista?.nome || cursista?.nome_cursista || 'Docente Cursista';
 
+  const montarPayloadComprovante = () => {
+    const base = comprovanteAtual || registroExistente || {};
+    const carimboRaw = base.data_aceite_termo || base.created_at || base.timestamp || new Date().toISOString();
+    return {
+      ...base,
+      nome_cursista: base.nome_cursista || nomeExibicao,
+      email_cursista: (userEmail || base.email_cursista || cursista?.email || cursista?.['e-mail'] || '').trim().toLowerCase(),
+      cgm_cursista: base.cgm_cursista || cgmBase || cursista?.cgm || '',
+      linha_funcional: base.linha_funcional || linhaFuncionalAtual || '1',
+      cgm_lf: base.cgm_lf || cgm_lf,
+      nre: base.nre || nreCursista,
+      componente: base.componente || componenteCursista,
+      chamamento: base.chamamento || evolucao.chamamentoTexto,
+      ano_formativo_pretendido: base.ano_formativo_pretendido || evolucao.anoNecessario2027 || '2027/1',
+      dia_semana_formativo: base.dia_semana_formativo || diaSemanaFixo,
+      turnoPretendido: base.turnoPretendido || base.opcao_turno || form.turnoPretendido,
+      horarioPretendido: base.horarioPretendido || base.opcao_modalidade || form.horarioPretendido,
+      necessitaAtendimentoEspecializado: base.necessitaAtendimentoEspecializado || form.necessitaAtendimentoEspecializado,
+      descricaoAtendimentoEspecializado: base.descricaoAtendimentoEspecializado || form.descricaoAtendimentoEspecializado,
+      data_aceite_termo: carimboRaw
+    };
+  };
+
   return (
     <div style={{ maxWidth: '980px', margin: '0 auto', padding: '1rem', boxSizing: 'border-box' }}>
       
@@ -708,7 +732,7 @@ export default function IntencaoMatricula2027({
                   </div>
                   <div>
                     <span style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', display: 'block' }}>Matrícula / CGM_LF:</span>
-                    <strong>{cgm_lf}</strong>
+                    <strong>{cgm_lf} (Padrão {linhaFuncionalAtual})</strong>
                   </div>
                   <div>
                     <span style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', display: 'block' }}>NRE de Lotação:</span>
@@ -723,8 +747,10 @@ export default function IntencaoMatricula2027({
                     <strong style={{ color: '#0072bc' }}>{evolucao.anoNecessario2027 || '2027/1'}</strong>
                   </div>
                   <div>
-                    <span style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', display: 'block' }}>Dia Formativo Semanal:</span>
-                    <strong>{diaSemanaFixo}</strong>
+                    <span style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', display: 'block' }}>Carimbo de Data e Hora:</span>
+                    <strong style={{ color: '#1e3a8a' }}>
+                      🕒 {formatarCarimboDataHora(comprovanteAtual?.data_aceite_termo || comprovanteAtual?.created_at || registroExistente?.data_aceite_termo || registroExistente?.created_at)}
+                    </strong>
                   </div>
                   <div style={{ gridColumn: '1 / -1', backgroundColor: '#ffffff', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
                     <span style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', display: 'block' }}>Turno e Horário Escolhidos:</span>
@@ -745,13 +771,13 @@ export default function IntencaoMatricula2027({
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.65rem', marginTop: '0.5rem' }}>
                 <button
                   type="button"
-                  onClick={() => window.print()}
+                  onClick={() => imprimirComprovanteIntencao2027(montarPayloadComprovante())}
                   style={{
-                    backgroundColor: '#f1f5f9',
-                    color: '#0f172a',
-                    border: '1px solid #cbd5e1',
+                    backgroundColor: '#002d5c',
+                    color: '#ffffff',
+                    border: 'none',
                     borderRadius: '8px',
-                    padding: '0.65rem 1.1rem',
+                    padding: '0.65rem 1.15rem',
                     fontSize: '0.85rem',
                     fontWeight: 700,
                     cursor: 'pointer',
@@ -760,7 +786,7 @@ export default function IntencaoMatricula2027({
                     gap: '0.4rem'
                   }}
                 >
-                  <span>🖨️</span> Imprimir Comprovante
+                  <span>🖨️</span> Imprimir Comprovante Oficial (PDF)
                 </button>
                 <button
                   type="button"
@@ -1191,19 +1217,61 @@ export default function IntencaoMatricula2027({
 
               {registroExistente && !sucesso && (
                 <div style={{
-                  backgroundColor: '#f8fafc',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '8px',
-                  padding: '0.75rem 1rem',
-                  fontSize: '0.82rem',
-                  color: '#475569',
+                  backgroundColor: '#f0fdf4',
+                  border: '1px solid #86efac',
+                  borderRadius: '10px',
+                  padding: '0.85rem 1.1rem',
+                  fontSize: '0.83rem',
+                  color: '#166534',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   flexWrap: 'wrap',
-                  gap: '0.5rem'
+                  gap: '0.75rem'
                 }}>
-                  <span>ℹ️ Você já registrou uma intenção anteriormente em <strong>{registroExistente.created_at ? new Date(registroExistente.created_at).toLocaleDateString('pt-BR') : 'data recente'}</strong>. Você pode atualizar suas preferências a qualquer momento.</span>
+                  <div>
+                    <strong>✓ Intenção já registrada para a matrícula {cgm_lf}</strong>
+                    <div style={{ fontSize: '0.77rem', color: '#15803d', marginTop: '0.15rem' }}>
+                      🕒 Carimbo de data e hora: <strong>{formatarCarimboDataHora(registroExistente.data_aceite_termo || registroExistente.created_at || registroExistente.timestamp)}</strong> · Turno: <strong>{registroExistente.turnoPretendido || registroExistente.opcao_turno || form.turnoPretendido}</strong>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setComprovanteAtual(registroExistente);
+                        setModalComprovanteAberto(true);
+                      }}
+                      style={{
+                        backgroundColor: '#ffffff',
+                        color: '#166534',
+                        border: '1px solid #86efac',
+                        borderRadius: '6px',
+                        padding: '0.4rem 0.75rem',
+                        fontSize: '0.78rem',
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      📄 Ver Comprovante
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => imprimirComprovanteIntencao2027(montarPayloadComprovante())}
+                      style={{
+                        backgroundColor: '#002d5c',
+                        color: '#ffffff',
+                        border: 'none',
+                        borderRadius: '6px',
+                        padding: '0.4rem 0.85rem',
+                        fontSize: '0.78rem',
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      🖨️ Imprimir Comprovante
+                    </button>
+                  </div>
                 </div>
               )}
 
