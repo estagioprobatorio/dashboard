@@ -356,6 +356,43 @@ function sincronizarAbaDadosParaTiDB() {
   var idxSituacao = getIdx(["situacao", "status"]);
   var idxObs = getIdx(["observacao", "observacoes"]);
 
+  // Lookup com a aba TURMAS para enriquecer horários, dia da semana e turno se estiverem vazios em DADOS
+  var mapaTurmas = {};
+  try {
+    var abaTurmas = ss.getSheetByName("TURMAS");
+    if (abaTurmas) {
+      var dadosTurmas = abaTurmas.getDataRange().getValues();
+      if (dadosTurmas.length > 1) {
+        var cabT = dadosTurmas[0].map(function(c) {
+          return String(c || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        });
+        var idxTTurma = cabT.indexOf("turma");
+        var idxTDia = cabT.indexOf("dia_da_semana");
+        if (idxTDia === -1) idxTDia = cabT.indexOf("dia da semana");
+        var idxTHIni = cabT.indexOf("horario_inicial");
+        if (idxTHIni === -1) idxTHIni = cabT.indexOf("horario inicial");
+        var idxTHFim = cabT.indexOf("horario_fim");
+        if (idxTHFim === -1) idxTHFim = cabT.indexOf("horario final");
+        var idxTTurno = cabT.indexOf("turno");
+
+        for (var t = 1; t < dadosTurmas.length; t++) {
+          var rowT = dadosTurmas[t];
+          var codT = idxTTurma !== -1 ? String(rowT[idxTTurma] || "").trim() : "";
+          if (codT) {
+            mapaTurmas[codT] = {
+              dia: idxTDia !== -1 ? String(rowT[idxTDia] || "").trim() : null,
+              horario_inicial: idxTHIni !== -1 ? formatarValorPlanilha(rowT[idxTHIni]) : null,
+              horario_fim: idxTHFim !== -1 ? formatarValorPlanilha(rowT[idxTHFim]) : null,
+              turno: idxTTurno !== -1 ? String(rowT[idxTTurno] || "").trim() : null
+            };
+          }
+        }
+      }
+    }
+  } catch (errT) {
+    Logger.log('Aviso ao carregar aba TURMAS: ' + errT);
+  }
+
   var cursistas = [];
   for (var i = 1; i < dados.length; i++) {
     var row = dados[i];
@@ -375,6 +412,12 @@ function sincronizarAbaDadosParaTiDB() {
     // Identificação única no dashboard: CGM + LF (ex: 12345678_LF1)
     var cod = cgm ? (cgm + (lfNum ? ("_LF" + lfNum) : ("_" + turmas))) : ("CURS_" + i);
 
+    var infoTurma = mapaTurmas[turmas] || {};
+    var diaSemanaVal = (idxDiaSemana !== -1 ? String(row[idxDiaSemana] || "").trim() : null) || infoTurma.dia || null;
+    var turnoVal = (idxTurno !== -1 ? String(row[idxTurno] || "").trim() : null) || infoTurma.turno || null;
+    var horarioIniVal = (idxHorarioIni !== -1 ? formatarValorPlanilha(row[idxHorarioIni]) : null) || infoTurma.horario_inicial || null;
+    var horarioFimVal = (idxHorarioFim !== -1 ? formatarValorPlanilha(row[idxHorarioFim]) : null) || infoTurma.horario_fim || null;
+
     cursistas.push({
       cod_cursista: cod,
       cgm: cgm || null,
@@ -393,10 +436,10 @@ function sincronizarAbaDadosParaTiDB() {
       nre_exe: idxNreExe !== -1 ? String(row[idxNreExe] || "").trim() : null,
       munic_exe: idxMunicExe !== -1 ? String(row[idxMunicExe] || "").trim() : null,
       estab_exe: idxEstabExe !== -1 ? String(row[idxEstabExe] || "").trim() : null,
-      dia_da_semana: idxDiaSemana !== -1 ? String(row[idxDiaSemana] || "").trim() : null,
-      turno: idxTurno !== -1 ? String(row[idxTurno] || "").trim() : null,
-      horario_inicial: idxHorarioIni !== -1 ? formatarValorPlanilha(row[idxHorarioIni]) : null,
-      horario_fim: idxHorarioFim !== -1 ? formatarValorPlanilha(row[idxHorarioFim]) : null,
+      dia_da_semana: diaSemanaVal,
+      turno: turnoVal,
+      horario_inicial: horarioIniVal,
+      horario_fim: horarioFimVal,
       nome_formador: idxFormador !== -1 ? String(row[idxFormador] || "").trim() : null,
       email_formador: idxEmailFormador !== -1 ? String(row[idxEmailFormador] || "").trim().toLowerCase() : null,
       tutor_responsavel: idxTutor !== -1 ? String(row[idxTutor] || "").trim() : null,

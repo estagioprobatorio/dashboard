@@ -3,6 +3,31 @@ import { supabase, isConfigured as isSupabaseConfigured } from '../supabase';
 import { driveDataService } from '../services/driveDataService';
 import { tidbService } from '../services/tidbService';
 import { imprimirComprovanteIntencao2027, formatarCarimboDataHora } from '../utils/comprovanteIntencaoPrint';
+import turmasOficiaisData from '../data/turmasOficiais.json';
+
+/**
+ * Normaliza o componente curricular para a chave oficial da tabela TURMAS
+ */
+function toTurmasKey(comp) {
+  if (!comp) return 'PEDAGOGO';
+  const s = String(comp).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+  if (s.includes('TECNIC') || s.includes('PROFISSIONAL')) return 'TECNICO';
+  if (s.includes('PEDAGOG') || s.includes('GESTOR')) return 'PEDAGOGO';
+  if (s.includes('QUIMIC')) return 'QUIMICA';
+  if (s.includes('EDUCACAO FISICA') || s.includes('ED. FISICA')) return 'EDUCACAO FISICA';
+  if (s.includes('FISIC')) return 'FISICA';
+  if (s.includes('BIOLOG')) return 'BIOLOGIA';
+  if (s.includes('CIENC')) return 'CIENCIAS';
+  if (s.includes('MATEMAT')) return 'MATEMATICA';
+  if (s.includes('HISTOR')) return 'HISTORIA';
+  if (s.includes('GEOGRAF')) return 'GEOGRAFIA';
+  if (s.includes('PORTUG')) return 'PORTUGUES';
+  if (s.includes('INGL') || s.includes('LEM')) return 'INGLES';
+  if (s.includes('ART')) return 'ARTE';
+  if (s.includes('FILOSOF')) return 'FILOSOFIA';
+  if (s.includes('SOCIOLOG')) return 'SOCIOLOGIA';
+  return 'PEDAGOGO';
+}
 
 /**
  * MAPEAMENTO DE DIAS DA SEMANA POR COMPONENTE CURRICULAR (BASE OFICIAL 2026)
@@ -339,51 +364,90 @@ export default function IntencaoMatricula2027({
     return Array.from(mapTurmas.values()).sort((a, b) => a.nomeTurma.localeCompare(b.nomeTurma));
   }, [records, cursista, componenteCursista, evolucao]);
 
-  // Horários praticados em 2026 filtrados pelo Turno selecionado
-  const getHorariosPorTurno = (turnoSelecionado) => {
-    const turnoUpper = String(turnoSelecionado || '').toUpperCase();
-    const setHorarios = new Set();
+  // Turnos válidos para o componente do cursista conforme a aba TURMAS
+  const turnosValidos = useMemo(() => {
+    const turmasKey = toTurmasKey(componenteCursista);
+    const horariosDoComp = turmasOficiaisData.horariosPorComponente[turmasKey] || {};
+    const disponiveis = [];
+    if (horariosDoComp.MANHA && horariosDoComp.MANHA.length > 0) disponiveis.push('Manhã');
+    if (horariosDoComp.TARDE && horariosDoComp.TARDE.length > 0) disponiveis.push('Tarde');
+    if (horariosDoComp.NOITE && horariosDoComp.NOITE.length > 0) disponiveis.push('Noite');
+    return disponiveis.length > 0 ? disponiveis : ['Manhã', 'Tarde', 'Noite'];
+  }, [componenteCursista]);
 
-    turmasDisponiveis2026.forEach(t => {
-      if (t.turno.includes(turnoUpper) || turnoUpper.includes(t.turno)) {
-        if (t.horarioFormatado && t.horarioFormatado !== '—') {
-          setHorarios.add(t.horarioFormatado);
-        }
-      }
+  // Lista de horários formativos previstos para o componente (exibição na tabela)
+  const horariosDisponiveisComponente = useMemo(() => {
+    const turmasKey = toTurmasKey(componenteCursista);
+    const horariosDoComp = turmasOficiaisData.horariosPorComponente[turmasKey] || {};
+    const lista = [];
+
+    const turnosOrdem = [
+      { key: 'MANHA', label: 'Manhã' },
+      { key: 'TARDE', label: 'Tarde' },
+      { key: 'NOITE', label: 'Noite' }
+    ];
+
+    turnosOrdem.forEach(({ key, label }) => {
+      const horarios = horariosDoComp[key] || [];
+      horarios.forEach(h => {
+        lista.push({
+          turno: label,
+          diaSemana: diaSemanaFixo,
+          horarioFormatado: h
+        });
+      });
     });
 
-    // Se encontrou horários específicos na lista de turmas
-    if (setHorarios.size > 0) {
-      return Array.from(setHorarios).sort();
-    }
+    return lista;
+  }, [componenteCursista, diaSemanaFixo]);
 
-    // Horários padrão de referência caso não tenha turma mapeada naquele turno específico
-    if (turnoUpper === 'MANHÃ' || turnoUpper === 'MANHA') {
+  // Horários praticados oficiais filtrados pelo Turno selecionado
+  const getHorariosPorTurno = (turnoSelecionado) => {
+    const turmasKey = toTurmasKey(componenteCursista);
+    const horariosDoComp = turmasOficiaisData.horariosPorComponente[turmasKey] || {};
+    const turnoNorm = String(turnoSelecionado || '').toUpperCase();
+    const turnoKey = turnoNorm.includes('MANH') ? 'MANHA' : turnoNorm.includes('TARD') ? 'TARDE' : 'NOITE';
+
+    const lista = horariosDoComp[turnoKey] || [];
+    if (lista.length > 0) return lista;
+
+    // Fallback padrão se necessário
+    if (turnoKey === 'MANHA') {
       return ['08:00 às 09:40', '10:00 às 11:40'];
     }
-    if (turnoUpper === 'TARDE') {
+    if (turnoKey === 'TARDE') {
       return ['13:30 às 15:10', '15:30 às 17:10'];
     }
-    if (turnoUpper === 'NOITE') {
-      return ['18:10 às 19:50', '20:00 às 21:40'];
-    }
-    return ['08:00 às 09:40', '13:30 às 15:10', '18:10 às 19:50'];
+    return ['18:10 às 19:50', '20:00 às 21:40'];
   };
 
-  // Formulário com valores padrão
-  const [form, setForm] = useState({
-    turnoPretendido: 'Noite',
-    horarioPretendido: '18:10 às 19:50',
-    necessitaAtendimentoEspecializado: 'Não',
-    descricaoAtendimentoEspecializado: '',
-    decisaoDuasMatriculas: 'manter_duas', // 'manter_duas' | 'apenas_padrao_1' | 'apenas_padrao_2'
-    termoAceito: false
+  // Formulário com valores padrão inicializados com base nos turnos válidos
+  const [form, setForm] = useState(() => {
+    const turnoInicial = turnosValidos[0] || 'Manhã';
+    return {
+      turnoPretendido: turnoInicial,
+      horarioPretendido: '08:00 às 09:40',
+      necessitaAtendimentoEspecializado: 'Não',
+      descricaoAtendimentoEspecializado: '',
+      decisaoDuasMatriculas: 'manter_duas', // 'manter_duas' | 'apenas_padrao_1' | 'apenas_padrao_2'
+      termoAceito: false
+    };
   });
+
+  // Garante que o turno pretendido seja um dos turnos válidos para o componente
+  useEffect(() => {
+    if (turnosValidos.length > 0 && !turnosValidos.includes(form.turnoPretendido)) {
+      setForm(prev => ({
+        ...prev,
+        turnoPretendido: turnosValidos[0]
+      }));
+    }
+  }, [turnosValidos]);
 
   // Lista dinâmica de horários para o turno atual
   const horariosDisponiveis = useMemo(() => {
     return getHorariosPorTurno(form.turnoPretendido);
-  }, [form.turnoPretendido, horariosDisponiveisComponente]);
+  }, [form.turnoPretendido, componenteCursista]);
 
   // Ajusta o horário pretendido caso o turno mude e o horário atual não pertença à nova lista
   useEffect(() => {
@@ -558,18 +622,17 @@ export default function IntencaoMatricula2027({
         created_at: new Date().toISOString()
       };
 
-      // 1. Salva no TiDB Cloud Serverless (com timeout protegido)
+      // 1 e 2. Salva em paralelo com timeout protegido (não trava a tela em 'Gravando...')
       try {
-        await tidbService.salvarIntencao2027(dadosRegistro);
+        await Promise.race([
+          Promise.allSettled([
+            tidbService.salvarIntencao2027(dadosRegistro),
+            driveDataService.salvarIntencao2027(dadosRegistro)
+          ]),
+          new Promise(resolve => setTimeout(resolve, 3500))
+        ]);
       } catch (err) {
-        console.warn('[TiDB] Erro ao salvar intenção via tidbService:', err);
-      }
-
-      // 2. Salva via Drive Service (Google Sheets / Drive)
-      try {
-        await driveDataService.salvarIntencao2027(dadosRegistro);
-      } catch (err) {
-        console.warn('Erro ao salvar intenção via DriveService:', err);
+        console.warn('[Sync] Aviso de salvamento:', err);
       }
 
       // 3. Salva no LocalStorage com chave específica por matrícula (CGM_LF) e respeita limite de 1 por matrícula
@@ -1521,9 +1584,9 @@ export default function IntencaoMatricula2027({
                       boxSizing: 'border-box'
                     }}
                   >
-                    <option value="Manhã">Manhã</option>
-                    <option value="Tarde">Tarde</option>
-                    <option value="Noite">Noite</option>
+                    {turnosValidos.map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
                   </select>
                   <span style={{ fontSize: '0.72rem', color: '#64748b', display: 'block', marginTop: '0.25rem' }}>
                     Selecione o turno de sua preferência para os encontros.
