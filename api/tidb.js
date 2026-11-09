@@ -1212,19 +1212,29 @@ export default async function handler(req, res) {
       const item = req.body.data;
       if (!item) return res.status(400).json({ error: 'Dados da intenção ausentes.' });
 
+      let obsTexto = item.observacao || '';
+      if (item.decisaoDuasMatriculas) {
+        obsTexto = `[Decisão: ${item.decisaoDuasMatriculas}] ${obsTexto}`.trim();
+      }
+      if (item.necessitaAtendimentoEspecializado === 'Sim' && item.descricaoAtendimentoEspecializado) {
+        obsTexto = `[Atendimento Especial: ${item.descricaoAtendimentoEspecializado}] ${obsTexto}`.trim();
+      }
+
+      const cgmIdent = item.cgm_lf || (item.cgm ? `${item.cgm}_${item.linha_funcional || 1}` : (item.cgm_cursista || null));
+
       const sql = `
         INSERT INTO intencao_matricula_2027 (
           cgm, nome_cursista, email, componente, opcao_turno, opcao_modalidade, observacao
         ) VALUES (?, ?, ?, ?, ?, ?, ?)
       `;
       const params = [
-        item.cgm ? String(item.cgm) : null,
+        cgmIdent ? String(cgmIdent) : null,
         item.nome_cursista || '',
-        item.email || null,
+        item.email_cursista || item.email || null,
         item.componente || null,
-        item.opcao_turno || null,
-        item.opcao_modalidade || null,
-        item.observacao || null
+        item.turnoPretendido || item.opcao_turno || null,
+        item.horarioPretendido || item.opcao_modalidade || null,
+        obsTexto || null
       ];
 
       await executeSql(sql, params);

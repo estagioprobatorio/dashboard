@@ -48,10 +48,29 @@ async function componenteId(ctx, nome) {
   return ctx.comp.get(n);
 }
 
+function normalizarChamamentoIngest(val) {
+  const s = String(val || '').trim();
+  if (!s) return '';
+  if (/1[º°oª\s]|1º\s*cham|primeiro/i.test(s)) return '1º Chamamento';
+  if (/2[º°oª\s]|2º\s*cham|segundo/i.test(s)) return '2º Chamamento';
+  if (/3[º°oª\s]|3º\s*cham|terceiro/i.test(s)) return '3º Chamamento';
+  if (/4[º°oª\s]|4º\s*cham|quarto/i.test(s)) return '4º Chamamento';
+  if (/5[º°oª\s]|5º\s*cham|quinto/i.test(s)) return '5º Chamamento';
+  if (/6[º°oª\s]|6º\s*cham|sexto/i.test(s)) return '6º Chamamento';
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (m) {
+    const mes = parseInt(m[2], 10);
+    const ano = parseInt(m[3], 10);
+    if (ano <= 2024) return (ano === 2024 && mes <= 2) ? '1º Chamamento' : '2º Chamamento';
+    if (ano === 2025) return mes <= 5 ? '3º Chamamento' : '4º Chamamento';
+    if (ano >= 2026) return mes <= 5 ? '5º Chamamento' : '6º Chamamento';
+  }
+  return s;
+}
+
 async function cicloId(ctx, ano, chamamento) {
-  const a = s(ano);
-  if (!a) return null;
-  const c = s(chamamento) || '';
+  const a = s(ano) || '2º/3º ANO';
+  const c = normalizarChamamentoIngest(chamamento);
   const k = `${a}|${c}`;
   if (!ctx.ciclo.has(k)) {
     await query('INSERT INTO ciclo (ano_formativo, chamamento) VALUES (?, ?) ON DUPLICATE KEY UPDATE ano_formativo = ano_formativo', [a, c]);

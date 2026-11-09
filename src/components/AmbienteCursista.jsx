@@ -11,7 +11,7 @@ import { getObservacoes2024PorCursista } from '../utils/observacoes2024Service';
 import { gerarDiagnosticoCursistaIA, parseScore, scoreLabel, getNivelInfo, normalizeString } from '../utils/aiPedagogicalService';
 import { calcularMedalhaCursista } from '../utils/gamificacaoService';
 
-export default function AmbienteCursista({ userEmail, records, observacoes = [], movimentacoes = [], onNovaMovimentacao, subTab = 'turma' }) {
+export default function AmbienteCursista({ userEmail, records, observacoes = [], movimentacoes = [], onNovaMovimentacao, subTab = 'turma', somenteIntencao = false, onIntencaoSalva }) {
   const [activeSubTab, setActiveSubTab] = useState(subTab);
   const [showModalForm, setShowModalForm] = useState(false);
   const [selectedTurma, setSelectedTurma] = useState(null);
@@ -90,6 +90,42 @@ export default function AmbienteCursista({ userEmail, records, observacoes = [],
   const evolucaoCursista = useMemo(() => {
     return calcularEvolucaoCursista2027(cursistaRecord);
   }, [cursistaRecord]);
+
+  // Análise de Dois Padrões: Modalidades Iguais vs Diferentes / Chamamentos Diferentes
+  const analiseDoisPadroes = useMemo(() => {
+    if (cursistaRecords.length < 2) {
+      return {
+        possuiDoisPadroes: false,
+        isModalidadesIguais: false,
+        isModalidadesDiferentesOuChamamentosDiferentes: false
+      };
+    }
+
+    const r1 = cursistaRecords[0];
+    const r2 = cursistaRecords[1];
+
+    const c1 = normalizeString(r1.componente || r1.componente_conc || '');
+    const c2 = normalizeString(r2.componente || r2.componente_conc || '');
+
+    const ch1 = r1.chamamento ? String(r1.chamamento) : '';
+    const ch2 = r2.chamamento ? String(r2.chamamento) : '';
+
+    const mesmoComp = (c1 && c2 && c1 === c2);
+    const mesmoCham = (ch1 && ch2 && ch1 === ch2);
+
+    const isModalidadesIguais = mesmoComp && mesmoCham;
+    const isModalidadesDiferentesOuChamamentosDiferentes = !isModalidadesIguais;
+
+    return {
+      possuiDoisPadroes: true,
+      rec1: r1,
+      rec2: r2,
+      isModalidadesIguais,
+      isModalidadesDiferentesOuChamamentosDiferentes,
+      componente1: r1.componente || r1.componente_conc || 'Geral',
+      componente2: r2.componente || r2.componente_conc || 'Geral'
+    };
+  }, [cursistaRecords]);
 
   // Carregar histórico de 2024 do cursista (busca em todos os vínculos)
   useEffect(() => {
@@ -234,6 +270,159 @@ export default function AmbienteCursista({ userEmail, records, observacoes = [],
         <p style={{ color: 'var(--color-text-muted)', marginTop: '0.5rem' }}>
           Não encontramos um cadastro associado ao e-mail <b>{userEmail}</b> na base de cursistas.
         </p>
+      </div>
+    );
+  }
+
+  // Se o modo estrito de Intenção de Vaga estiver ativo para o cursista
+  if (somenteIntencao) {
+    return (
+      <div className="tab-content animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', maxWidth: '1080px', margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
+        
+        {/* Banner de Boas-Vindas Institucional SEED/PR */}
+        <div className="glass-panel" style={{
+          background: 'linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-primary-mid) 100%)',
+          color: 'white',
+          borderRadius: '16px',
+          padding: '1.25rem 1.75rem',
+          boxShadow: 'var(--shadow-md)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '1rem'
+        }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
+              <span style={{ backgroundColor: 'var(--color-accent-green)', color: '#ffffff', padding: '0.2rem 0.6rem', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase' }}>
+                Área do Cursista · SEED-PR
+              </span>
+              <span style={{ fontSize: '0.8rem', opacity: 0.85 }}>CGM: {cursistaRecord.cgm || '-'}</span>
+            </div>
+            <h1 style={{ fontSize: '1.45rem', fontWeight: 800, fontFamily: 'var(--font-header)', margin: 0 }}>
+              Olá, {cursistaRecord.nome_cursista || cursistaRecord.nome}!
+            </h1>
+          </div>
+
+          <button
+            onClick={handleInstallPWA}
+            style={{
+              backgroundColor: 'rgba(255, 255, 255, 0.15)',
+              color: '#fff',
+              border: '1px solid rgba(255, 255, 255, 0.3)',
+              borderRadius: '10px',
+              padding: '0.5rem 1rem',
+              fontSize: '0.82rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              backdropFilter: 'blur(4px)'
+            }}
+          >
+            <span>📲</span> Instalar App no Celular
+          </button>
+        </div>
+
+        {/* Seletor de Padrões/Vínculos para Cursistas com Múltiplos Vínculos (Dois Padrões) */}
+        {cursistaRecords.length > 1 && (
+          <div style={{
+            backgroundColor: analiseDoisPadroes.isModalidadesIguais ? '#f5f3ff' : '#eff6ff',
+            border: analiseDoisPadroes.isModalidadesIguais ? '2px solid #c4b5fd' : '2px solid #93c5fd',
+            borderRadius: '14px',
+            padding: '1.25rem',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '1rem'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.85rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <span style={{ fontSize: '1.6rem' }}>{analiseDoisPadroes.isModalidadesIguais ? '⚖️' : '🎓'}</span>
+                <div>
+                  <strong style={{ fontSize: '0.95rem', color: analiseDoisPadroes.isModalidadesIguais ? '#4c1d95' : '#1e3a8a', display: 'block' }}>
+                    {analiseDoisPadroes.isModalidadesIguais
+                      ? `Você possui 2 matrículas ativas na mesma modalidade (${analiseDoisPadroes.componente1}):`
+                      : `Você possui 2 matrículas ativas em modalidades ou chamamentos diferentes:`
+                    }
+                  </strong>
+                  <span style={{ fontSize: '0.82rem', color: analiseDoisPadroes.isModalidadesIguais ? '#6d28d9' : '#2563eb' }}>
+                    {analiseDoisPadroes.isModalidadesIguais
+                      ? 'Preencha os dois padrões e ao final escolha se deseja manter ambas ou optar por apenas uma.'
+                      : 'Obrigatório realizar um preenchimento para cada matrícula (definida pelo CGM_LF).'
+                    }
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Botões dos Padrões com Status individual */}
+            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+              {cursistaRecords.map((rec, idx) => {
+                const isSel = idx === activeRecordIndex;
+                const comp = rec.componente || rec.componente_conc || 'Geral';
+                const lf = rec.linha_funcional || rec.lf || (idx + 1);
+                const chaveLf = rec.cgm ? `${rec.cgm}_${lf}` : `${userEmail}_${lf}`;
+                const salvo = !!localStorage.getItem(`intencao_2027_${chaveLf}`);
+                const turno = rec.turmas?.toUpperCase().includes('MANHA') ? 'Manhã' : rec.turmas?.toUpperCase().includes('TARDE') ? 'Tarde' : rec.turmas?.toUpperCase().includes('NOITE') ? 'Noite' : '';
+
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setSelectedRecordIndex(idx)}
+                    style={{
+                      flex: '1 1 240px',
+                      padding: '0.75rem 1.15rem',
+                      borderRadius: '10px',
+                      border: isSel ? '2px solid #002d5c' : '1px solid #cbd5e1',
+                      backgroundColor: isSel ? '#002d5c' : '#ffffff',
+                      color: isSel ? '#ffffff' : '#1e293b',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.3rem',
+                      textAlign: 'left',
+                      boxShadow: isSel ? '0 4px 12px rgba(0, 45, 92, 0.2)' : '0 1px 3px rgba(0,0,0,0.05)',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                      <span style={{ fontWeight: 800, fontSize: '0.88rem' }}>
+                        Padrão {idx + 1} (LF {lf})
+                      </span>
+                      <span style={{
+                        fontSize: '0.72rem',
+                        fontWeight: 800,
+                        padding: '0.15rem 0.5rem',
+                        borderRadius: '999px',
+                        backgroundColor: salvo ? (isSel ? '#22c55e' : '#dcfce7') : (isSel ? '#f59e0b' : '#fef3c7'),
+                        color: salvo ? (isSel ? '#ffffff' : '#15803d') : (isSel ? '#ffffff' : '#b45309')
+                      }}>
+                        {salvo ? '✓ Confirmado' : '⏳ Pendente'}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '0.78rem', opacity: isSel ? 0.9 : 0.75 }}>
+                      {comp} {turno ? `· ${turno}` : ''}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Formulário de Intenção de Vaga 2027 com Informativo ao Logar e Termo de Ciência */}
+        <IntencaoMatricula2027 
+          cursista={cursistaRecord} 
+          records={records} 
+          userEmail={userEmail}
+          onIntencaoSalva={onIntencaoSalva}
+          todosVinculos={cursistaRecords}
+          isModalidadesIguais={analiseDoisPadroes.isModalidadesIguais}
+          isModalidadesDiferentesOuChamamentosDiferentes={analiseDoisPadroes.isModalidadesDiferentesOuChamamentosDiferentes}
+          onTrocarPadrao={cursistaRecords.length > 1 ? () => setSelectedRecordIndex(prev => prev === 0 ? 1 : 0) : null}
+        />
       </div>
     );
   }

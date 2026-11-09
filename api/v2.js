@@ -177,12 +177,32 @@ export default async function handler(req, res) {
     if (action === 'insert_intencao') {
       exigeFuncao(user, ...STAFF, 'cursista');
       const d = body.data || {};
-      const alvo = await alvoCursista(user, d.email);
+      const alvo = await alvoCursista(user, d.email_cursista || d.email);
       if (!alvo) throw new HttpError(400, 'Cursista não identificado.');
-      const v = (await query('SELECT id FROM vinculo WHERE usuario_id = ? ORDER BY linha_funcional LIMIT 1', [alvo]))[0];
+      const lf = d.linha_funcional ? String(d.linha_funcional).trim() : null;
+      let v = null;
+      if (lf) {
+        v = (await query('SELECT id FROM vinculo WHERE usuario_id = ? AND linha_funcional = ? LIMIT 1', [alvo, lf]))[0];
+      }
+      if (!v) {
+        v = (await query('SELECT id FROM vinculo WHERE usuario_id = ? ORDER BY linha_funcional LIMIT 1', [alvo]))[0];
+      }
+      
+      let obsPartes = [];
+      if (d.necessitaAtendimentoEspecializado === 'Sim' || d.descricaoAtendimentoEspecializado) {
+        obsPartes.push(`[Atendimento Especial: Sim] ${d.descricaoAtendimentoEspecializado || ''}`);
+      }
+      if (d.decisaoDuasMatriculas) {
+        obsPartes.push(`[Decisão 2 Matrículas: ${d.decisaoDuasMatriculas}]`);
+      }
+      if (d.observacao) {
+        obsPartes.push(d.observacao);
+      }
+      const obsTexto = obsPartes.join(' | ');
+
       await query(
         `INSERT INTO intencao_matricula (usuario_id, vinculo_id, componente, opcao_turno, opcao_modalidade, observacao) VALUES (?,?,?,?,?,?)`,
-        [alvo, v ? v.id : null, s(d.componente), s(d.opcao_turno), s(d.opcao_modalidade), s(d.observacao)]
+        [alvo, v ? v.id : null, s(d.componente), s(d.turnoPretendido || d.opcao_turno), s(d.horarioPretendido || d.opcao_modalidade), s(obsTexto)]
       );
       return res.status(200).json({ status: 'success' });
     }

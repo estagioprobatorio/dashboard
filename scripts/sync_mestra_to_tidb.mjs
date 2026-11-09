@@ -5,6 +5,21 @@ import XLSX from 'xlsx';
 import { encrypt, hmacHex, normalizeDigits } from '../api/_lib/crypto.js';
 import { s, lowerEmail, normalizeNre } from '../api/_lib/utils.js';
 
+function dataToChamamento(dateStr) {
+  if (!dateStr) return null;
+  const s = String(dateStr).trim();
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (!m) return s;
+  const dia = parseInt(m[1], 10);
+  const mes = parseInt(m[2], 10);
+  const ano = parseInt(m[3], 10);
+
+  if (ano <= 2024) return (ano === 2024 && mes <= 2) ? '1º Chamamento' : '2º Chamamento';
+  if (ano === 2025) return mes <= 5 ? '3º Chamamento' : '4º Chamamento';
+  if (ano >= 2026) return mes <= 5 ? '5º Chamamento' : '6º Chamamento';
+  return s;
+}
+
 function excelTimeToStr(val) {
   if (!val && val !== 0) return null;
   const str = String(val).trim();
@@ -64,7 +79,7 @@ async function main() {
   const cicloSet = new Set();
   for (const r of dadosRows) {
     const a = s(r.ano_formativo);
-    const ch = s(r.chamamento) || '';
+    const ch = dataToChamamento(s(r.chamamento)) || '';
     if (a) cicloSet.add(`${a}|${ch}`);
   }
   for (const key of cicloSet) {
@@ -250,7 +265,7 @@ async function main() {
     const vid = vincIdMap.get(`${uid}_${lf}`);
     if (!vid) continue;
     const tid = turmaIdByCod.get(s(r.turmas)) || null;
-    const cid = cicloMap.get(`${s(r.ano_formativo)}|${s(r.chamamento) || ''}`) || null;
+    const cid = cicloMap.get(`${s(r.ano_formativo)}|${dataToChamamento(s(r.chamamento)) || ''}`) || null;
     const mKey = `${vid}_${tid || 0}`;
     if (matDedup.has(mKey)) continue;
 

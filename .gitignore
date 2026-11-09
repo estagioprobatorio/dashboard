@@ -39,5 +39,7 @@ out/
 
 # Planilhas pesadas locais (backup local / templates)
 docs-planilhas/
+testes-estagio-main.zip
+testes-estagio-main/
 desktop-app/target/
 desktop-app/dependency-reduced-pom.xml

@@ -41,6 +41,7 @@ import fallbackData from './data_fallback.json';
 import tutoresFallback from './tutores_fallback.json';
 import observacoesFallback from './observacoes_fallback.json';
 import fallbackConcluintes from './concluintes_fallback.json';
+import { USUARIOS_TESTES_ADMINS } from './data_usuarios_testes_admins';
 
 export default function App() {
   const [macroPilar, setMacroPilar] = useState('pedagogica'); // 'pedagogica' | 'administrativa'
@@ -99,6 +100,7 @@ export default function App() {
     });
 
     const seenOrphanCgm = new Set();
+    const seenRecords = new Set();
     const cleanRecords = (records || []).filter(r => {
       if (!r) return false;
       const turma = String(r.turmas || r.turma || '').trim();
@@ -109,6 +111,7 @@ export default function App() {
 
       const cgm = String(r.cgm || '').trim();
       const ch = String(r.chamamento || '').trim();
+      const lf = String(r.linha_funcional || '1').trim();
       const semChamamento = !ch || ch === '-';
 
       if (semChamamento && cgm) {
@@ -118,10 +121,19 @@ export default function App() {
         if (seenOrphanCgm.has(cgm)) return false;
         seenOrphanCgm.add(cgm);
       }
+
+      // Deduplicação estrita de linhas duplicadas da mesma turma/vínculo (mantendo múltiplas matrículas legítimas distintas)
+      const chaveRegistro = `${cgm || r.email || r['e-mail'] || r.nome_cursista}_${lf}_${turma}`;
+      if (seenRecords.has(chaveRegistro)) return false;
+      seenRecords.add(chaveRegistro);
+
       return true;
     });
 
-    return cleanRecords.map(r => {
+    // Unifica a base limpa de cursistas com os usuários testes dos admins e superadmins
+    const baseCombinada = [...cleanRecords, ...USUARIOS_TESTES_ADMINS];
+
+    return baseCombinada.map(r => {
       if (!r) return {};
       const tutorName = r.tutor_responsavel ? r.tutor_responsavel.trim().toUpperCase() : '';
       const tutorInfo = tutoresMap.get(tutorName);
@@ -662,6 +674,29 @@ export default function App() {
   }, [observacoesList, filteredRecordsForView, enrichedRecords, tutoresList, user, userRole, simulatedRole, effectiveRole, effectiveEmail]);
 
 
+  // Forçar cursistas na aba de Intenção de Vaga 2027
+  useEffect(() => {
+    if (effectiveRole === 'cursista') {
+      setActiveTab('cursista_matricula_2027');
+    }
+  }, [effectiveRole]);
+
+  // Handler para atualizar intenções de matrícula em tempo real
+  const handleIntencaoSalva = (novaIntencao) => {
+    setIntencoes2027List(prev => {
+      const cgm = String(novaIntencao.cgm_cursista || novaIntencao.cgm || '').trim();
+      const em = String(novaIntencao.email_cursista || novaIntencao.email || '').trim().toLowerCase();
+      const filtered = (prev || []).filter(item => {
+        const itemCgm = String(item.cgm_cursista || item.cgm || '').trim();
+        const itemEm = String(item.email_cursista || item.email || '').trim().toLowerCase();
+        if (cgm && itemCgm && itemCgm === cgm) return false;
+        if (em && itemEm && itemEm === em) return false;
+        return true;
+      });
+      return [novaIntencao, ...filtered];
+    });
+  };
+
   // Handler para novas solicitações enviadas pelo Cursista
   const handleNovaMovimentacao = async (novaSolicitacao) => {
     setMovimentacoesList(prev => [novaSolicitacao, ...prev]);
@@ -745,8 +780,23 @@ export default function App() {
       );
     }
 
-    // Se o perfil ativo for Cursista ou se a aba for de Cursista
-    if (effectiveRole === 'cursista' || activeTab.startsWith('cursista_') || activeTab === 'espaco_cursista') {
+    // Se o perfil ativo for Cursista (acesso restrito unicamente à Intenção de Vagas 2027 nesta fase)
+    if (effectiveRole === 'cursista') {
+      return (
+        <AmbienteCursista 
+          userEmail={effectiveEmail} 
+          records={enrichedRecords} 
+          observacoes={filteredObservacoesForView}
+          movimentacoes={movimentacoesList}
+          onNovaMovimentacao={handleNovaMovimentacao}
+          somenteIntencao={true}
+          onIntencaoSalva={handleIntencaoSalva}
+        />
+      );
+    }
+
+    // Se uma sub-aba de Cursista for acessada diretamente (ex: simulação admin)
+    if (activeTab.startsWith('cursista_') || activeTab === 'espaco_cursista') {
       if (activeTab === 'cursista_documentos') {
         return <CentralDocumentos userRole="cursista" />;
       }
@@ -761,6 +811,7 @@ export default function App() {
           movimentacoes={movimentacoesList}
           onNovaMovimentacao={handleNovaMovimentacao}
           subTab={subTab}
+          onIntencaoSalva={handleIntencaoSalva}
         />
       );
     }
@@ -861,6 +912,7 @@ export default function App() {
             records={enrichedRecords} 
             userRole={effectiveRole} 
             userEmail={effectiveEmail} 
+            intencoesList={intencoes2027List}
           />
         ) : (
           <Panorama data={filteredRecordsForView} concluintes={concluintesEfetivos} />
@@ -891,9 +943,11 @@ export default function App() {
 
           <div 
             className="identidade-console"
-            onClick={() => setActiveTab('inicio')}
-            style={{ cursor: 'pointer' }}
-            title="Ir para a Página Inicial (Central de Ferramentas)"
+            onClick={() => {
+              if (effectiveRole !== 'cursista') setActiveTab('inicio');
+            }}
+            style={{ cursor: effectiveRole !== 'cursista' ? 'pointer' : 'default' }}
+            title={effectiveRole !== 'cursista' ? "Ir para a Página Inicial (Central de Ferramentas)" : "Estágio Probatório SEED-PR"}
           >
             <button
               type="button"
@@ -925,6 +979,61 @@ export default function App() {
           </div>
 
           <div className="acoes-usuario-console">
+            {/* SELETOR DE CENÁRIOS DE TESTE PARA ADMINS E SUPERADMINS */}
+            {(userRole === 'admin' || userRole === 'tecnico') && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <select
+                  value={simulatedRole === 'cursista' ? simulatedEmail : ''}
+                  onChange={(e) => {
+                    const em = e.target.value;
+                    if (!em) {
+                      setSimulatedRole(null);
+                      setSimulatedEmail('');
+                      setActiveTab('intencao_vagas_2027');
+                    } else {
+                      setSimulatedRole('cursista');
+                      setSimulatedEmail(em);
+                      setActiveTab('cursista_matricula_2027');
+                    }
+                  }}
+                  style={{
+                    backgroundColor: simulatedRole === 'cursista' ? '#dcfce7' : '#ffffff',
+                    color: simulatedRole === 'cursista' ? '#166534' : '#001d3d',
+                    border: simulatedRole === 'cursista' ? '2px solid #22c55e' : '1px solid #cbd5e1',
+                    borderRadius: '8px',
+                    padding: '0.45rem 0.65rem',
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    maxWidth: '240px'
+                  }}
+                  title="Simular visualização de Cursista para testes"
+                >
+                  <option value="">🧪 Testar Cursista (Cenários)</option>
+                  <optgroup label="── 1. Modalidades Iguais (Escolhe ou Mantém) ──">
+                    <option value="jorge.dotti@escola.pr.gov.br">Jorge Dotti · Matemática (3º Cham.)</option>
+                    <option value="chrystiankrone@escola.pr.gov.br">Chrystian Krone · Ed. Física (4º Cham.)</option>
+                    <option value="estagioprobatorio@escola.pr.gov.br">SEED Admin 1 · Arte (5º Cham.)</option>
+                  </optgroup>
+                  <optgroup label="── 2. Modalidades Diferentes (Obrigatório Ambos) ──">
+                    <option value="alexandrebomfim@escola.pr.gov.br">Alexandre Bomfim · História + Pedagogo</option>
+                    <option value="est.probmatricula@escola.pr.gov.br">SEED Admin 2 · Inglês + Técnicos</option>
+                  </optgroup>
+                  <optgroup label="── 3. Chamamentos Diferentes (Obrigatório Ambos) ──">
+                    <option value="ana.paulados.santos@escola.pr.gov.br">Ana Paula · Português (3º vs 6º Cham.)</option>
+                    <option value="elianaprovenci@escola.pr.gov.br">Eliana Provenci · Ciências (4º) + Física (6º)</option>
+                  </optgroup>
+                  <optgroup label="── 4. Ciclo Encerra Dez/26 + Elegível ──">
+                    <option value="fernanda.ambonatti@escola.pr.gov.br">Fernanda Ambonatti · Biologia (2º vs 4º Cham.)</option>
+                  </optgroup>
+                  <optgroup label="── 5. Padrão Único (1 Matrícula) ──">
+                    <option value="mariangela.iurk@escola.pr.gov.br">Mariangela Iurk · Química (6º Cham. 1º ano)</option>
+                    <option value="eliane.bruning@escola.pr.gov.br">Eliane Bruning · Geografia (3º Cham. Atend. Especial)</option>
+                  </optgroup>
+                </select>
+              </div>
+            )}
+
             <button 
               className="botao-busca-console" 
               type="button"
@@ -959,85 +1068,102 @@ export default function App() {
         </div>
       </header>
 
+      {/* BARRA SUPERIOR DE SIMULAÇÃO DE CURSISTA ATIVA */}
+      {simulatedRole === 'cursista' && (
+        <div style={{
+          backgroundColor: '#002d5c',
+          color: '#ffffff',
+          padding: '0.65rem 1.5rem',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '0.75rem',
+          borderBottom: '3px solid #00984a',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          zIndex: 9999
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+            <span style={{ fontSize: '1.3rem' }}>🧪</span>
+            <div>
+              <strong style={{ fontSize: '0.88rem', letterSpacing: '0.02em', textTransform: 'uppercase', color: '#86efac' }}>
+                Modo de Teste da Visão do Cursista Ativo
+              </strong>
+              <div style={{ fontSize: '0.8rem', opacity: 0.95 }}>
+                Simulando Docente: <b>{effectiveEmail}</b>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
+            <button
+              onClick={() => {
+                setSimulatedRole(null);
+                setSimulatedEmail('');
+                setActiveTab('intencao_vagas_2027');
+              }}
+              style={{
+                backgroundColor: '#ffffff',
+                color: '#002d5c',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '0.45rem 1.1rem',
+                fontWeight: 800,
+                fontSize: '0.82rem',
+                cursor: 'pointer',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.2)'
+              }}
+            >
+              ✕ Sair do Teste (Voltar ao Painel Admin)
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* CORPO PRINCIPAL COM SIDEBAR ESTILO GOOGLE CLOUD CONSOLE */}
       <div className="console-layout-wrapper">
         <aside className={`console-sidebar ${isSidebarCollapsed ? 'collapsed' : ''}`} aria-label="Navegação Lateral">
           
           <div className="console-sidebar-nav">
-            {/* BOTÃO FIXO: PÁGINA INICIAL / CENTRAL DE FERRAMENTAS */}
-            <div className="console-nav-group" style={{ marginBottom: '0.4rem', paddingBottom: '0.4rem', borderBottom: '1px solid #e2e8f0' }}>
-              <button
-                type="button"
-                className={`console-nav-item ${activeTab === 'inicio' ? 'active' : ''}`}
-                onClick={() => setActiveTab('inicio')}
-                title="Página Inicial - Central de Ferramentas"
-                style={{ fontWeight: 600 }}
-              >
-                <span className="console-nav-icon">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-                    <polyline points="9 22 9 12 15 12 15 22"></polyline>
-                  </svg>
-                </span>
-                {!isSidebarCollapsed && <span className="console-nav-text">Início / Ferramentas</span>}
-              </button>
-            </div>
+            {/* BOTÃO FIXO: PÁGINA INICIAL / CENTRAL DE FERRAMENTAS (Apenas para não-cursistas) */}
+            {effectiveRole !== 'cursista' && (
+              <div className="console-nav-group" style={{ marginBottom: '0.4rem', paddingBottom: '0.4rem', borderBottom: '1px solid #e2e8f0' }}>
+                <button
+                  type="button"
+                  className={`console-nav-item ${activeTab === 'inicio' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('inicio')}
+                  title="Página Inicial - Central de Ferramentas"
+                  style={{ fontWeight: 600 }}
+                >
+                  <span className="console-nav-icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                      <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                    </svg>
+                  </span>
+                  {!isSidebarCollapsed && <span className="console-nav-text">Início / Ferramentas</span>}
+                </button>
+              </div>
+            )}
 
             {effectiveRole === 'cursista' ? (
               <div className="console-nav-group">
-                {!isSidebarCollapsed && <div className="console-nav-label">Espaço Cursista</div>}
+                {!isSidebarCollapsed && <div className="console-nav-label">Intenção de Vagas 2027</div>}
                 
                 <button
                   type="button"
-                  className={`console-nav-item ${activeTab === 'cursista_turma' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('cursista_turma')}
-                  title="Minha Turma"
+                  className={`console-nav-item ${activeTab === 'cursista_matricula_2027' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('cursista_matricula_2027')}
+                  title="Solicitação da Intenção de Vaga 2027"
+                  style={{
+                    backgroundColor: 'rgba(0, 152, 74, 0.12)',
+                    color: '#007a33',
+                    fontWeight: 700
+                  }}
                 >
-                  <span className="console-nav-icon">🏫</span>
-                  {!isSidebarCollapsed && <span className="console-nav-text">Minha Turma</span>}
+                  <span className="console-nav-icon">📅</span>
+                  {!isSidebarCollapsed && <span className="console-nav-text">Intenção de Vaga 2027</span>}
                 </button>
-
-                <button
-                  type="button"
-                  className={`console-nav-item ${activeTab === 'cursista_observacoes' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('cursista_observacoes')}
-                  title="Meu Acompanhamento & Medalhas"
-                >
-                  <span className="console-nav-icon">🏅</span>
-                  {!isSidebarCollapsed && <span className="console-nav-text">Meu Acompanhamento</span>}
-                </button>
-
-                <button
-                  type="button"
-                  className={`console-nav-item ${activeTab === 'cursista_solicitacoes' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('cursista_solicitacoes')}
-                  title="Minhas Solicitações"
-                >
-                  <span className="console-nav-icon">🔄</span>
-                  {!isSidebarCollapsed && <span className="console-nav-text">Minhas Solicitações</span>}
-                </button>
-
-                <button
-                  type="button"
-                  className={`console-nav-item ${activeTab === 'cursista_documentos' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('cursista_documentos')}
-                  title="Documentos Formativos"
-                >
-                  <span className="console-nav-icon">📄</span>
-                  {!isSidebarCollapsed && <span className="console-nav-text">Documentos Formativos</span>}
-                </button>
-
-                {isCursistaElegivel2027 && (
-                  <button
-                    type="button"
-                    className={`console-nav-item ${activeTab === 'cursista_matricula_2027' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('cursista_matricula_2027')}
-                    title="Intenção Matrícula 2027"
-                  >
-                    <span className="console-nav-icon">📅</span>
-                    {!isSidebarCollapsed && <span className="console-nav-text">Intenção Matrícula 2027</span>}
-                  </button>
-                )}
               </div>
             ) : (
               <>

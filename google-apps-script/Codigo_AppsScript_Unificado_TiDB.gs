@@ -319,6 +319,30 @@ function sincronizarAbaDadosParaTiDB() {
   var idxEmailFormador = getIdx(["e-mail formador", "email formador"]);
   var idxTutor = getIdx(["tutor responsavel", "tutor"]);
   var idxEmailTutor = getIdx(["e-mail tutor", "email tutor"]);
+  var idxChamamento = getIdx(["chamamento", "chamamento cursista"]);
+  var idxAnoFormativo = getIdx(["ano formativo", "ano_formativo"]);
+  var idxPeriodoIni = getIdx(["periodo_ini", "periodo inicial", "inicio"]);
+
+  function normalizarChamamentoGs(val, dataRef) {
+    var s = String(val || "").trim();
+    if (/1[º°oª\s]|1º\s*cham|primeiro/i.test(s)) return "1º Chamamento";
+    if (/2[º°oª\s]|2º\s*cham|segundo/i.test(s)) return "2º Chamamento";
+    if (/3[º°oª\s]|3º\s*cham|terceiro/i.test(s)) return "3º Chamamento";
+    if (/4[º°oª\s]|4º\s*cham|quarto/i.test(s)) return "4º Chamamento";
+    if (/5[º°oª\s]|5º\s*cham|quinto/i.test(s)) return "5º Chamamento";
+    if (/6[º°oª\s]|6º\s*cham|sexto/i.test(s)) return "6º Chamamento";
+
+    var dStr = /^\d{1,2}\/\d{1,2}\/\d{4}/.test(s) ? s : String(dataRef || "").trim();
+    var m = dStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (m) {
+      var mes = parseInt(m[2], 10);
+      var ano = parseInt(m[3], 10);
+      if (ano <= 2024) return (ano === 2024 && mes <= 2) ? "1º Chamamento" : "2º Chamamento";
+      if (ano === 2025) return mes <= 5 ? "3º Chamamento" : "4º Chamamento";
+      if (ano >= 2026) return mes <= 5 ? "5º Chamamento" : "6º Chamamento";
+    }
+    return s || null;
+  }
 
   var cursistas = [];
   for (var i = 1; i < dados.length; i++) {
@@ -336,8 +360,12 @@ function sincronizarAbaDadosParaTiDB() {
     }
     var lfNum = lf.replace(/\D/g, "");
 
-    // Identificação única no dashboard: CGM + LF (ex: 12345678_LF1)
-    var cod = cgm ? (cgm + (lfNum ? ("_LF" + lfNum) : ("_" + turmas))) : ("CURS_" + i);
+    // Identificação única no dashboard: CGM + LF (ex: 12345678_1 ou 12345678_turma)
+    var cod = cgm ? (cgm + (lfNum ? ("_" + lfNum) : ("_" + turmas))) : ("CURS_" + i);
+
+    var rawCham = idxChamamento !== -1 ? String(row[idxChamamento] || "").trim() : "";
+    var rawPeriodo = idxPeriodoIni !== -1 ? String(row[idxPeriodoIni] || "").trim() : "";
+    var chFinal = normalizarChamamentoGs(rawCham, rawPeriodo);
 
     cursistas.push({
       cod_cursista: cod,
@@ -351,6 +379,9 @@ function sincronizarAbaDadosParaTiDB() {
       componente: idxComponente !== -1 ? String(row[idxComponente] || "").trim() : null,
       dia_da_semana: idxDiaSemana !== -1 ? String(row[idxDiaSemana] || "").trim() : null,
       turno: idxTurno !== -1 ? String(row[idxTurno] || "").trim() : null,
+      chamamento: chFinal,
+      ano_formativo: idxAnoFormativo !== -1 ? String(row[idxAnoFormativo] || "").trim() : null,
+      periodo_ini: rawPeriodo || null,
       nome_formador: idxFormador !== -1 ? String(row[idxFormador] || "").trim() : null,
       email_formador: idxEmailFormador !== -1 ? String(row[idxEmailFormador] || "").trim().toLowerCase() : null,
       tutor_responsavel: idxTutor !== -1 ? String(row[idxTutor] || "").trim() : null,
