@@ -308,10 +308,13 @@ export default function App() {
         if (!isMounted) return;
 
         if (pacote) {
-          // Se a API v2 autenticada retornou a função oficial do banco, aplica diretamente
-          if (pacote.funcao) {
-            console.log('[App] Função do usuário validada pelo servidor:', pacote.funcao);
-            setUserRole(pacote.funcao);
+          // Se a API v2 autenticada retornou a função oficial do banco, aplica diretamente (normalizando superadmin -> admin)
+          if (pacote.funcao && pacote.funcao !== 'visualizador') {
+            const normFunc = pacote.funcao === 'superadmin' ? 'admin' : pacote.funcao;
+            const localRole = user?.email ? resolveUserRole(user.email, pacote.baseCursistas || enrichedRecords) : null;
+            const finalRole = (localRole === 'admin' || localRole === 'tecnico') ? localRole : normFunc;
+            console.log('[App] Função do usuário validada pelo servidor:', pacote.funcao, '-> aplicada:', finalRole);
+            setUserRole(finalRole);
           }
 
           try {
@@ -705,14 +708,25 @@ export default function App() {
 
   // Handler para atualizar intenções de matrícula em tempo real
   const handleIntencaoSalva = (novaIntencao) => {
+    if (!novaIntencao) return;
+    if (novaIntencao._resetAll) {
+      setIntencoes2027List([]);
+      return;
+    }
     setIntencoes2027List(prev => {
+      const lf = String(novaIntencao.linha_funcional || '1').trim();
       const cgm = String(novaIntencao.cgm_cursista || novaIntencao.cgm || '').trim();
       const em = String(novaIntencao.email_cursista || novaIntencao.email || '').trim().toLowerCase();
+      const novaKeyLf = String(novaIntencao.cgm_lf || (cgm ? `${cgm}_${lf}` : `${em}_${lf}`)).trim();
+
       const filtered = (prev || []).filter(item => {
+        if (!item || item._resetAll) return false;
+        const itemLf = String(item.linha_funcional || '1').trim();
         const itemCgm = String(item.cgm_cursista || item.cgm || '').trim();
         const itemEm = String(item.email_cursista || item.email || '').trim().toLowerCase();
-        if (cgm && itemCgm && itemCgm === cgm) return false;
-        if (em && itemEm && itemEm === em) return false;
+        const itemKeyLf = String(item.cgm_lf || (itemCgm ? `${itemCgm}_${itemLf}` : `${itemEm}_${itemLf}`)).trim();
+        if (novaKeyLf && itemKeyLf && novaKeyLf === itemKeyLf) return false;
+        if (em && itemEm && em === itemEm && lf === itemLf) return false;
         return true;
       });
       return [novaIntencao, ...filtered];
@@ -929,12 +943,13 @@ export default function App() {
           />
         );
       case 'intencao_vagas_2027':
-        return (userRole === 'admin' || userRole === 'tecnico' || isSuperAdminTutor) ? (
+        return (userRole === 'admin' || userRole === 'superadmin' || userRole === 'tecnico' || effectiveRole === 'tutor' || isSuperAdminTutor) ? (
           <PainelIntencaoVagasAdmin 
             records={enrichedRecords} 
             userRole={effectiveRole} 
             userEmail={effectiveEmail} 
             intencoesList={intencoes2027List}
+            onIntencaoSalva={handleIntencaoSalva}
           />
         ) : (
           <Panorama data={filteredRecordsForView} concluintes={concluintesEfetivos} />
@@ -1358,7 +1373,7 @@ export default function App() {
                     </button>
                   )}
 
-                  {(userRole === 'admin' || isSuperAdminTutor) && (
+                  {(userRole === 'admin' || userRole === 'superadmin' || userRole === 'tecnico' || effectiveRole === 'tutor' || isSuperAdminTutor) && (
                     <button
                       type="button"
                       className={`console-nav-item ${activeTab === 'intencao_vagas_2027' ? 'active' : ''}`}

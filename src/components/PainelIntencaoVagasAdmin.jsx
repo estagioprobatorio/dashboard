@@ -5,7 +5,7 @@ import { driveDataService } from '../services/driveDataService';
 import { normalizeNre } from '../utils/nreUtils';
 import { normalizeComponenteCanonical } from '../utils/componenteUtils';
 
-export default function PainelIntencaoVagasAdmin({ records = [], userRole, userEmail, intencoesList = [] }) {
+export default function PainelIntencaoVagasAdmin({ records = [], userRole, userEmail, intencoesList = [], onIntencaoSalva }) {
   // Aba ativa do Painel Administrativo
   // 'dashboard' = Visão Geral & Gráficos de Adesão
   // 'confirmadas' = Inscrições Confirmadas (Tabela Detalhada)
@@ -102,13 +102,15 @@ export default function PainelIntencaoVagasAdmin({ records = [], userRole, userE
     return Array.from(mapa.values());
   }, [intencoesList]);
 
-  // Mapa rápido de consulta de intenções por CGM_LF, por CGM e por E-mail
+  // Mapa rápido de consulta de intenções por CGM_LF, por CGM, por E-mail+LF e por E-mail
   const mapaConsultaIntencoes = useMemo(() => {
     const porCgmLf = new Map();
     const porCgm = new Map();
+    const porEmailLf = new Map();
     const porEmail = new Map();
 
     todasIntencoes.forEach(int => {
+      if (!int || int._resetAll) return;
       const cgm = String(int.cgm_cursista || int.cgm || '').trim();
       const em = String(int.email_cursista || int.email || '').trim().toLowerCase();
       const lf = String(int.linha_funcional || int.lf || '1').trim();
@@ -116,15 +118,19 @@ export default function PainelIntencaoVagasAdmin({ records = [], userRole, userE
 
       if (chaveMatricula) porCgmLf.set(chaveMatricula, int);
       if (cgm) porCgm.set(cgm, int);
-      if (em) porEmail.set(em, int);
+      if (em) {
+        porEmailLf.set(`${em}_${lf}`, int);
+        if (!porEmail.has(em)) porEmail.set(em, int);
+      }
     });
 
-    return { porCgmLf, porCgm, porEmail };
+    return { porCgmLf, porCgm, porEmailLf, porEmail };
   }, [todasIntencoes]);
 
   // 2. Enriquecer registros com o cálculo de evolução individual e cruzamento de inscrição por CGM_LF
   const recordsComEvolucao = useMemo(() => {
     const mapaUnicos = new Map();
+    const intencoesPareadas = new Set();
 
     (records || []).forEach(r => {
       if (!r) return;
@@ -141,8 +147,14 @@ export default function PainelIntencaoVagasAdmin({ records = [], userRole, userE
         
         // Busca intenção específica da matrícula (CGM_LF)
         let intencao = mapaConsultaIntencoes.porCgmLf.get(chaveMatricula) ||
+                       (email && mapaConsultaIntencoes.porEmailLf.get(`${email}_${lf}`)) ||
                        (cgm && mapaConsultaIntencoes.porCgm.get(cgm)) ||
-                       (email && mapaConsultaIntencoes.porEmail.get(email)) || null;
+                       (email && lf === '1' && mapaConsultaIntencoes.porEmail.get(email)) || null;
+
+        if (intencao) {
+          const intKey = intencao.cgm_lf || `${intencao.cgm_cursista || intencao.cgm || ''}_${intencao.linha_funcional || 1}`;
+          intencoesPareadas.add(intKey);
+        }
 
         // Verifica se houve decisão de optar por apenas uma das matrículas
         let dispensadoPorEscolha = false;
@@ -164,8 +176,44 @@ export default function PainelIntencaoVagasAdmin({ records = [], userRole, userE
       }
     });
 
+    // Garante que qualquer intenção salva que não tenha cruzado com a base ativa (ex: conta de teste, CGM mascarado, etc.) também apareça!
+    todasIntencoes.forEach(int => {
+      if (!int || int._resetAll) return;
+      const intKey = int.cgm_lf || `${int.cgm_cursista || int.cgm || ''}_${int.linha_funcional || 1}`;
+      if (!intencoesPareadas.has(intKey)) {
+        const lf = String(int.linha_funcional || int.lf || '1').trim();
+        const cgm = String(int.cgm_cursista || int.cgm || '').trim();
+        const email = String(int.email_cursista || int.email || '').trim().toLowerCase();
+        const chaveMatricula = int.cgm_lf || (cgm ? `${cgm}_${lf}` : `${email}_${lf}`);
+        const fakeRecord = {
+          cgm: cgm || '—',
+          cgm_lf: chaveMatricula,
+          linha_funcional: lf,
+          nome: int.nome_cursista || 'Docente Cursista',
+          nome_cursista: int.nome_cursista || 'Docente Cursista',
+          email: email,
+          nre: int.nre || 'Curitiba',
+          nre_exe: int.nre || 'Curitiba',
+          componente: int.componente || 'Geral',
+          chamamento: int.chamamento || '3º Chamamento',
+          ano_formativo: int.ano_formativo_anterior || '1º ANO',
+          turmas: int.turma_anterior || 'Turma 2026',
+          dia_da_semana: int.dia_semana_formativo || ''
+        };
+        const evolucao = calcularEvolucaoCursista2027(fakeRecord);
+        evolucao.elegivelIntencao = true; // Se preencheu intenção, exibe nos confirmados
+        mapaUnicos.set(`int_extra_${chaveMatricula}`, {
+          ...fakeRecord,
+          evolucao,
+          intencao: int,
+          inscrito: true,
+          dispensadoPorEscolha: false
+        });
+      }
+    });
+
     return Array.from(mapaUnicos.values());
-  }, [records, mapaConsultaIntencoes]);
+  }, [records, mapaConsultaIntencoes, todasIntencoes]);
 
   // Lista única de NREs para filtro
   const nresDisponiveis = useMemo(() => {
@@ -204,7 +252,7 @@ export default function PainelIntencaoVagasAdmin({ records = [], userRole, userE
       if (num === 1) concluidos++;
       else if (num === 2 && !isElegivel) encerram2026++;
 
-      if (isElegivel) {
+      if (isElegivel || r.inscrito) {
         elegiveis++;
         if (num === 6) {
           demanda1Ano++;
@@ -257,7 +305,7 @@ export default function PainelIntencaoVagasAdmin({ records = [], userRole, userE
     const mapaNre = new Map();
 
     recordsComEvolucao.forEach(r => {
-      if (!r.evolucao.elegivelIntencao) return;
+      if (!r.evolucao.elegivelIntencao && !r.inscrito) return;
       const nre = normalizeNre(r.nre_exe || r.nre_cursista || r.nre_tutor || r.nre) || 'Não Informado';
       if (!mapaNre.has(nre)) {
         mapaNre.set(nre, { nre, elegiveis: 0, confirmados: 0, pendentes: 0, especiais: 0 });
@@ -285,7 +333,7 @@ export default function PainelIntencaoVagasAdmin({ records = [], userRole, userE
     const mapaComp = new Map();
 
     recordsComEvolucao.forEach(r => {
-      if (!r.evolucao.elegivelIntencao) return;
+      if (!r.evolucao.elegivelIntencao && !r.inscrito) return;
       const comp = normalizeComponenteCanonical(r.componente_conc || r.componente);
       if (!mapaComp.has(comp)) {
         mapaComp.set(comp, { componente: comp, elegiveis: 0, confirmados: 0, manha: 0, tarde: 0, noite: 0, especiais: 0 });
@@ -313,7 +361,7 @@ export default function PainelIntencaoVagasAdmin({ records = [], userRole, userE
 
   // 6. Lista Filtrada de Inscrições Confirmadas
   const inscricoesConfirmadasFiltradas = useMemo(() => {
-    let list = recordsComEvolucao.filter(r => r.evolucao.elegivelIntencao && r.inscrito);
+    let list = recordsComEvolucao.filter(r => r.inscrito);
 
     if (filtroNre !== 'todos') {
       list = list.filter(r => normalizeNre(r.nre_exe || r.nre_cursista || r.nre_tutor || r.nre) === filtroNre);
@@ -1778,6 +1826,7 @@ export default function PainelIntencaoVagasAdmin({ records = [], userRole, userE
                 records={records}
                 userEmail={cursistaSimulado.email || cursistaSimulado['e-mail']}
                 isSimulacao={true}
+                onIntencaoSalva={onIntencaoSalva}
               />
             </div>
 

@@ -44,7 +44,6 @@ const podeGerenciar = (user, funcaoAlvo) =>
 
 /** Resolve o usuário (cursista) alvo de um registro: o próprio cursista, ou por e-mail para a equipe. */
 async function alvoCursista(user, email, nome = null) {
-  if (user.funcao === 'cursista') return user.id;
   const em = lowerEmail(email);
   if (!em) return user.id;
   let r = await query('SELECT id FROM usuario WHERE email_inst = ?', [em]);
@@ -63,7 +62,12 @@ export default async function handler(req, res) {
   applyCors(req, res);
   if (req.method === 'OPTIONS') return res.status(204).end();
 
-  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  let body = {};
+  if (req.body && typeof req.body === 'object') {
+    body = req.body;
+  } else if (typeof req.body === 'string' && req.body.trim()) {
+    try { body = JSON.parse(req.body); } catch { body = {}; }
+  }
   let action = (req.query && req.query.action) || body.action || 'ping';
   if (action === 'undefined' || action === 'null' || !action) action = 'ping';
 
@@ -184,10 +188,10 @@ export default async function handler(req, res) {
     }
 
     if (action === 'insert_intencao') {
-      exigeFuncao(user, ...STAFF, 'cursista');
+      exigeFuncao(user, ...STAFF, 'tutor', 'cursista');
       const d = body.data || {};
       const alvo = await alvoCursista(user, d.email_cursista || d.email, d.nome_cursista);
-      const lf = d.linha_funcional ? String(d.linha_funcional).trim() : null;
+      const lf = d.linha_funcional ? String(d.linha_funcional).trim() : '1';
       let v = null;
       if (lf) {
         v = (await query('SELECT id FROM vinculo WHERE usuario_id = ? AND linha_funcional = ? LIMIT 1', [alvo, lf]))[0];
@@ -195,30 +199,79 @@ export default async function handler(req, res) {
       if (!v) {
         v = (await query('SELECT id FROM vinculo WHERE usuario_id = ? ORDER BY linha_funcional LIMIT 1', [alvo]))[0];
       }
-      
+
+      const cgmRaw = String(d.cgm_cursista || d.cgm || '').trim();
+      const cgmLf = String(d.cgm_lf || (cgmRaw ? `${cgmRaw}_${lf}` : `${lowerEmail(d.email_cursista || d.email || user.email)}_${lf}`)).trim();
+      const turnoVal = s(d.turnoPretendido || d.opcao_turno);
+      const horarioVal = s(d.horarioPretendido || d.opcao_modalidade);
+
       let obsPartes = [];
       if (d.necessitaAtendimentoEspecializado === 'Sim' || d.descricaoAtendimentoEspecializado) {
         obsPartes.push(`[Atendimento Especial: Sim] ${d.descricaoAtendimentoEspecializado || ''}`);
       }
-      if (d.decisaoDuasMatriculas) {
-        obsPartes.push(`[Decisão 2 Matrículas: ${d.decisaoDuasMatriculas}]`);
+      if (d.decisao_duas_matriculas || d.decisaoDuasMatriculas) {
+        obsPartes.push(`[Decisão 2 Matrículas: ${d.decisao_duas_matriculas || d.decisaoDuasMatriculas}]`);
       }
       if (d.observacao) {
         obsPartes.push(d.observacao);
       }
-      const obsTexto = obsPartes.join(' | ');
+
+      const metaObj = {
+        cgm_lf: cgmLf,
+        cgm_cursista: cgmRaw,
+        linha_funcional: lf,
+        nome_cursista: d.nome_cursista || '',
+        email_cursista: lowerEmail(d.email_cursista || d.email || user.email),
+        componente: d.componente || '',
+        nre: d.nre || '',
+        chamamento: d.chamamento || '',
+        num_chamamento: d.num_chamamento || null,
+        turnoPretendido: turnoVal || '',
+        horarioPretendido: horarioVal || '',
+        dia_semana_formativo: d.dia_semana_formativo || '',
+        ano_formativo_pretendido: d.ano_formativo_pretendido || '',
+        ano_formativo_anterior: d.ano_formativo_anterior || '',
+        turma_anterior: d.turma_anterior || '',
+        necessitaAtendimentoEspecializado: d.necessitaAtendimentoEspecializado || 'Não',
+        descricaoAtendimentoEspecializado: d.descricaoAtendimentoEspecializado || '',
+        decisao_duas_matriculas: d.decisao_duas_matriculas || d.decisaoDuasMatriculas || 'independente',
+        data_aceite_termo: d.data_aceite_termo || new Date().toISOString()
+      };
+
+      const obsTexto = `${obsPartes.join(' | ')}||META:${JSON.stringify(metaObj)}`;
+
+      // Remove intenção anterior da mesma linha funcional para evitar duplicatas
+      try {
+        if (v && v.id) {
+          await query('DELETE FROM intencao_matricula WHERE usuario_id = ? AND vinculo_id = ?', [alvo, v.id]);
+        }
+        await query('DELETE FROM intencao_matricula WHERE usuario_id = ? AND observacao LIKE ?', [alvo, `%"cgm_lf":"${cgmLf}"%`]);
+      } catch (eDel) {}
 
       await query(
         `INSERT INTO intencao_matricula (usuario_id, vinculo_id, componente, opcao_turno, opcao_modalidade, observacao) VALUES (?,?,?,?,?,?)`,
-        [alvo, v ? v.id : null, s(d.componente), s(d.turnoPretendido || d.opcao_turno), s(d.horarioPretendido || d.opcao_modalidade), s(obsTexto)]
+        [alvo, v ? v.id : null, s(d.componente), turnoVal, horarioVal, s(obsTexto)]
       );
 
-      // Redundância para a tabela intencao_matricula_2027 (se existir no esquema)
+      // Redundância para a tabela intencao_matricula_2027 (cria se não existir)
       try {
-        const cgmIdent = d.cgm_lf || (d.cgm_cursista ? `${d.cgm_cursista}_${lf || 1}` : d.cgm);
+        await query(`
+          CREATE TABLE IF NOT EXISTS intencao_matricula_2027 (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            cgm VARCHAR(80),
+            nome_cursista VARCHAR(255),
+            email VARCHAR(255),
+            componente VARCHAR(150),
+            opcao_turno VARCHAR(100),
+            opcao_modalidade VARCHAR(150),
+            observacao TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
+        await query('DELETE FROM intencao_matricula_2027 WHERE cgm = ?', [cgmLf]);
         await query(
           `INSERT INTO intencao_matricula_2027 (cgm, nome_cursista, email, componente, opcao_turno, opcao_modalidade, observacao) VALUES (?,?,?,?,?,?,?)`,
-          [s(cgmIdent), s(d.nome_cursista), s(d.email_cursista || d.email), s(d.componente), s(d.turnoPretendido || d.opcao_turno), s(d.horarioPretendido || d.opcao_modalidade), s(obsTexto)]
+          [s(cgmLf), s(d.nome_cursista), s(d.email_cursista || d.email || user.email), s(d.componente), turnoVal, horarioVal, s(obsTexto)]
         );
       } catch (eTab2) {}
 
@@ -232,7 +285,7 @@ export default async function handler(req, res) {
         }).catch(() => null);
       }
 
-      return res.status(200).json({ status: 'success' });
+      return res.status(200).json({ status: 'success', cgm_lf: cgmLf });
     }
 
     if (action === 'reset_intencoes_2027' || action === 'limpar_intencoes_2027') {

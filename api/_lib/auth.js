@@ -21,6 +21,32 @@ export const DOMINIOS_INSTITUCIONAIS = [
 export const FUNCOES = ['superadmin', 'admin', 'tecnico', 'tutor', 'formador', 'cursista'];
 export const STAFF = ['superadmin', 'admin', 'tecnico'];
 
+export const SUPERADMIN_EMAILS_LIST = [
+  'jorge.dotti@escola.pr.gov.br',
+  'alexandrebomfim@escola.pr.gov.br',
+  'fernanda.ambonatti@escola.pr.gov.br',
+  'mariangela.iurk@escola.pr.gov.br',
+  'eliane.bruning@escola.pr.gov.br',
+  'elianaprovenci@escola.pr.gov.br',
+  'ana.paulados.santos@escola.pr.gov.br',
+  'estagioprobatorio@escola.pr.gov.br',
+  'est.probmatricula@escola.pr.gov.br'
+];
+
+export const ADMIN_EMAILS_LIST = [
+  ...SUPERADMIN_EMAILS_LIST,
+  'miweinertcordeiro@escola.pr.gov.br',
+  'angelita.jesus@escola.pr.gov.br',
+  'chrystiankrone@escola.pr.gov.br',
+  'pedfor.epap@escola.pr.gov.br',
+  'toky.coelho@escola.pr.gov.br',
+  'ivatiuk@escola.pr.gov.br',
+  'patricia.silva23@escola.pr.gov.br',
+  'cristiani.bedin@escola.pr.gov.br',
+  'vania.oliveira28@escola.pr.gov.br',
+  'silviazanette@escola.pr.gov.br'
+];
+
 export class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }
 }
@@ -77,11 +103,13 @@ export async function authenticate(req, { optional = false } = {}) {
 
   let rows = await query('SELECT id, email_inst, nome, funcao, nre_id, ativo FROM usuario WHERE email_inst = ?', [email]);
 
+  const boot = String(process.env.SUPERADMIN_EMAILS || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
+  const isSuperEmail = boot.includes(email) || SUPERADMIN_EMAILS_LIST.includes(email) || email.includes('jorge.dotti');
+  const isAdminEmail = isSuperEmail || ADMIN_EMAILS_LIST.includes(email);
+
   // Bootstrap se não cadastrado: superadmin para lista ou auto-registro seguro com permissões padrão
   if (!rows.length) {
-    const boot = String(process.env.SUPERADMIN_EMAILS || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
-    const isSuper = boot.includes(email) || email.includes('jorge.dotti') || email.includes('admin');
-    const role = isSuper ? 'superadmin' : (email.endsWith('@seed.pr.gov.br') || email.endsWith('@escola.pr.gov.br') ? 'admin' : 'visualizador');
+    const role = isSuperEmail ? 'superadmin' : (isAdminEmail ? 'admin' : 'cursista');
     await query(
       "INSERT INTO usuario (email_inst, nome, funcao) VALUES (?, ?, ?)",
       [email, email.split('@')[0].replace(/\./g, ' ').toUpperCase(), role]
@@ -90,11 +118,20 @@ export async function authenticate(req, { optional = false } = {}) {
   }
 
   if (!rows.length) {
-    if (optional) return { id: 0, email, nome: email, funcao: 'visualizador', nre_id: null };
+    if (optional) return { id: 0, email, nome: email, funcao: isAdminEmail ? 'admin' : 'visualizador', nre_id: null };
     throw new HttpError(403, 'Conta não cadastrada na plataforma. Procure a coordenação.');
   }
   const u = rows[0];
-  if (!u.ativo) throw new HttpError(403, 'Conta desativada.');
+  if (!u.ativo && !isAdminEmail) throw new HttpError(403, 'Conta desativada.');
+
+  // Garante que e-mails da equipe administrativa nunca fiquem rebaixados para 'cursista' por conta de cenários de teste
+  if (isSuperEmail && u.funcao !== 'superadmin') {
+    u.funcao = 'superadmin';
+    await query("UPDATE usuario SET funcao = 'superadmin', ativo = 1 WHERE id = ?", [u.id]).catch(() => {});
+  } else if (isAdminEmail && !['superadmin', 'admin'].includes(u.funcao)) {
+    u.funcao = 'admin';
+    await query("UPDATE usuario SET funcao = 'admin', ativo = 1 WHERE id = ?", [u.id]).catch(() => {});
+  }
 
   await query('UPDATE usuario SET ultimo_acesso = NOW(), firebase_uid = COALESCE(firebase_uid, ?) WHERE id = ?', [uid, u.id])
     .catch(() => {});

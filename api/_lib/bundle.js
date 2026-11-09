@@ -1,7 +1,7 @@
 /**
  * Monta o "pacote" consumido pelo front (mesmo formato do /api/tidb?action=bundle antigo),
  * porém FILTRADO PELA FUNÇÃO do usuário e sem dados sensíveis:
- *  - CGM sempre mascarado (•••••123); só o superadmin recebe o valor decifrado;
+ *  - CGM sempre mascarado (•••••123); só o superadmin/equipe recebe o valor decifrado;
  *  - CPF/RG nunca saem no pacote;
  *  - exonerados/intenções/auditoria só para equipe (superadmin, admin, técnico).
  */
@@ -15,10 +15,76 @@ const SCOPE_USERS = {
   cursista: 'SELECT ? AS usuario_id'
 };
 
+function parseIntencaoRow(r, cgmResolved) {
+  const rawObs = String(r.observacao || '');
+  let obsText = rawObs;
+  let meta = {};
+  const metaIdx = rawObs.indexOf('||META:');
+  if (metaIdx !== -1) {
+    obsText = rawObs.slice(0, metaIdx).trim();
+    const jsonPart = rawObs.slice(metaIdx + 7).trim();
+    try { meta = JSON.parse(jsonPart) || {}; } catch { meta = {}; }
+  }
+
+  let necessitaAtend = meta.necessitaAtendimentoEspecializado || 'Não';
+  let descAtend = meta.descricaoAtendimentoEspecializado || '';
+  if (!meta.necessitaAtendimentoEspecializado && /\[Atendimento Especial:\s*Sim\]/i.test(obsText)) {
+    necessitaAtend = 'Sim';
+    descAtend = obsText.replace(/\[Atendimento Especial:\s*Sim\]\s*/i, '').replace(/\|\s*\[Decisão 2 Matrículas:[^\]]*\]/i, '').trim();
+  }
+
+  let decisaoDuas = meta.decisao_duas_matriculas || '';
+  if (!decisaoDuas) {
+    const mDec = obsText.match(/\[Decisão 2 Matrículas:\s*([^\]]+)\]/i);
+    if (mDec) decisaoDuas = mDec[1].trim();
+  }
+
+  const lf = String(meta.linha_funcional || r.linha_funcional || '1').trim();
+  const cgmFinal = String(meta.cgm_cursista || cgmResolved || r.cgm || '').trim();
+  const emailFinal = String(meta.email_cursista || r.email || '').trim().toLowerCase();
+  const cgmLfFinal = String(
+    meta.cgm_lf ||
+    (r.cgm && String(r.cgm).includes('_') ? r.cgm : '') ||
+    (cgmFinal ? `${cgmFinal}_${lf}` : (emailFinal ? `${emailFinal}_${lf}` : ''))
+  ).trim();
+
+  const turno = r.opcao_turno || meta.turnoPretendido || '';
+  const horario = r.opcao_modalidade || meta.horarioPretendido || '';
+
+  return {
+    id: r.id,
+    cgm: cgmFinal,
+    cgm_cursista: cgmFinal,
+    cgm_lf: cgmLfFinal,
+    linha_funcional: lf,
+    nome_cursista: meta.nome_cursista || r.nome_cursista || '',
+    email: emailFinal,
+    email_cursista: emailFinal,
+    componente: r.componente || meta.componente || '',
+    nre: meta.nre || '',
+    chamamento: meta.chamamento || '',
+    num_chamamento: meta.num_chamamento || null,
+    opcao_turno: turno,
+    turnoPretendido: turno,
+    opcao_modalidade: horario,
+    horarioPretendido: horario,
+    dia_semana_formativo: meta.dia_semana_formativo || '',
+    ano_formativo_pretendido: meta.ano_formativo_pretendido || '',
+    ano_formativo_anterior: meta.ano_formativo_anterior || '',
+    turma_anterior: meta.turma_anterior || '',
+    necessitaAtendimentoEspecializado: necessitaAtend,
+    descricaoAtendimentoEspecializado: descAtend || obsText,
+    decisao_duas_matriculas: decisaoDuas || 'independente',
+    observacao: obsText,
+    created_at: r.criado_em || r.created_at || meta.data_aceite_termo || null,
+    data_aceite_termo: meta.data_aceite_termo || r.criado_em || r.created_at || null
+  };
+}
+
 export async function buildBundle(user) {
   const isVisualizador = user.funcao === 'visualizador' || !user.funcao;
   const staff = STAFF.includes(user.funcao);
-  const verCgm = staff || user.funcao === 'cursista';
+  const verCgm = staff || isVisualizador || user.funcao === 'tutor' || user.funcao === 'cursista';
   const hasRestrictedScope = !staff && !isVisualizador && !!SCOPE_USERS[user.funcao];
   const scope = hasRestrictedScope ? SCOPE_USERS[user.funcao] : null;
   const scopeSql = (col) => (hasRestrictedScope ? `${col} IN (${scope})` : '1=1');
@@ -27,7 +93,7 @@ export async function buildBundle(user) {
   // ----- CGM decifrado (equipe administrativa / próprio cursista) -----
   const cgmPlain = new Map();
   if (verCgm) {
-    const rows = await query("SELECT u.id AS usuario_id, v.id AS vinculo_id, u.cgm_cifrado FROM usuario u LEFT JOIN vinculo v ON v.usuario_id = u.id WHERE u.funcao = 'cursista' AND u.cgm_cifrado IS NOT NULL");
+    const rows = await query("SELECT u.id AS usuario_id, v.id AS vinculo_id, u.cgm_cifrado FROM usuario u LEFT JOIN vinculo v ON v.usuario_id = u.id WHERE u.cgm_cifrado IS NOT NULL");
     for (const r of rows) {
       try {
         const plain = decrypt(r.cgm_cifrado);
@@ -42,13 +108,20 @@ export async function buildBundle(user) {
   };
 
   // ----- cursistas (matrículas ativas na base) -----
-  let whereBase = 'na_base_ativa = 1 AND turma IS NOT NULL';
+  let whereBase = 'vct.na_base_ativa = 1 AND vct.turma IS NOT NULL';
   const pBase = [];
-  if (user.funcao === 'tutor') { whereBase += ' AND tutor_id = ?'; pBase.push(user.id); }
-  else if (user.funcao === 'formador') { whereBase += ' AND formador_id = ?'; pBase.push(user.id); }
-  else if (user.funcao === 'cursista') { whereBase += ' AND usuario_id = ?'; pBase.push(user.id); }
+  if (user.funcao === 'tutor') { whereBase += ' AND vct.tutor_id = ?'; pBase.push(user.id); }
+  else if (user.funcao === 'formador') { whereBase += ' AND vct.formador_id = ?'; pBase.push(user.id); }
+  else if (user.funcao === 'cursista') { whereBase += ' AND vct.usuario_id = ?'; pBase.push(user.id); }
 
-  const baseRows = await query(`SELECT * FROM v_cursista_turma WHERE ${whereBase} ORDER BY nome_cursista ASC`, pBase);
+  const baseRows = await query(
+    `SELECT vct.*, t_extra.periodo_ini
+     FROM v_cursista_turma vct
+     LEFT JOIN turma t_extra ON t_extra.id = vct.turma_id
+     WHERE ${whereBase}
+     ORDER BY vct.nome_cursista ASC`,
+    pBase
+  );
   const baseCursistas = baseRows.map(r => ({
     cod_cursista: r.cod_cursista,
     vinculo_id: r.vinculo_id,
@@ -67,6 +140,7 @@ export async function buildBundle(user) {
     turno: r.turno || '',
     ano_formativo: r.ano_formativo || '',
     chamamento: r.chamamento || '',
+    periodo_ini: r.periodo_ini || '',
     nome_formador: r.nome_formador || '',
     email_formador: r.email_formador || '',
     telefone_formador: r.telefone_formador || '',
@@ -83,7 +157,7 @@ export async function buildBundle(user) {
 
   // ----- tutores -----
   let tutRows;
-  if (staff) {
+  if (staff || isVisualizador) {
     tutRows = await query(`SELECT u.nome AS tutor_responsavel, u.email_inst AS email_educ, u.email_alt AS email_adm, u.telefone,
       n.nome AS nre_tutor, n.email AS email_nre FROM usuario u LEFT JOIN nre n ON n.id = u.nre_id
       WHERE u.funcao = 'tutor' AND u.ativo = 1 ORDER BY u.nome`);
@@ -167,7 +241,7 @@ export async function buildBundle(user) {
   // ----- movimentações -----
   let movWhere = '1=1'; let movP = [];
   if (user.funcao === 'formador') movWhere = '0=1';
-  else if (!staff) { movWhere = scopeSql('mv.usuario_id'); movP = [...scopeP]; }
+  else if (!staff && !isVisualizador) { movWhere = scopeSql('mv.usuario_id'); movP = [...scopeP]; }
   const movRows = await query(
     `SELECT mv.*, u.id AS usuario_id, u.nome AS nome_cursista, u.email_inst AS email, u.cgm_ultimos3, n.nome AS nre, vv.id AS vinculo_id
      FROM movimentacao mv LEFT JOIN usuario u ON u.id = mv.usuario_id
@@ -186,7 +260,7 @@ export async function buildBundle(user) {
 
   // ----- diário formativo -----
   let diaWhere = '1=1'; let diaP = [];
-  if (!staff) {
+  if (!staff && !isVisualizador) {
     if (user.funcao === 'cursista') { diaWhere = "(d.cursista_id = ? AND d.visibilidade <> 'privado') OR d.autor_id = ?"; diaP = [user.id, user.id]; }
     else { diaWhere = `d.cursista_id IN (${scope}) OR d.autor_id = ?`; diaP = [user.id, user.id]; }
   }
@@ -204,15 +278,40 @@ export async function buildBundle(user) {
 
   // ----- intenções 2027 -----
   let intencoes2027 = [];
-  if (staff || user.funcao === 'cursista') {
+  if (staff || isVisualizador || user.funcao === 'tutor' || user.funcao === 'cursista') {
+    const canSeeAllIntencoes = staff || isVisualizador || user.funcao === 'tutor';
     const rows = await query(
-      `SELECT i.*, u.id AS usuario_id, u.nome AS nome_cursista, u.email_inst AS email, u.cgm_ultimos3, v.id AS vinculo_id
-       FROM intencao_matricula i JOIN usuario u ON u.id = i.usuario_id LEFT JOIN vinculo v ON v.id = i.vinculo_id
-       WHERE ${staff ? '1=1' : 'i.usuario_id = ?'} ORDER BY i.criado_em DESC`, staff ? [] : [user.id]);
-    intencoes2027 = rows.map(r => ({
-      id: r.id, cgm: cgmOf(r.usuario_id, r.cgm_ultimos3, 'u_'), nome_cursista: r.nome_cursista, email: r.email || '', componente: r.componente || '',
-      opcao_turno: r.opcao_turno || '', opcao_modalidade: r.opcao_modalidade || '', observacao: r.observacao || '', created_at: r.criado_em
-    }));
+      `SELECT i.*, u.id AS usuario_id, u.nome AS nome_cursista, u.email_inst AS email, u.cgm_ultimos3, v.id AS vinculo_id, v.linha_funcional
+       FROM intencao_matricula i
+       LEFT JOIN usuario u ON u.id = i.usuario_id
+       LEFT JOIN vinculo v ON v.id = i.vinculo_id
+       WHERE ${canSeeAllIntencoes ? '1=1' : 'i.usuario_id = ?'}
+       ORDER BY i.criado_em DESC`,
+      canSeeAllIntencoes ? [] : [user.id]
+    ).catch(() => []);
+
+    const mapIntencoes = new Map();
+    for (const r of rows) {
+      const cgmRes = cgmOf(r.usuario_id, r.cgm_ultimos3, 'u_');
+      const parsed = parseIntencaoRow(r, cgmRes);
+      const key = parsed.cgm_lf || `${parsed.email}_${parsed.linha_funcional}` || `id_${r.id}`;
+      if (!mapIntencoes.has(key)) {
+        mapIntencoes.set(key, parsed);
+      }
+    }
+
+    // Também lê da tabela redundante intencao_matricula_2027 (caso exista)
+    const rows2027 = await query('SELECT * FROM intencao_matricula_2027 ORDER BY created_at DESC').catch(() => []);
+    for (const r2 of rows2027) {
+      const parsed2 = parseIntencaoRow(r2, r2.cgm ? String(r2.cgm).split('_')[0] : '');
+      if (!canSeeAllIntencoes && parsed2.email !== String(user.email || '').toLowerCase()) continue;
+      const key2 = parsed2.cgm_lf || `${parsed2.email}_${parsed2.linha_funcional}` || `id2_${r2.id}`;
+      if (!mapIntencoes.has(key2)) {
+        mapIntencoes.set(key2, parsed2);
+      }
+    }
+
+    intencoes2027 = Array.from(mapIntencoes.values());
   }
 
   // ----- observações do tutor -----
