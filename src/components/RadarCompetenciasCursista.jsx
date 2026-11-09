@@ -10,27 +10,27 @@ import {
 } from 'recharts';
 import { parseScore } from '../utils/aiPedagogicalService';
 
-export default function RadarCompetenciasCursista({ observacoes = [], title = "Radar de Competências Docentes" }) {
+export default function RadarCompetenciasCursista({ observacoes = [], title = "Radar de Competências Docentes (Rubrica 2026)" }) {
   const radarData = useMemo(() => {
     if (!Array.isArray(observacoes) || observacoes.length === 0) {
       return [
-        { dimensao: 'Planejamento', nota: 2.0, fullMark: 3 },
-        { dimensao: 'Gestão de Sala', nota: 2.0, fullMark: 3 },
-        { dimensao: 'Metodologias', nota: 2.0, fullMark: 3 },
-        { dimensao: 'RCO+Aulas', nota: 2.0, fullMark: 3 },
-        { dimensao: 'Clima Escolar', nota: 2.0, fullMark: 3 },
-        { dimensao: 'Avaliação', nota: 2.0, fullMark: 3 },
-        { dimensao: 'Gestão do Tempo', nota: 2.0, fullMark: 3 }
+        { dimensao: 'Planejamento', nota: 3.0, fullMark: 4 },
+        { dimensao: 'Articulação Curricular', nota: 3.0, fullMark: 4 },
+        { dimensao: 'Mediação & Protagonismo', nota: 3.0, fullMark: 4 },
+        { dimensao: 'Gestão de Sala', nota: 3.0, fullMark: 4 },
+        { dimensao: 'RCO+Aulas & Plataformas', nota: 3.0, fullMark: 4 },
+        { dimensao: 'Clima & Interação', nota: 3.0, fullMark: 4 },
+        { dimensao: 'Gestão do Tempo', nota: 3.0, fullMark: 4 }
       ];
     }
 
-    // Acumuladores
+    // Acumuladores alinhados à Rubrica Analítica 2026 (Escala 1.0 a 4.0)
     const dimensoes = {
       'Planejamento': { sum: 0, count: 0 },
-      'Prática em Sala': { sum: 0, count: 0 },
+      'Articulação Curricular': { sum: 0, count: 0 },
+      'Mediação & Protagonismo': { sum: 0, count: 0 },
       'Gestão de Sala': { sum: 0, count: 0 },
-      'Metodologias': { sum: 0, count: 0 },
-      'RCO+Aulas': { sum: 0, count: 0 },
+      'RCO+Aulas & Plataformas': { sum: 0, count: 0 },
       'Clima & Interação': { sum: 0, count: 0 },
       'Gestão do Tempo': { sum: 0, count: 0 }
     };
@@ -42,16 +42,16 @@ export default function RadarCompetenciasCursista({ observacoes = [], title = "R
       if (plan !== null) {
         dimensoes['Planejamento'].sum += plan;
         dimensoes['Planejamento'].count += 1;
-        dimensoes['RCO+Aulas'].sum += plan;
-        dimensoes['RCO+Aulas'].count += 1;
+        dimensoes['Articulação Curricular'].sum += plan;
+        dimensoes['Articulação Curricular'].count += 1;
+        dimensoes['RCO+Aulas & Plataformas'].sum += plan;
+        dimensoes['RCO+Aulas & Plataformas'].count += 1;
       }
       if (prat !== null) {
-        dimensoes['Prática em Sala'].sum += prat;
-        dimensoes['Prática em Sala'].count += 1;
+        dimensoes['Mediação & Protagonismo'].sum += prat;
+        dimensoes['Mediação & Protagonismo'].count += 1;
         dimensoes['Gestão de Sala'].sum += prat;
         dimensoes['Gestão de Sala'].count += 1;
-        dimensoes['Metodologias'].sum += prat;
-        dimensoes['Metodologias'].count += 1;
         dimensoes['Clima & Interação'].sum += prat;
         dimensoes['Clima & Interação'].count += 1;
         dimensoes['Gestão do Tempo'].sum += prat;
@@ -76,8 +76,8 @@ export default function RadarCompetenciasCursista({ observacoes = [], title = "R
               dimensoes['Clima & Interação'].sum += r.score;
               dimensoes['Clima & Interação'].count += 1;
             } else {
-              dimensoes['Metodologias'].sum += r.score;
-              dimensoes['Metodologias'].count += 1;
+              dimensoes['Mediação & Protagonismo'].sum += r.score;
+              dimensoes['Mediação & Protagonismo'].count += 1;
             }
           }
         });
@@ -85,11 +85,11 @@ export default function RadarCompetenciasCursista({ observacoes = [], title = "R
     });
 
     return Object.entries(dimensoes).map(([dimensao, val]) => {
-      const media = val.count > 0 ? Number((val.sum / val.count).toFixed(2)) : 2.0;
+      const media = val.count > 0 ? Number((val.sum / val.count).toFixed(2)) : 3.0;
       return {
         dimensao,
         nota: media,
-        fullMark: 3
+        fullMark: 4
       };
     });
   }, [observacoes]);
@@ -108,7 +108,7 @@ export default function RadarCompetenciasCursista({ observacoes = [], title = "R
             🎯 {title}
           </h4>
           <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-            Média de proficiência por competência docente observada (escala 0 a 3.0)
+            Média de proficiência por dimensão da Rubrica Analítica 2026 (escala 1.0 a 4.0)
           </span>
         </div>
         <span style={{ fontSize: '0.72rem', backgroundColor: '#eff6ff', color: '#1e40af', padding: '0.2rem 0.5rem', borderRadius: '4px', fontWeight: 700 }}>
@@ -121,7 +121,7 @@ export default function RadarCompetenciasCursista({ observacoes = [], title = "R
           <RadarChart data={radarData} outerRadius="75%">
             <PolarGrid stroke="#e2e8f0" />
             <PolarAngleAxis dataKey="dimensao" tick={{ fill: '#334155', fontSize: 11, fontWeight: 700 }} />
-            <PolarRadiusAxis angle={30} domain={[0, 3]} stroke="#94a3b8" />
+            <PolarRadiusAxis angle={30} domain={[0, 4]} tickCount={5} stroke="#94a3b8" />
             <Radar
               name="Proficiência Docente"
               dataKey="nota"
@@ -129,7 +129,7 @@ export default function RadarCompetenciasCursista({ observacoes = [], title = "R
               fill="#007a33"
               fillOpacity={0.35}
             />
-            <Tooltip formatter={(value) => [`${value} / 3.0`, 'Nota Formativa']} />
+            <Tooltip formatter={(value) => [`${value} / 4.0`, 'Média (Rubrica 2026)']} />
           </RadarChart>
         </ResponsiveContainer>
       </div>
@@ -137,9 +137,9 @@ export default function RadarCompetenciasCursista({ observacoes = [], title = "R
       <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', fontSize: '0.75rem', color: '#64748b', marginTop: '0.5rem', flexWrap: 'wrap' }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
           <span style={{ width: '10px', height: '10px', backgroundColor: '#007a33', borderRadius: '2px', display: 'inline-block' }} />
-          Média Formativa do Professor
+          Média Formativa Equiparada (2024–2026)
         </span>
-        <span>• Meta institucional: ≥ 2.0 (Atendeu integralmente)</span>
+        <span>• Meta institucional: ≥ 3.0 (Atende Integralmente) | 4.0 (Supera)</span>
       </div>
     </div>
   );

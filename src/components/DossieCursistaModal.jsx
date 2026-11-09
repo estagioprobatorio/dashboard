@@ -3,6 +3,7 @@ import { formatDatePtBr, parseDateToTimestamp } from '../utils/dateUtils';
 import FormularioInserirObservacao from './FormularioInserirObservacao';
 import CurvaEvolucaoPedagogica from './CurvaEvolucaoPedagogica';
 import HistoricoTurmasCursista from './HistoricoTurmasCursista';
+import ExplicacaoAdequacaoAdmin from './ExplicacaoAdequacaoAdmin';
 import { getObservacoes2024PorCursista } from '../utils/observacoes2024Service';
 import { parseScore, scoreLabel, gerarDiagnosticoCursistaIA, getNivelInfo, normalizeString } from '../utils/aiPedagogicalService';
 import { getFormadorEmail } from '../utils/formadoresUtils';
@@ -11,6 +12,8 @@ export default function DossieCursistaModal({
   cursista, 
   turmaInfo, 
   observacoes = [], 
+  userRole,
+  userEmail,
   onClose, 
   onSaveObservacao,
   readOnly = false 
@@ -285,6 +288,9 @@ export default function DossieCursistaModal({
           {/* HISTÓRICO DE TURMAS (somente Admin e Técnico) */}
           <HistoricoTurmasCursista cursista={cursista} turmaAtual={turmaInfo?.turma} />
 
+          {/* GUIA DIDÁTICO PARA ADMIN & SUPERADMIN SOBRE A EQUIPARAÇÃO 2024/2025 -> 2026 */}
+          <ExplicacaoAdequacaoAdmin userRole={userRole} userEmail={userEmail} compact={true} />
+
           {/* CARDS DE KPIS */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '1rem' }}>
             
@@ -296,11 +302,17 @@ export default function DossieCursistaModal({
               <div style={{ fontSize: '1.65rem', fontWeight: 800, color: '#0f172a', margin: '0.2rem 0' }}>
                 {observacoesDoCursista.length} <span style={{ fontSize: '0.85rem', color: '#00984a', fontWeight: 600 }}>({totalRealizadas} realizadas)</span>
               </div>
-              <div style={{ fontSize: '0.75rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <div style={{ fontSize: '0.74rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
                 {loading2024 ? (
-                  <span style={{ color: '#0284c7' }}>⏳ Buscando base de 2024...</span>
+                  <span style={{ color: '#0284c7' }}>⏳ Buscando base histórica...</span>
                 ) : obs2024.length > 0 ? (
-                  <span>Histórico Consolidado: <b>{obs2024.length} em 2024</b> • <b>{observacoesAtuais2026.length} em 2026</b></span>
+                  <span>
+                    Histórico: <b>{obs2024.filter(o => String(o.ciclo_historico || o.ano_letivo || '').includes('2024')).length} em 2024</b>
+                    {obs2024.some(o => String(o.ciclo_historico || o.ano_letivo || '').includes('2025')) && (
+                      <> • <b>{obs2024.filter(o => String(o.ciclo_historico || o.ano_letivo || '').includes('2025')).length} em 2025</b></>
+                    )}
+                    {' • '}<b>{observacoesAtuais2026.length} em 2026</b>
+                  </span>
                 ) : (
                   <span>Ciclo Formativo 2026</span>
                 )}
@@ -627,7 +639,9 @@ export default function DossieCursistaModal({
                 {observacoesDoCursista.map((obs, idx) => {
                   const isExpanded = expandedObsId === obs.id || (idx === 0 && expandedObsId === null);
                   const isReal = obs.is_realizada ?? obs.observacao_realizada?.toLowerCase().includes('sim');
-                  const is2024 = String(obs.ano_letivo || obs.ano_formativo || '').includes('2024') || String(obs.id_origem || '').includes('2024');
+                  const anoStr = String(obs.ciclo_historico || obs.ano_letivo || obs.ano_formativo || obs.id_origem || '');
+                  const is2024 = anoStr.includes('2024');
+                  const is2025 = !is2024 && anoStr.includes('2025');
 
                   return (
                     <div 
@@ -660,11 +674,11 @@ export default function DossieCursistaModal({
                             borderRadius: '4px',
                             fontSize: '0.72rem',
                             fontWeight: 800,
-                            backgroundColor: is2024 ? '#fef3c7' : '#e0e7ff',
-                            color: is2024 ? '#92400e' : '#3730a3',
-                            border: is2024 ? '1px solid #fde68a' : '1px solid #c7d2fe'
+                            backgroundColor: is2024 ? '#fef3c7' : (is2025 ? '#ede9fe' : '#e0e7ff'),
+                            color: is2024 ? '#92400e' : (is2025 ? '#5b21b6' : '#3730a3'),
+                            border: is2024 ? '1px solid #fde68a' : (is2025 ? '1px solid #ddd6fe' : '1px solid #c7d2fe')
                           }}>
-                            {is2024 ? '🗓️ Histórico 2024' : '🗓️ Ciclo 2026'}
+                            {is2024 ? '🗓️ Histórico 2024 (1º Ano)' : (is2025 ? '🗓️ Histórico 2025 (2º Ano PDP)' : '🗓️ Ciclo 2026')}
                           </span>
 
                           <span style={{
@@ -698,13 +712,13 @@ export default function DossieCursistaModal({
                             <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
                               <span 
                                 title={obs.nivel_pratica || ''}
-                                style={{ fontSize: '0.75rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '4px', backgroundColor: '#e0f2fe', color: '#0369a1', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                                style={{ fontSize: '0.75rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '4px', backgroundColor: '#e0f2fe', color: '#0369a1', maxWidth: '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                               >
                                 Prática: {obs.nivel_pratica ? getNivelInfo(obs.nivel_pratica).shortLabel : '-'}
                               </span>
                               <span 
                                 title={obs.nivel_planejamento || ''}
-                                style={{ fontSize: '0.75rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '4px', backgroundColor: '#ede9fe', color: '#6d28d9', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                                style={{ fontSize: '0.75rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '4px', backgroundColor: '#ede9fe', color: '#6d28d9', maxWidth: '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                               >
                                 Plan: {obs.nivel_planejamento ? getNivelInfo(obs.nivel_planejamento).shortLabel : '-'}
                               </span>
@@ -720,6 +734,33 @@ export default function DossieCursistaModal({
                       {/* Conteúdo Expansível do Detalhe */}
                       {isExpanded && (
                         <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem', backgroundColor: '#ffffff' }}>
+                          {(obs.nivel_pratica_original || obs.justificativa_rubrica_2026) && (
+                            <div style={{
+                              backgroundColor: is2025 ? '#f5f3ff' : '#fffbeb',
+                              border: is2025 ? '1px solid #ddd6fe' : '1px solid #fde68a',
+                              borderLeft: is2025 ? '4px solid #7c3aed' : '4px solid #d97706',
+                              padding: '0.75rem 0.95rem',
+                              borderRadius: '8px',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '0.3rem'
+                            }}>
+                              <div style={{ fontSize: '0.76rem', fontWeight: 800, color: is2025 ? '#5b21b6' : '#92400e', textTransform: 'uppercase' }}>
+                                ⚖️ Equiparação Pedagógica (Rubrica Analítica 2026)
+                              </div>
+                              {obs.nivel_pratica_original && (
+                                <div style={{ fontSize: '0.81rem', color: '#334155' }}>
+                                  <b>Registro Original ({is2024 ? '2024 - 1º Ano' : '2025 - 2º Ano PDP'}):</b> {obs.nivel_pratica_original}
+                                </div>
+                              )}
+                              {obs.justificativa_rubrica_2026 && (
+                                <div style={{ fontSize: '0.8rem', color: '#475569', fontStyle: 'italic' }}>
+                                  "{obs.justificativa_rubrica_2026}"
+                                </div>
+                              )}
+                            </div>
+                          )}
+
                           {obs.proposta_pedagogica && (
                             <div style={{ backgroundColor: '#eff6ff', padding: '0.65rem 0.85rem', borderRadius: '6px', borderLeft: '4px solid #3b82f6' }}>
                               <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1d4ed8', textTransform: 'uppercase' }}>Proposta Pedagógica Selecionada:</span>

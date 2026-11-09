@@ -16,7 +16,7 @@ export default function CurvaEvolucaoPedagogica({
   subtitle = "Acompanhamento cronológico dos níveis de Prática Docente e Planejamento",
   showFilters = true
 }) {
-  const [filtroPeriodo, setFiltroPeriodo] = useState('todas'); // 'todas' | '2026' | '2024' | 'recentes'
+  const [filtroPeriodo, setFiltroPeriodo] = useState('todas'); // 'todas' | '2026' | '2025' | '2024' | 'recentes'
   const [activeTooltip, setActiveTooltip] = useState(null);
   const containerRef = useRef(null);
 
@@ -28,13 +28,21 @@ export default function CurvaEvolucaoPedagogica({
       const scorePratica = parseScore(obs.nivel_pratica || obs.criterio2_nivel);
       const scorePlan = parseScore(obs.nivel_planejamento || obs.criterio1_nivel);
       const rawDate = obs.data_feedback || obs.data_pratica || obs.data_observacao || obs.carimbo || obs.created_at;
-      const timestamp = parseDateToTimestamp(rawDate);
-      const dataFormatada = formatDatePtBr(rawDate);
       
-      // Identificar o ano / ciclo
-      const anoStr = String(obs.ano_formativo || obs.ano_letivo || obs.semestre || obs.carimbo || '');
-      const is2024 = anoStr.includes('2024') || String(obs.id_origem || '').includes('2024');
-      const anoCiclo = is2024 ? '2024' : '2026';
+      // Identificar o ano / ciclo (2024, 2025 ou 2026)
+      const anoStr = String(obs.ciclo_historico || obs.ano_letivo || obs.ano_formativo || obs.semestre || obs.carimbo || '');
+      const idStr = String(obs.id_origem || obs.id || '');
+      const is2024 = anoStr.includes('2024') || idStr.startsWith('2024');
+      const is2025 = !is2024 && (anoStr.includes('2025') || idStr.startsWith('2025'));
+      const anoCiclo = is2024 ? '2024' : (is2025 ? '2025' : '2026');
+
+      let timestamp = parseDateToTimestamp(rawDate);
+      if (!timestamp || timestamp <= 0) {
+        timestamp = is2024
+          ? new Date('2024-06-15').getTime()
+          : (is2025 ? new Date('2025-09-15').getTime() : new Date('2026-04-15').getTime());
+      }
+      const dataFormatada = formatDatePtBr(rawDate);
 
       return {
         id: obs.id || `obs-${idx}`,
@@ -44,10 +52,12 @@ export default function CurvaEvolucaoPedagogica({
         anoCiclo,
         scorePratica,
         scorePlan,
-        semestre: obs.semestre || (is2024 ? 'Histórico 2024' : 'Ciclo 2026'),
+        semestre: obs.semestre || (is2024 ? 'Histórico 2024 (1º Ano)' : (is2025 ? 'Histórico 2025 (2º Ano PDP)' : 'Ciclo 2026')),
         tema: obs.tema || obs.foco_pedagogico || 'Geral',
         modalidade: obs.modalidade_feedback || obs.modalidade || 'Presencial',
         proposta: obs.proposta_pedagogica || '',
+        nivelOriginalPratica: obs.nivel_pratica_original || '',
+        justificativaRubrica2026: obs.justificativa_rubrica_2026 || '',
         raw: obs
       };
     });
@@ -60,14 +70,18 @@ export default function CurvaEvolucaoPedagogica({
   const contadores = useMemo(() => {
     const total = todasObservacoesOrdenadas.length;
     const count2026 = todasObservacoesOrdenadas.filter(o => o.anoCiclo === '2026').length;
+    const count2025 = todasObservacoesOrdenadas.filter(o => o.anoCiclo === '2025').length;
     const count2024 = todasObservacoesOrdenadas.filter(o => o.anoCiclo === '2024').length;
-    return { total, count2026, count2024 };
+    return { total, count2026, count2025, count2024 };
   }, [todasObservacoesOrdenadas]);
 
   // 2. Aplicar filtro selecionado
   const dadosExibidos = useMemo(() => {
     if (filtroPeriodo === '2026') {
       return todasObservacoesOrdenadas.filter(o => o.anoCiclo === '2026');
+    }
+    if (filtroPeriodo === '2025') {
+      return todasObservacoesOrdenadas.filter(o => o.anoCiclo === '2025');
     }
     if (filtroPeriodo === '2024') {
       return todasObservacoesOrdenadas.filter(o => o.anoCiclo === '2024');
@@ -193,8 +207,8 @@ export default function CurvaEvolucaoPedagogica({
         </div>
       </div>
 
-      {/* BARRA DE FILTROS RÁPIDOS POR PERÍODO (quando houver mais de 5 observações) */}
-      {showFilters && todasObservacoesOrdenadas.length > 5 && (
+      {/* BARRA DE FILTROS RÁPIDOS POR PERÍODO */}
+      {showFilters && (todasObservacoesOrdenadas.length > 3 || contadores.count2024 > 0 || contadores.count2025 > 0) && (
         <div style={{
           display: 'flex',
           alignItems: 'center',
@@ -247,44 +261,64 @@ export default function CurvaEvolucaoPedagogica({
             </button>
           )}
 
-          {contadores.count2026 > 0 && contadores.count2024 > 0 && (
-            <>
-              <button
-                type="button"
-                onClick={() => setFiltroPeriodo('2026')}
-                style={{
-                  padding: '0.25rem 0.65rem',
-                  borderRadius: '6px',
-                  fontSize: '0.75rem',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  border: filtroPeriodo === '2026' ? '1px solid #0072bc' : '1px solid #cbd5e1',
-                  backgroundColor: filtroPeriodo === '2026' ? '#0072bc' : '#ffffff',
-                  color: filtroPeriodo === '2026' ? '#ffffff' : '#334155',
-                  transition: 'all 0.15s'
-                }}
-              >
-                Apenas 2026 ({contadores.count2026})
-              </button>
+          {contadores.count2026 > 0 && (
+            <button
+              type="button"
+              onClick={() => setFiltroPeriodo('2026')}
+              style={{
+                padding: '0.25rem 0.65rem',
+                borderRadius: '6px',
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                border: filtroPeriodo === '2026' ? '1px solid #0072bc' : '1px solid #cbd5e1',
+                backgroundColor: filtroPeriodo === '2026' ? '#0072bc' : '#ffffff',
+                color: filtroPeriodo === '2026' ? '#ffffff' : '#334155',
+                transition: 'all 0.15s'
+              }}
+            >
+              Ciclo 2026 ({contadores.count2026})
+            </button>
+          )}
 
-              <button
-                type="button"
-                onClick={() => setFiltroPeriodo('2024')}
-                style={{
-                  padding: '0.25rem 0.65rem',
-                  borderRadius: '6px',
-                  fontSize: '0.75rem',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  border: filtroPeriodo === '2024' ? '1px solid #d97706' : '1px solid #cbd5e1',
-                  backgroundColor: filtroPeriodo === '2024' ? '#d97706' : '#ffffff',
-                  color: filtroPeriodo === '2024' ? '#ffffff' : '#334155',
-                  transition: 'all 0.15s'
-                }}
-              >
-                Histórico 2024 ({contadores.count2024})
-              </button>
-            </>
+          {contadores.count2025 > 0 && (
+            <button
+              type="button"
+              onClick={() => setFiltroPeriodo('2025')}
+              style={{
+                padding: '0.25rem 0.65rem',
+                borderRadius: '6px',
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                border: filtroPeriodo === '2025' ? '1px solid #7c3aed' : '1px solid #cbd5e1',
+                backgroundColor: filtroPeriodo === '2025' ? '#7c3aed' : '#ffffff',
+                color: filtroPeriodo === '2025' ? '#ffffff' : '#334155',
+                transition: 'all 0.15s'
+              }}
+            >
+              Histórico 2025 ({contadores.count2025})
+            </button>
+          )}
+
+          {contadores.count2024 > 0 && (
+            <button
+              type="button"
+              onClick={() => setFiltroPeriodo('2024')}
+              style={{
+                padding: '0.25rem 0.65rem',
+                borderRadius: '6px',
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                border: filtroPeriodo === '2024' ? '1px solid #d97706' : '1px solid #cbd5e1',
+                backgroundColor: filtroPeriodo === '2024' ? '#d97706' : '#ffffff',
+                color: filtroPeriodo === '2024' ? '#ffffff' : '#334155',
+                transition: 'all 0.15s'
+              }}
+            >
+              Histórico 2024 ({contadores.count2024})
+            </button>
           )}
 
           {count > 8 && (
@@ -481,9 +515,9 @@ export default function CurvaEvolucaoPedagogica({
                   textAnchor="middle"
                   fontSize="8"
                   fontWeight="700"
-                  fill={p.anoCiclo === '2024' ? '#d97706' : '#0284c7'}
+                  fill={p.anoCiclo === '2024' ? '#d97706' : (p.anoCiclo === '2025' ? '#7c3aed' : '#0284c7')}
                 >
-                  {p.anoCiclo === '2024' ? '2024' : '2026'}
+                  {p.anoCiclo}
                 </text>
 
                 {/* 3. Data Inclinada a -35° para legibilidade máxima sem sobreposição */}
@@ -523,7 +557,7 @@ export default function CurvaEvolucaoPedagogica({
             style={{
               position: 'absolute',
               top: '12px',
-              left: Math.min(Math.max(10, activeTooltip.baseX - 110), svgWidth - 250),
+              left: Math.min(Math.max(10, activeTooltip.baseX - 130), svgWidth - 285),
               background: '#001d3d',
               color: '#ffffff',
               padding: '0.65rem 0.85rem',
@@ -532,14 +566,14 @@ export default function CurvaEvolucaoPedagogica({
               boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.4)',
               zIndex: 10,
               pointerEvents: 'none',
-              maxWidth: '240px',
+              maxWidth: '275px',
               border: '1px solid rgba(255, 255, 255, 0.15)',
               lineHeight: 1.35
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem', borderBottom: '1px solid rgba(255,255,255,0.15)', paddingBottom: '0.25rem' }}>
               <span style={{ fontWeight: 800, color: '#38bdf8' }}>
-                Obs #{activeTooltip.originalIndex} ({activeTooltip.anoCiclo})
+                Obs #{activeTooltip.originalIndex} (Ciclo {activeTooltip.anoCiclo})
               </span>
               <span style={{ fontSize: '0.72rem', opacity: 0.8 }}>
                 📅 {activeTooltip.dataStr}
@@ -549,13 +583,19 @@ export default function CurvaEvolucaoPedagogica({
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', marginTop: '0.35rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                 <span style={{ color: '#4ade80' }}>●</span>
-                <span><b>Prática Docente:</b> {activeTooltip.scorePratica ? `Nível ${activeTooltip.scorePratica} (${scoreLabel(activeTooltip.scorePratica).split('(')[0].trim()})` : 'Não avaliada'}</span>
+                <span><b>Prática (Rubrica 2026):</b> {activeTooltip.scorePratica ? `Nível ${activeTooltip.scorePratica} (${scoreLabel(activeTooltip.scorePratica).split('(')[0].trim()})` : 'Não avaliada'}</span>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                 <span style={{ color: '#60a5fa' }}>■</span>
                 <span><b>Planejamento:</b> {activeTooltip.scorePlan ? `Nível ${activeTooltip.scorePlan} (${scoreLabel(activeTooltip.scorePlan).split('(')[0].trim()})` : 'Não avaliado'}</span>
               </div>
+
+              {activeTooltip.nivelOriginalPratica && (
+                <div style={{ marginTop: '0.15rem', fontSize: '0.71rem', color: '#fde68a', backgroundColor: 'rgba(255,255,255,0.08)', padding: '0.2rem 0.4rem', borderRadius: '4px' }}>
+                  📜 <b>Original {activeTooltip.anoCiclo}:</b> {activeTooltip.nivelOriginalPratica.length > 55 ? `${activeTooltip.nivelOriginalPratica.slice(0, 52)}...` : activeTooltip.nivelOriginalPratica}
+                </div>
+              )}
 
               {activeTooltip.tema && activeTooltip.tema !== 'Geral' && (
                 <div style={{ marginTop: '0.2rem', fontSize: '0.73rem', color: '#cbd5e1' }}>

@@ -1278,6 +1278,8 @@ export default function App() {
             anoFormativo: cursistaDossieModal.ano_formativo || '1º ANO'
           }}
           observacoes={observacoesList}
+          userRole={userRole}
+          userEmail={user?.email}
           onClose={() => setCursistaDossieModal(null)}
         />
       )}

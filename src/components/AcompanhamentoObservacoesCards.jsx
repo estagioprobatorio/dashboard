@@ -1,9 +1,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import DossieCursistaModal from './DossieCursistaModal';
 import FormularioInserirObservacao from './FormularioInserirObservacao';
+import ExplicacaoAdequacaoAdmin from './ExplicacaoAdequacaoAdmin';
 import { carregarObservacoes2024 } from '../utils/observacoes2024Service';
 import { normalizeComponente } from './ObservacoesOverview';
-import { formatDatePtBr } from '../utils/dateUtils';
+import { formatDatePtBr, parseDateToTimestamp } from '../utils/dateUtils';
 import { parseScore, gerarResumoRedeEstatistico } from '../utils/aiPedagogicalService';
 
 // Helper para converter nível para pontuação 1 a 4 (aceita texto e números como 3.0)
@@ -185,19 +186,27 @@ export default function AcompanhamentoObservacoesCards({
       // Ordenar cronologicamente crescente para calcular evolução (mais antiga -> mais recente)
       const parseTimestamp = (o) => {
         const raw = o.data_pratica || o.data_observacao || o.data_feedback || o.carimbo || '';
-        if (!raw) return 0;
-        const d = new Date(raw);
-        return isNaN(d.getTime()) ? 0 : d.getTime();
+        const ts = parseDateToTimestamp(raw);
+        if (ts > 0) return ts;
+        const anoStr = String(o.ciclo_historico || o.ano_letivo || o.ano_formativo || o.id_origem || '');
+        if (anoStr.includes('2024')) return new Date('2024-06-15').getTime();
+        if (anoStr.includes('2025')) return new Date('2025-09-15').getTime();
+        return new Date('2026-04-15').getTime();
       };
       
       const ordenadasCrescente = [...listaObs].sort((a, b) => parseTimestamp(a) - parseTimestamp(b));
       const realizadas = ordenadasCrescente.filter(o => o.is_realizada ?? o.observacao_realizada?.toLowerCase().includes('sim'));
 
-      // Análise dos anos com registros
-      const has2024 = listaObs.some(o => String(o.ano_letivo || o.ano_formativo || o.id_origem || '').includes('2024'));
-      const has2026 = listaObs.some(o => !String(o.ano_letivo || o.ano_formativo || o.id_origem || '').includes('2024'));
+      // Análise dos anos com registros (2024, 2025, 2026)
+      const isObs2024 = (o) => String(o.ciclo_historico || o.ano_letivo || o.ano_formativo || o.id_origem || '').includes('2024');
+      const isObs2025 = (o) => !isObs2024(o) && String(o.ciclo_historico || o.ano_letivo || o.ano_formativo || o.id_origem || '').includes('2025');
+      const isObs2026 = (o) => !isObs2024(o) && !isObs2025(o);
 
-      // Trajetória da Prática Docente
+      const has2024 = listaObs.some(isObs2024);
+      const has2025 = listaObs.some(isObs2025);
+      const has2026 = listaObs.some(isObs2026);
+
+      // Trajetória da Prática Docente (Escala Equiparada Rubrica 2026)
       let nivelInicial = null;
       let nivelFinal = null;
       let delta = 0;
@@ -207,7 +216,7 @@ export default function AcompanhamentoObservacoesCards({
       if (realizadas.length > 0) {
         // Encontra o primeiro score de prática válido
         for (let i = 0; i < realizadas.length; i++) {
-          const sc = nivelToScore(realizadas[i].nivel_pratica);
+          const sc = nivelToScore(realizadas[i].nivel_pratica || realizadas[i].criterio2_nivel);
           if (sc !== null) {
             nivelInicial = sc;
             break;
@@ -216,7 +225,7 @@ export default function AcompanhamentoObservacoesCards({
 
         // Encontra o último score de prática válido
         for (let i = realizadas.length - 1; i >= 0; i--) {
-          const sc = nivelToScore(realizadas[i].nivel_pratica);
+          const sc = nivelToScore(realizadas[i].nivel_pratica || realizadas[i].criterio2_nivel);
           if (sc !== null) {
             nivelFinal = sc;
             break;
@@ -259,6 +268,7 @@ export default function AcompanhamentoObservacoesCards({
         totalObs: listaObs.length,
         totalRealizadas: realizadas.length,
         has2024,
+        has2025,
         has2026,
         nivelInicial,
         nivelFinal,
@@ -305,8 +315,9 @@ export default function AcompanhamentoObservacoesCards({
 
       // Filtro por Ciclo / Histórico
       if (anoFiltro === 'com_2024' && !c.has2024) return false;
+      if (anoFiltro === 'com_2025' && !c.has2025) return false;
       if (anoFiltro === 'com_2026' && !c.has2026) return false;
-      if (anoFiltro === 'ambos' && (!c.has2024 || !c.has2026)) return false;
+      if (anoFiltro === 'ambos' && !((c.has2024 || c.has2025) && c.has2026)) return false;
 
       return true;
     });
@@ -400,10 +411,13 @@ export default function AcompanhamentoObservacoesCards({
           </h2>
 
           <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.88rem', color: 'var(--color-text-muted)' }}>
-            Consulte a evolução pedagógica de cada professor cursista desde 2024. Clique no cartão para visualizar o dossiê detalhado, curvas de progressão e registrar novas observações.
+            Consulte a evolução pedagógica de cada professor cursista (ciclos 2024, 2025 e 2026 equiparados na Rubrica Analítica de 2026). Clique no cartão para visualizar o dossiê detalhado, curvas de progressão e registrar novas observações.
           </p>
         </div>
       </div>
+
+      {/* EXPLICAÇÃO DIDÁTICA PARA ADMIN & SUPERADMIN SOBRE A CONSTRUÇÃO DOS DADOS */}
+      <ExplicacaoAdequacaoAdmin userRole={userRole} userEmail={userEmail} defaultExpanded={true} />
 
       {/* TOP KPI CARDS (RESUMO EXECUTIVO) */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
@@ -789,9 +803,10 @@ export default function AcompanhamentoObservacoesCards({
               }}
             >
               <option value="">Todas as Bases</option>
-              <option value="com_2024">Com Histórico de 2024</option>
+              <option value="com_2024">Com Histórico de 2024 (1º Ano)</option>
+              <option value="com_2025">Com Histórico de 2025 (2º Ano PDP)</option>
               <option value="com_2026">Com Observação em 2026</option>
-              <option value="ambos">Histórico Completo (2024 e 2026)</option>
+              <option value="ambos">Trajetória Longitudinal (2024/2025 + 2026)</option>
             </select>
           </div>
 
@@ -1056,12 +1071,17 @@ export default function AcompanhamentoObservacoesCards({
                             2024
                           </span>
                         )}
+                        {item.has2025 && (
+                          <span style={{ backgroundColor: '#ede9fe', color: '#5b21b6', padding: '0.15rem 0.4rem', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 700, border: '1px solid #ddd6fe' }}>
+                            2025
+                          </span>
+                        )}
                         {item.has2026 && (
                           <span style={{ backgroundColor: '#e0e7ff', color: '#3730a3', padding: '0.15rem 0.4rem', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 700, border: '1px solid #c7d2fe' }}>
                             2026
                           </span>
                         )}
-                        {!item.has2024 && !item.has2026 && (
+                        {!item.has2024 && !item.has2025 && !item.has2026 && (
                           <span style={{ backgroundColor: '#f1f5f9', color: '#64748b', padding: '0.15rem 0.4rem', borderRadius: '4px', fontSize: '0.7rem' }}>
                             -
                           </span>
@@ -1309,10 +1329,15 @@ export default function AcompanhamentoObservacoesCards({
 
                   {/* BADGES HISTÓRICAS E TURMA */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.4rem' }}>
-                    <div style={{ display: 'flex', gap: '0.35rem' }}>
+                    <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
                       {item.has2024 && (
                         <span style={{ backgroundColor: '#fef3c7', color: '#92400e', padding: '0.15rem 0.45rem', borderRadius: '4px', fontWeight: 700, border: '1px solid #fde68a' }}>
                           🗓️ 2024
+                        </span>
+                      )}
+                      {item.has2025 && (
+                        <span style={{ backgroundColor: '#ede9fe', color: '#5b21b6', padding: '0.15rem 0.45rem', borderRadius: '4px', fontWeight: 700, border: '1px solid #ddd6fe' }}>
+                          🗓️ 2025
                         </span>
                       )}
                       {item.has2026 && (
@@ -1320,7 +1345,7 @@ export default function AcompanhamentoObservacoesCards({
                           🗓️ 2026
                         </span>
                       )}
-                      {!item.has2024 && !item.has2026 && (
+                      {!item.has2024 && !item.has2025 && !item.has2026 && (
                         <span style={{ backgroundColor: '#f1f5f9', color: '#64748b', padding: '0.15rem 0.45rem', borderRadius: '4px', fontWeight: 600 }}>
                           Sem registros
                         </span>
@@ -1550,6 +1575,8 @@ export default function AcompanhamentoObservacoesCards({
             anoFormativo: selectedCursistaDossie.ano_formativo || '1º ANO'
           }}
           observacoes={observacoes}
+          userRole={userRole}
+          userEmail={userEmail}
           onClose={() => setSelectedCursistaDossie(null)}
           onSaveObservacao={async (novaObs) => {
             if (onNovaObservacao) {

@@ -1,3 +1,5 @@
+import { parseDateToTimestamp } from './dateUtils';
+
 /**
  * Serviço de Inteligência Artificial e Diagnóstico Pedagógico
  * SEED-PR • Estágio Probatório
@@ -5,7 +7,7 @@
  * Gera análises formativas aprofundadas por cursista e consolidadas para a rede:
  * - Pontos Fortes Consolidados
  * - Pontos de Atenção / Oportunidades de Aperfeiçoamento
- * - Evolução para cada Referência / Temática Pedagógica
+ * - Evolução para cada Referência / Temática Pedagógica (2024, 2025 e 2026 equiparados na Rubrica Analítica 2026)
  * - Síntese Executiva e Recomendações
  */
 
@@ -20,31 +22,46 @@ export const normalizeString = (str) => {
     .replace(/\s+/g, ' ');
 };
 
-// Helper para converter nível para número 1-4
+// Helper para converter nível para número 1-4 (seguro contra números dentro de descrições longas de rubricas)
 export const parseScore = (nivel) => {
   if (nivel === null || nivel === undefined) return null;
   const cleanStr = String(nivel).trim();
   if (!cleanStr || cleanStr === '-' || cleanStr === '—') return null;
 
-  const num = parseFloat(cleanStr.replace(',', '.'));
-  if (!isNaN(num) && num >= 1 && num <= 4) {
-    return Math.round(num);
+  if (cleanStr.length <= 6) {
+    const num = parseFloat(cleanStr.replace(',', '.'));
+    if (!isNaN(num) && num >= 1 && num <= 4) {
+      return Math.round(num);
+    }
   }
 
   const n = cleanStr.toUpperCase();
-  if (n.includes('4') || n.includes('SUPERA') || n.includes('SUPEROU')) return 4;
-  if (n.includes('3') || n.includes('INTEGRAL') || (n.includes('ATENDE') && !n.includes('PARCIAL')) || (n.includes('ATINGE') && !n.includes('PARCIAL'))) return 3;
-  if (n.includes('2') || n.includes('PARCIAL')) return 2;
-  if (n.includes('1') || n.includes('NÃO') || n.includes('NAO')) return 1;
+  if (n.startsWith('SUPERA') || n.includes('NÍVEL 4') || n.includes('NIVEL 4') || n.includes('SUPEROU')) return 4;
+  if (n.startsWith('NÃO ATENDE') || n.startsWith('NAO ATENDE') || n.startsWith('NÃO ATINGE') || n.startsWith('NAO ATINGE') || n.includes('NÍVEL 1') || n.includes('NIVEL 1')) return 1;
+  if (n.startsWith('ATENDE PARCIAL') || n.startsWith('ATINGE PARCIAL') || n.includes('PARCIALMENTE') || n.includes('NÍVEL 2') || n.includes('NIVEL 2')) return 2;
+  if (n.startsWith('ATENDE INTEGRAL') || n.startsWith('ATINGE INTEGRAL') || n.includes('INTEGRALMENTE') || n.includes('NÍVEL 3') || n.includes('NIVEL 3')) return 3;
+
+  // Fallbacks secundários
+  if (n.includes('SUPERA')) return 4;
+  if (n.includes('PARCIAL')) return 2;
+  if ((n.includes('ATENDE') || n.includes('ATINGE')) && !n.includes('NÃO') && !n.includes('NAO')) return 3;
+  if (n.includes('NÃO') || n.includes('NAO')) return 1;
+
+  if (cleanStr.length <= 15) {
+    if (n.includes('4')) return 4;
+    if (n.includes('3')) return 3;
+    if (n.includes('2')) return 2;
+    if (n.includes('1')) return 1;
+  }
   return null;
 };
 
 export const scoreLabel = (score) => {
   switch (score) {
     case 4: return 'Supera (Nível 4)';
-    case 3: return 'Atinge Integralmente (Nível 3)';
-    case 2: return 'Atinge Parcialmente (Nível 2)';
-    case 1: return 'Não Atinge (Nível 1)';
+    case 3: return 'Atende Integralmente (Nível 3)';
+    case 2: return 'Atende Parcialmente (Nível 2)';
+    case 1: return 'Não Atende (Nível 1)';
     default: return 'Em Diagnóstico';
   }
 };
@@ -84,21 +101,21 @@ export const getNivelInfo = (rawNivel) => {
       border = '#86efac';
       break;
     case 3:
-      shortLabel = 'Nível 3 • Atinge Integralmente';
+      shortLabel = 'Nível 3 • Atende Integralmente';
       badgeClass = 'badge-atende';
       color = '#0369a1';
       bg = '#e0f2fe';
       border = '#7dd3fc';
       break;
     case 2:
-      shortLabel = 'Nível 2 • Atinge Parcialmente';
+      shortLabel = 'Nível 2 • Atende Parcialmente';
       badgeClass = 'badge-parcial';
       color = '#b45309';
       bg = '#fef3c7';
       border = '#fcd34d';
       break;
     case 1:
-      shortLabel = 'Nível 1 • Não Atinge';
+      shortLabel = 'Nível 1 • Não Atende';
       badgeClass = 'badge-nao-atende';
       color = '#b91c1c';
       bg = '#fee2e2';
@@ -123,27 +140,31 @@ export const getNivelInfo = (rawNivel) => {
 
 
 /**
- * Gera o diagnóstico individual por cursista
+ * Gera o diagnóstico individual por cursista (com suporte à trajetória longitudinal 2024 -> 2025 -> 2026)
  */
 export function gerarDiagnosticoCursistaIA({ cursista, observacoes = [], turmaInfo = {} }) {
   const nome = cursista?.nome || cursista?.nome_cursista || 'Professor Cursista';
   const componente = cursista?.componente || turmaInfo?.componente || 'Componente Curricular';
-  const formador = turmaInfo?.formador || cursista?.nome_formador || 'Formador(a)';
 
-  // Ordena cronologicamente
-  const ordenadas = [...observacoes].sort((a, b) => {
-    const dA = new Date(a.data_pratica || a.data_observacao || a.carimbo || 0).getTime();
-    const dB = new Date(b.data_pratica || b.data_observacao || b.carimbo || 0).getTime();
-    return dA - dB;
-  });
+  // Ordena cronologicamente usando parseDateToTimestamp (suporta DD/MM/YYYY e ISO)
+  const getTs = (o) => {
+    const ts = parseDateToTimestamp(o.data_pratica || o.data_observacao || o.data_feedback || o.carimbo || o.created_at);
+    if (ts > 0) return ts;
+    const anoStr = String(o.ano_letivo || o.ano_formativo || o.ciclo_historico || '');
+    if (anoStr.includes('2024')) return new Date('2024-06-15').getTime();
+    if (anoStr.includes('2025')) return new Date('2025-09-15').getTime();
+    return new Date('2026-04-15').getTime();
+  };
+
+  const ordenadas = [...observacoes].sort((a, b) => getTs(a) - getTs(b));
 
   const realizadas = ordenadas.filter(o => o.is_realizada ?? o.observacao_realizada?.toLowerCase().includes('sim'));
   const totalObs = ordenadas.length;
   const totalRealizadas = realizadas.length;
 
-  // Trajetória de prática e planejamento
-  const scoresPratica = realizadas.map(o => parseScore(o.nivel_pratica)).filter(s => s !== null);
-  const scoresPlan = realizadas.map(o => parseScore(o.nivel_planejamento)).filter(s => s !== null);
+  // Trajetória de prática e planejamento (já calibrada na Rubrica Analítica 2026)
+  const scoresPratica = realizadas.map(o => parseScore(o.nivel_pratica || o.criterio2_nivel)).filter(s => s !== null);
+  const scoresPlan = realizadas.map(o => parseScore(o.nivel_planejamento || o.criterio1_nivel)).filter(s => s !== null);
 
   const nivelInicialPratica = scoresPratica[0] ?? null;
   const nivelFinalPratica = scoresPratica[scoresPratica.length - 1] ?? null;
@@ -159,7 +180,7 @@ export function gerarDiagnosticoCursistaIA({ cursista, observacoes = [], turmaIn
   ordenadas.forEach(obs => {
     let tema = (obs.tema || obs.tematica || obs.proposta_pedagogica || '').trim();
     if (!tema || tema.toLowerCase().includes('observação 2024') || tema.toLowerCase().includes('geral')) {
-      tema = 'Prática Docente e Metodologias';
+      tema = 'Prática Docente e Metodologias (1º Ano)';
     }
 
     if (!referenciasMap.has(tema)) {
@@ -172,12 +193,12 @@ export function gerarDiagnosticoCursistaIA({ cursista, observacoes = [], turmaIn
   const evolucaoPorReferencia = [];
 
   referenciasMap.forEach((obsTema, temaNome) => {
-    const scoresTema = obsTema.map(o => parseScore(o.nivel_pratica)).filter(s => s !== null);
-    const nIni = scoresTema[0] ?? (nivelInicialPratica || 2);
+    const scoresTema = obsTema.map(o => parseScore(o.nivel_pratica || o.criterio2_nivel)).filter(s => s !== null);
+    const nIni = scoresTema[0] ?? (nivelInicialPratica || 3);
     const nFim = scoresTema[scoresTema.length - 1] ?? (nivelFinalPratica || nIni);
     const d = nFim - nIni;
 
-    let statusTema = 'Estável';
+    let statusTema = 'Consolidado Nível 3 (Atende Integral)';
     let statusCor = '#0284c7';
     let statusBg = '#e0f2fe';
     if (d > 0) {
@@ -186,8 +207,8 @@ export function gerarDiagnosticoCursistaIA({ cursista, observacoes = [], turmaIn
       statusBg = '#dcfce7';
     } else if (nFim === 4 && d === 0) {
       statusTema = 'Consolidado Nível 4 (Supera)';
-      statusCor = '#0072bc';
-      statusBg = '#e0f2fe';
+      statusCor = '#15803d';
+      statusBg = '#dcfce7';
     } else if (d < 0) {
       statusTema = `Requer Atenção (${d})`;
       statusCor = '#991b1b';
@@ -219,20 +240,20 @@ export function gerarDiagnosticoCursistaIA({ cursista, observacoes = [], turmaIn
       {
         referencia: 'Intencionalidade Pedagógica e Planejamento',
         totalObservacoes: totalRealizadas || 1,
-        nivelInicial: nivelInicialPlan || 2,
+        nivelInicial: nivelInicialPlan || 3,
         nivelAtual: nivelFinalPlan || 3,
-        delta: deltaPlan || 1,
+        delta: deltaPlan || 0,
         status: deltaPlan > 0 ? `Evolução Positiva (+${deltaPlan})` : 'Consolidado',
         cor: '#166534',
         bg: '#dcfce7',
         descricao: 'Alinhamento dos planos de aula às diretrizes curriculares do Paraná e RCO+Aulas.'
       },
       {
-        referencia: 'Mediação Didática e Gestão de Sala',
+        referencia: 'Mediação Didática e Protagonismo Discente',
         totalObservacoes: totalRealizadas || 1,
-        nivelInicial: nivelInicialPratica || 2,
+        nivelInicial: nivelInicialPratica || 3,
         nivelAtual: nivelFinalPratica || 3,
-        delta: deltaPratica || 1,
+        delta: deltaPratica || 0,
         status: deltaPratica > 0 ? `Evolução Positiva (+${deltaPratica})` : 'Estável',
         cor: '#0072bc',
         bg: '#e0f2fe',
@@ -244,10 +265,10 @@ export function gerarDiagnosticoCursistaIA({ cursista, observacoes = [], turmaIn
   // GERAÇÃO DOS PONTOS FORTES
   const pontosFortes = [];
   if (nivelFinalPratica >= 3) {
-    pontosFortes.push(`Domínio pedagógico no componente ${componente}, alcançando ${scoreLabel(nivelFinalPratica)}.`);
+    pontosFortes.push(`Domínio pedagógico no componente ${componente}, alcançando ${scoreLabel(nivelFinalPratica)} na Rubrica Analítica 2026.`);
   }
   if (deltaPratica > 0) {
-    pontosFortes.push(`Progressão didática comprovada ao longo do ciclo com avanço de +${deltaPratica} nível(is) na prática docente.`);
+    pontosFortes.push(`Progressão didática comprovada ao longo dos ciclos formativos com avanço de +${deltaPratica} nível(is) na prática docente.`);
   }
   if (nivelFinalPlan >= 3) {
     pontosFortes.push('Planejamento estruturado e aderente às diretrizes pedagógicas e recursos digitais da SEED-PR.');
@@ -263,7 +284,7 @@ export function gerarDiagnosticoCursistaIA({ cursista, observacoes = [], turmaIn
     pontosAtencao.push('Consolidação das etapas de fechamento da aula e checagem da compreensão individual dos estudantes.');
   }
   if (deltaPratica <= 0 && nivelFinalPratica < 4) {
-    pontosAtencao.push('Intensificar a diversificação de estratégias de metodologias ativas para superar a estabilidade de nível.');
+    pontosAtencao.push('Ampliar práticas de protagonismo, autoria discente e monitoria entre pares para avançar do nível Atende Integralmente (3) ao nível Supera (4).');
   }
   if (nivelFinalPlan < 3) {
     pontosAtencao.push('Refinamento dos instrumentos avaliativos formativos e gestão do tempo previsto no plano de aula.');
@@ -273,19 +294,19 @@ export function gerarDiagnosticoCursistaIA({ cursista, observacoes = [], turmaIn
   // SÍNTESE EXECUTIVA
   let sinteseTexto = '';
   if (deltaPratica > 0) {
-    sinteseTexto = `O professor ${nome} apresenta uma trajetória de evolução expressiva no componente ${componente}. Iniciou o acompanhamento no Nível ${nivelInicialPratica || 2} e atingiu o Nível ${nivelFinalPratica || 3} (+${deltaPratica} níveis). As evidências demonstram apropriação dos combinados pedagógicos e fortalecimento da intencionalidade didática em sala de aula.`;
+    sinteseTexto = `O(a) professor(a) ${nome} apresenta uma trajetória de evolução positiva no componente ${componente} (escala equiparada à Rubrica Analítica 2026). Iniciou o acompanhamento no Nível ${nivelInicialPratica || 3} e atingiu o Nível ${nivelFinalPratica || 4} (+${deltaPratica} nível/níveis). As evidências demonstram apropriação dos combinados pedagógicos e fortalecimento do protagonismo estudantil em sala de aula.`;
   } else if (nivelFinalPratica === 4) {
-    sinteseTexto = `O professor ${nome} mantém desempenho de excelência (Nível 4 - Supera) no componente ${componente}, caracterizado por liderança na mediação didática, engajamento expressivo dos estudantes e planejamento exemplar plenamente alinhado às metas formativas do Estado do Paraná.`;
+    sinteseTexto = `O(a) professor(a) ${nome} mantém desempenho de excelência (Nível 4 - Supera) no componente ${componente}, caracterizado por liderança na mediação didática, protagonismo ativo dos estudantes e planejamento exemplar plenamente alinhado às metas formativas do Estado do Paraná.`;
   } else if (totalRealizadas > 0) {
-    sinteseTexto = `O professor ${nome} concluiu ${totalRealizadas} observações pedagógicas no ciclo, mantendo estabilidade no ${scoreLabel(nivelFinalPratica || 2)}. O momento é propício para direcionar os próximos diálogos formativos ao fortalecimento da gestão de sala e fechamento de aula.`;
+    sinteseTexto = `O(a) professor(a) ${nome} concluiu ${totalRealizadas} observações pedagógicas no histórico consolidado (2024–2026), mantendo consistência no ${scoreLabel(nivelFinalPratica || 3)}. O momento é propício para direcionar os próximos diálogos formativos à promoção de autoria e protagonismo discente rumo ao nível Supera (4).`;
   } else {
-    sinteseTexto = `O professor ${nome} está em fase de acolhimento formativo no componente ${componente}, aguardando o registro das primeiras observações em sala para consolidação dos indicadores de prática docente.`;
+    sinteseTexto = `O(a) professor(a) ${nome} está em fase de acompanhamento formativo no componente ${componente}, aguardando o registro das próximas observações em sala para consolidação dos indicadores de prática docente.`;
   }
 
   // PLANO DE AÇÃO / RECOMENDAÇÕES
   const planoAcao = [
-    'Realizar o diálogo formativo focado na autoavaliação dos estudantes e fechamento de aula.',
-    'Alinhar o próximo planejamento pedagógico à recomposição de aprendizagens do trimestre.',
+    'Estimular atividades de autoria, investigação e monitoria entre estudantes (critério diferencial para o nível Supera na Rubrica 2026).',
+    'Realizar o diálogo formativo focado na autoavaliação dos estudantes e sistematização do fechamento de aula.',
     'Compartilhar práticas exitosas consolidadas nas reuniões pedagógicas da escola.'
   ];
 
@@ -305,7 +326,7 @@ export function gerarDiagnosticoCursistaIA({ cursista, observacoes = [], turmaIn
 }
 
 /**
- * Gera o Resumo Geral Analítico da Rede com dados estatísticos
+ * Gera o Resumo Geral Analítico da Rede com dados estatísticos (Escala Equiparada Rubrica 2026)
  */
 export function gerarResumoRedeEstatistico(cursistasComEvolucao = []) {
   const totalProfessores = cursistasComEvolucao.length;
@@ -364,7 +385,7 @@ export function gerarResumoRedeEstatistico(cursistasComEvolucao = []) {
   const taxaSupera = totalAvaliados > 0 ? Math.round((niveisPratica.nivel4 / totalAvaliados) * 100) : 0;
   const taxaIntegralOuSupera = totalAvaliados > 0 ? Math.round(((niveisPratica.nivel3 + niveisPratica.nivel4) / totalAvaliados) * 100) : 0;
 
-  const sinteseRede = `A rede pedagógica monitora ${totalProfessores} professores cursistas, com ${totalAvaliados} avaliados em observações da prática (${totalProfessores > 0 ? Math.round((totalAvaliados / totalProfessores) * 100) : 0}% de cobertura). Do total avaliado, ${taxaEvolucao}% (${evolucaoPositiva.length} docentes) apresentaram evolução positiva ou consolidação no nível máximo, e ${taxaIntegralOuSupera}% encontram-se nos Níveis 3 e 4.`;
+  const sinteseRede = `A rede pedagógica monitora ${totalProfessores} professores cursistas, com ${totalAvaliados} avaliados em observações da prática (${totalProfessores > 0 ? Math.round((totalAvaliados / totalProfessores) * 100) : 0}% de cobertura). Com a equiparação estatística dos ciclos 2024 (1º Ano) e 2025 (2º Ano PDP) à Rubrica Analítica de 2026, ${taxaEvolucao}% (${evolucaoPositiva.length} docentes) apresentaram evolução positiva ou consolidação no nível máximo, e ${taxaIntegralOuSupera}% encontram-se nos Níveis 3 (Atende Integralmente) e 4 (Supera).`;
 
   return {
     totalProfessores,
@@ -374,9 +395,9 @@ export function gerarResumoRedeEstatistico(cursistasComEvolucao = []) {
     taxaIntegralOuSupera,
     sinteseRede,
     distribuicaoNiveis: [
-      { nivel: 'Nível 1 (Não Atinge)', total: niveisPratica.nivel1, cor: '#ef4444', pct: totalAvaliados > 0 ? Math.round((niveisPratica.nivel1 / totalAvaliados) * 100) : 0 },
-      { nivel: 'Nível 2 (Atinge Parcial)', total: niveisPratica.nivel2, cor: '#f59e0b', pct: totalAvaliados > 0 ? Math.round((niveisPratica.nivel2 / totalAvaliados) * 100) : 0 },
-      { nivel: 'Nível 3 (Atinge Integral)', total: niveisPratica.nivel3, cor: '#0072bc', pct: totalAvaliados > 0 ? Math.round((niveisPratica.nivel3 / totalAvaliados) * 100) : 0 },
+      { nivel: 'Nível 1 (Não Atende)', total: niveisPratica.nivel1, cor: '#ef4444', pct: totalAvaliados > 0 ? Math.round((niveisPratica.nivel1 / totalAvaliados) * 100) : 0 },
+      { nivel: 'Nível 2 (Atende Parcial)', total: niveisPratica.nivel2, cor: '#f59e0b', pct: totalAvaliados > 0 ? Math.round((niveisPratica.nivel2 / totalAvaliados) * 100) : 0 },
+      { nivel: 'Nível 3 (Atende Integral)', total: niveisPratica.nivel3, cor: '#0072bc', pct: totalAvaliados > 0 ? Math.round((niveisPratica.nivel3 / totalAvaliados) * 100) : 0 },
       { nivel: 'Nível 4 (Supera)', total: niveisPratica.nivel4, cor: '#00984a', pct: totalAvaliados > 0 ? Math.round((niveisPratica.nivel4 / totalAvaliados) * 100) : 0 }
     ],
     trajetorias: [

@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import ObservacaoModalDetalhes from './ObservacaoModalDetalhes';
 import FormularioInserirObservacao from './FormularioInserirObservacao';
+import ExplicacaoAdequacaoAdmin from './ExplicacaoAdequacaoAdmin';
 import { normalizeComponente, getSemestre, isObservacao2026 } from './ObservacoesOverview';
 import { formatDatePtBr } from '../utils/dateUtils';
 import { NRES_OFICIAIS, normalizeNre } from '../utils/nreUtils';
@@ -516,6 +517,9 @@ export default function ObservacaoPratica({ observacoes = [], cursistas = [], tu
           </button>
         </div>
       </div>
+
+      {/* Explicação Didática da Adequação Longitudinal 2024/2025 -> 2026 (Exclusivo Admin e Superadmin) */}
+      <ExplicacaoAdequacaoAdmin userRole={userRole} userEmail={userEmail} defaultExpanded={false} />
 
       {/* Cards de Métricas (KPIs) - Reformulados conforme Documento 23-09 */}
       <div style={{
