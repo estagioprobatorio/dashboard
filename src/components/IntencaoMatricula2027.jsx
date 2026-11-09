@@ -383,7 +383,7 @@ export default function IntencaoMatricula2027({
   // Lista dinâmica de horários para o turno atual
   const horariosDisponiveis = useMemo(() => {
     return getHorariosPorTurno(form.turnoPretendido);
-  }, [form.turnoPretendido, turmasDisponiveis2026]);
+  }, [form.turnoPretendido, horariosDisponiveisComponente]);
 
   // Ajusta o horário pretendido caso o turno mude e o horário atual não pertença à nova lista
   useEffect(() => {
@@ -1164,18 +1164,18 @@ export default function IntencaoMatricula2027({
               </span>
             </div>
 
-            {/* ── LISTA DE TURMAS DE 2026 (SOMENTE LEITURA / NADA EDITÁVEL) ── */}
+            {/* ── QUADRO DE HORÁRIOS FORMATIVOS PREVISTOS (SEM NOMES DE TURMAS) ── */}
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                 <label style={{ fontSize: '0.82rem', fontWeight: 800, color: '#001d3d', textTransform: 'uppercase' }}>
-                  📋 Turmas Existentes em 2026 ({componenteCursista} · {evolucao.chamamentoTexto})
+                  ⏰ Horários Formativos Previstos ({componenteCursista})
                 </label>
                 <span style={{ fontSize: '0.74rem', color: '#64748b' }}>
-                  Somente consulta de horários praticados · Nada editável
+                  Horários praticados na rede estadual · Selecione sua preferência de turno abaixo
                 </span>
               </div>
 
-              {turmasDisponiveis2026.length > 0 ? (
+              {horariosDisponiveisComponente.length > 0 ? (
                 <div style={{
                   maxHeight: '210px',
                   overflowY: 'auto',
@@ -1186,19 +1186,15 @@ export default function IntencaoMatricula2027({
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
                     <thead>
                       <tr style={{ backgroundColor: '#f8fafc', color: '#475569', textAlign: 'left', borderBottom: '1px solid #e2e8f0', position: 'sticky', top: 0 }}>
-                        <th style={{ padding: '0.55rem 0.85rem', fontWeight: 800 }}>Turma Formativa</th>
-                        <th style={{ padding: '0.55rem 0.65rem', fontWeight: 800 }}>Turno</th>
+                        <th style={{ padding: '0.55rem 0.85rem', fontWeight: 800 }}>Turno</th>
                         <th style={{ padding: '0.55rem 0.65rem', fontWeight: 800 }}>Dia da Semana</th>
-                        <th style={{ padding: '0.55rem 0.85rem', fontWeight: 800 }}>Horário Praticado</th>
+                        <th style={{ padding: '0.55rem 0.85rem', fontWeight: 800 }}>Horário Previsto</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {turmasDisponiveis2026.map((t, idx) => (
+                      {horariosDisponiveisComponente.map((t, idx) => (
                         <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                          <td style={{ padding: '0.5rem 0.85rem', fontWeight: 700, color: '#001d3d' }}>
-                            {t.nomeTurma}
-                          </td>
-                          <td style={{ padding: '0.5rem 0.65rem', color: '#0369a1', fontWeight: 700 }}>
+                          <td style={{ padding: '0.5rem 0.85rem', color: '#0369a1', fontWeight: 700 }}>
                             {t.turno}
                           </td>
                           <td style={{ padding: '0.5rem 0.65rem', color: '#475569' }}>
@@ -1214,7 +1210,7 @@ export default function IntencaoMatricula2027({
                 </div>
               ) : (
                 <div style={{ padding: '0.85rem', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.8rem', color: '#64748b' }}>
-                  Turmas regulares de <strong>{componenteCursista}</strong> com horários padrão de atendimento da rede estadual.
+                  Horários regulares de <strong>{componenteCursista}</strong> ofertados nos turnos <strong>Manhã, Tarde e Noite</strong> conforme a rede estadual.
                 </div>
               )}
             </div>
@@ -1537,7 +1533,7 @@ export default function IntencaoMatricula2027({
                 {/* Horário Preferencial: De acordo com as turmas de 2026 */}
                 <div>
                   <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 800, color: '#001d3d', marginBottom: '0.35rem' }}>
-                    HORÁRIO PREFERENCIAL (TURMAS DE 2026)
+                    HORÁRIO PREFERENCIAL
                   </label>
                   <select
                     value={form.horarioPretendido}
@@ -1559,7 +1555,7 @@ export default function IntencaoMatricula2027({
                     ))}
                   </select>
                   <span style={{ fontSize: '0.72rem', color: '#15803d', fontWeight: 600, display: 'block', marginTop: '0.25rem' }}>
-                    ✓ Horários sincronizados com as turmas de {componenteCursista} no turno {form.turnoPretendido}.
+                    ✓ Horários formativos disponíveis para {componenteCursista} no turno {form.turnoPretendido}.
                   </span>
                 </div>
 
