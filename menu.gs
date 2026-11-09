@@ -1879,6 +1879,13 @@ function apiSalvarIntencao2027(payload) {
       aba.getRange(1, 1, 1, colunas.length).setFontWeight("bold").setBackground("#0f172a").setFontColor("#ffffff");
     }
 
+    var temAtendimentoEsp = (
+      String(d.necessitaAtendimentoEspecializado || "").trim().toLowerCase() === "sim" ||
+      d.necessitaAtendimentoEspecializado === true ||
+      String(d.necessita_atendimento_especializado || "").trim().toUpperCase() === "SIM" ||
+      (typeof d.descricaoAtendimentoEspecializado === "string" && d.descricaoAtendimentoEspecializado.trim().length > 0)
+    );
+
     var novaLinha = [
       chaveCgmLf,
       cgmLimpo,
@@ -1894,7 +1901,7 @@ function apiSalvarIntencao2027(payload) {
       d.turma_origem_2026 || "",
       d.turnoPretendido || d.turno_pretendido || "",
       d.horarioPretendido || d.horario_pretendido || "",
-      d.necessitaAtendimentoEspecializado ? "SIM" : "NÃO",
+      temAtendimentoEsp ? "SIM" : "NÃO",
       d.descricaoAtendimentoEspecializado || "",
       d.decisao_duas_matriculas || "",
       d.aceite_termo_ciencia !== false ? "SIM" : "NÃO",
@@ -1972,7 +1979,13 @@ function enviarEmailConfirmacaoIntencao(d, chaveCgmLf, lfLimpa) {
   var horario = d.horarioPretendido || d.horario_pretendido || "-";
   var ano2027 = d.ano_formativo_2027 || "2º/3º ANO";
   var sem2027 = d.semestre_2027 || "2027.1";
-  var atendimentoEsp = d.necessitaAtendimentoEspecializado ? ("SIM (" + (d.descricaoAtendimentoEspecializado || "Solicitado") + ")") : "NÃO";
+  var temEspEmail = (
+    String(d.necessitaAtendimentoEspecializado || "").trim().toLowerCase() === "sim" ||
+    d.necessitaAtendimentoEspecializado === true ||
+    String(d.necessita_atendimento_especializado || "").trim().toUpperCase() === "SIM" ||
+    (typeof d.descricaoAtendimentoEspecializado === "string" && d.descricaoAtendimentoEspecializado.trim().length > 0)
+  );
+  var atendimentoEsp = temEspEmail ? ("SIM (" + (d.descricaoAtendimentoEspecializado || "Solicitado") + ")") : "NÃO (Não Solicitado)";
   var dataHora = Utilities.formatDate(new Date(), "America/Sao_Paulo", "dd/MM/yyyy 'às' HH:mm");
 
   var assunto = "Confirmação de Intenção de Matrícula 2027 - Estágio Probatório SEED-PR (" + chaveCgmLf + ")";
@@ -2019,7 +2032,7 @@ function enviarEmailConfirmacaoIntencao(d, chaveCgmLf, lfLimpa) {
         "<p style='font-size:12px;color:#475569;line-height:1.5;background:#f0fdf4;border:1px solid #bbf7d0;padding:12px;border-radius:8px;'>" +
           "<strong>Declaração de Ciência Registrada:</strong> O preenchimento deste formulário constitui pré-inscrição necessária para o planejamento e organização prévia das turmas de 2027, estando a priorização do turno e horário condicionada ao suprimento de aulas no mesmo turno no ano letivo de 2027." +
         "</p>" +
-        "<p style='font-size:12px;color:#64748b;margin-bottom:0;'>Caso necessite alterar sua opção dentro do prazo vigente, basta acessar novamente a plataforma do Estágio Probatório.</p>" +
+        "<p style='font-size:12px;color:#64748b;margin-bottom:0;'>Sua manifestação de intenção foi registrada com sucesso no sistema oficial do Estágio Probatório.</p>" +
       "</div>" +
     "</div>";
 

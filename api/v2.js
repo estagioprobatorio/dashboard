@@ -205,8 +205,11 @@ export default async function handler(req, res) {
       const turnoVal = s(d.turnoPretendido || d.opcao_turno);
       const horarioVal = s(d.horarioPretendido || d.opcao_modalidade);
 
+      const temEspecial = String(d.necessitaAtendimentoEspecializado || '').trim().toLowerCase() === 'sim' ||
+        (typeof d.descricaoAtendimentoEspecializado === 'string' && d.descricaoAtendimentoEspecializado.trim().length > 0);
+
       let obsPartes = [];
-      if (d.necessitaAtendimentoEspecializado === 'Sim' || d.descricaoAtendimentoEspecializado) {
+      if (temEspecial) {
         obsPartes.push(`[Atendimento Especial: Sim] ${d.descricaoAtendimentoEspecializado || ''}`);
       }
       if (d.decisao_duas_matriculas || d.decisaoDuasMatriculas) {
@@ -232,7 +235,7 @@ export default async function handler(req, res) {
         ano_formativo_pretendido: d.ano_formativo_pretendido || '',
         ano_formativo_anterior: d.ano_formativo_anterior || '',
         turma_anterior: d.turma_anterior || '',
-        necessitaAtendimentoEspecializado: d.necessitaAtendimentoEspecializado || 'Não',
+        necessitaAtendimentoEspecializado: temEspecial ? 'Sim' : 'Não',
         descricaoAtendimentoEspecializado: d.descricaoAtendimentoEspecializado || '',
         decisao_duas_matriculas: d.decisao_duas_matriculas || d.decisaoDuasMatriculas || 'independente',
         data_aceite_termo: d.data_aceite_termo || new Date().toISOString()

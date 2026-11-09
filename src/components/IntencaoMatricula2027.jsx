@@ -463,14 +463,12 @@ export default function IntencaoMatricula2027({
   const lfAtual = String(cursista?.linha_funcional || cursista?.lf || '1').trim();
   const cgmAtual = String(cursista?.cgm || '').trim();
   const cgm_lf = cgmAtual ? `${cgmAtual}_${lfAtual}` : `${(userEmail || '').trim().toLowerCase()}_${lfAtual}`;
-  const [modoRetificacao, setModoRetificacao] = useState(false);
   const [dispensadoPorOutroPadrao, setDispensadoPorOutroPadrao] = useState(false);
 
   // Carrega registro existente do Cursista específico para esta matrícula (CGM_LF)
   useEffect(() => {
     setRegistroExistente(null);
     setSucesso(false);
-    setModoRetificacao(false);
     setDispensadoPorOutroPadrao(false);
 
     const carregarRegistro = async () => {
@@ -571,8 +569,8 @@ export default function IntencaoMatricula2027({
 
   const handleSalvar = async (e) => {
     e.preventDefault();
-    if (registroExistente && !modoRetificacao) {
-      alert(`A intenção de vaga para a matrícula ${cgm_lf} já foi registrada (limite de 1 inscrição por matrícula). Utilize o botão "Ver Comprovante" ou "Retificar Opção" caso precise atualizar o turno.`);
+    if (registroExistente) {
+      alert(`A intenção de vaga para a matrícula ${cgm_lf} já foi registrada com sucesso.`);
       return;
     }
     if (dispensadoPorOutroPadrao) {
@@ -670,7 +668,6 @@ export default function IntencaoMatricula2027({
 
       setRegistroExistente(dadosRegistro);
       setComprovanteAtual(dadosRegistro);
-      setModoRetificacao(false);
       if (typeof onIntencaoSalva === 'function') {
         try { onIntencaoSalva(dadosRegistro); } catch (e) { console.warn(e); }
       }
@@ -1401,41 +1398,6 @@ export default function IntencaoMatricula2027({
                     >
                       🖨️ Imprimir Comprovante
                     </button>
-                    {!modoRetificacao ? (
-                      <button
-                        type="button"
-                        onClick={() => setModoRetificacao(true)}
-                        style={{
-                          backgroundColor: '#fffbeb',
-                          color: '#b45309',
-                          border: '1px solid #fcd34d',
-                          borderRadius: '6px',
-                          padding: '0.4rem 0.75rem',
-                          fontSize: '0.78rem',
-                          fontWeight: 700,
-                          cursor: 'pointer'
-                        }}
-                      >
-                        ✏️ Retificar Turno
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setModoRetificacao(false)}
-                        style={{
-                          backgroundColor: '#f1f5f9',
-                          color: '#475569',
-                          border: '1px solid #cbd5e1',
-                          borderRadius: '6px',
-                          padding: '0.4rem 0.75rem',
-                          fontSize: '0.78rem',
-                          fontWeight: 700,
-                          cursor: 'pointer'
-                        }}
-                      >
-                        ✕ Cancelar Retificação
-                      </button>
-                    )}
                   </div>
                 </div>
               )}
@@ -1571,6 +1533,7 @@ export default function IntencaoMatricula2027({
                   </label>
                   <select
                     value={form.turnoPretendido}
+                    disabled={!!registroExistente}
                     onChange={e => setForm({ ...form, turnoPretendido: e.target.value })}
                     style={{
                       width: '100%',
@@ -1579,9 +1542,10 @@ export default function IntencaoMatricula2027({
                       border: '1px solid #0072bc',
                       fontSize: '0.9rem',
                       fontWeight: 700,
-                      backgroundColor: '#ffffff',
+                      backgroundColor: registroExistente ? '#f8fafc' : '#ffffff',
                       color: '#001d3d',
-                      boxSizing: 'border-box'
+                      boxSizing: 'border-box',
+                      cursor: registroExistente ? 'not-allowed' : 'default'
                     }}
                   >
                     {turnosValidos.map(t => (
@@ -1600,6 +1564,7 @@ export default function IntencaoMatricula2027({
                   </label>
                   <select
                     value={form.horarioPretendido}
+                    disabled={!!registroExistente}
                     onChange={e => setForm({ ...form, horarioPretendido: e.target.value })}
                     style={{
                       width: '100%',
@@ -1608,9 +1573,10 @@ export default function IntencaoMatricula2027({
                       border: '1px solid #0072bc',
                       fontSize: '0.9rem',
                       fontWeight: 700,
-                      backgroundColor: '#ffffff',
+                      backgroundColor: registroExistente ? '#f8fafc' : '#ffffff',
                       color: '#001d3d',
-                      boxSizing: 'border-box'
+                      boxSizing: 'border-box',
+                      cursor: registroExistente ? 'not-allowed' : 'default'
                     }}
                   >
                     {horariosDisponiveis.map(h => (
@@ -1645,8 +1611,18 @@ export default function IntencaoMatricula2027({
                   </label>
                   <select
                     value={form.necessitaAtendimentoEspecializado}
+                    disabled={!!registroExistente}
                     onChange={e => setForm({ ...form, necessitaAtendimentoEspecializado: e.target.value })}
-                    style={{ width: '100%', maxWidth: '240px', padding: '0.55rem', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                    style={{
+                      width: '100%',
+                      maxWidth: '240px',
+                      padding: '0.55rem',
+                      borderRadius: '6px',
+                      border: '1px solid #cbd5e1',
+                      fontSize: '0.85rem',
+                      backgroundColor: registroExistente ? '#f8fafc' : '#ffffff',
+                      cursor: registroExistente ? 'not-allowed' : 'default'
+                    }}
                   >
                     <option value="Não">Não</option>
                     <option value="Sim">Sim</option>
@@ -1660,6 +1636,7 @@ export default function IntencaoMatricula2027({
                       <textarea
                         rows={3}
                         required
+                        disabled={!!registroExistente}
                         placeholder="Descreva aqui os detalhes da necessidade de atendimento especializado ou recursos pedagógicos de acessibilidade..."
                         value={form.descricaoAtendimentoEspecializado}
                         onChange={e => setForm({ ...form, descricaoAtendimentoEspecializado: e.target.value })}
@@ -1670,7 +1647,9 @@ export default function IntencaoMatricula2027({
                           border: '1px solid #cbd5e1',
                           fontSize: '0.85rem',
                           fontFamily: 'inherit',
-                          boxSizing: 'border-box'
+                          boxSizing: 'border-box',
+                          backgroundColor: registroExistente ? '#f8fafc' : '#ffffff',
+                          cursor: registroExistente ? 'not-allowed' : 'text'
                         }}
                       />
                     </div>
@@ -1717,6 +1696,7 @@ export default function IntencaoMatricula2027({
                         type="radio"
                         name="decisaoDuasMatriculas"
                         value="manter_duas"
+                        disabled={!!registroExistente}
                         checked={form.decisaoDuasMatriculas === 'manter_duas'}
                         onChange={e => setForm({ ...form, decisaoDuasMatriculas: e.target.value })}
                         style={{ marginTop: '0.2rem', accentColor: '#7c3aed' }}
@@ -1746,6 +1726,7 @@ export default function IntencaoMatricula2027({
                         type="radio"
                         name="decisaoDuasMatriculas"
                         value="apenas_padrao_1"
+                        disabled={!!registroExistente}
                         checked={form.decisaoDuasMatriculas === 'apenas_padrao_1'}
                         onChange={e => setForm({ ...form, decisaoDuasMatriculas: e.target.value })}
                         style={{ marginTop: '0.2rem', accentColor: '#7c3aed' }}
@@ -1775,6 +1756,7 @@ export default function IntencaoMatricula2027({
                         type="radio"
                         name="decisaoDuasMatriculas"
                         value="apenas_padrao_2"
+                        disabled={!!registroExistente}
                         checked={form.decisaoDuasMatriculas === 'apenas_padrao_2'}
                         onChange={e => setForm({ ...form, decisaoDuasMatriculas: e.target.value })}
                         style={{ marginTop: '0.2rem', accentColor: '#7c3aed' }}
@@ -1806,13 +1788,14 @@ export default function IntencaoMatricula2027({
                 <input
                   type="checkbox"
                   id="termoConcordancia"
+                  disabled={!!registroExistente}
                   checked={form.termoAceito || false}
                   onChange={e => setForm({ ...form, termoAceito: e.target.checked })}
                   style={{
                     marginTop: '0.2rem',
                     width: '20px',
                     height: '20px',
-                    cursor: 'pointer',
+                    cursor: registroExistente ? 'not-allowed' : 'pointer',
                     accentColor: '#00984a',
                     flexShrink: 0
                   }}
@@ -1925,7 +1908,7 @@ export default function IntencaoMatricula2027({
                     </button>
                   )}
 
-                  {registroExistente && !modoRetificacao ? (
+                  {registroExistente ? (
                     <button
                       type="button"
                       onClick={() => imprimirComprovanteIntencao2027(montarPayloadComprovante())}
@@ -1971,9 +1954,7 @@ export default function IntencaoMatricula2027({
                           ? 'Gravando...'
                           : dispensadoPorOutroPadrao
                             ? `Matrícula ${cgm_lf} Dispensada`
-                            : modoRetificacao
-                              ? `💾 Salvar Retificação (${cgm_lf})`
-                              : `💾 Confirmar Intenção (${cgm_lf})`}
+                            : `💾 Confirmar Intenção (${cgm_lf})`}
                       </span>
                     </button>
                   )}
