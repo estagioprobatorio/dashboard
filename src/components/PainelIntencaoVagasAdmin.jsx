@@ -55,55 +55,53 @@ export default function PainelIntencaoVagasAdmin({ records = [], userRole, userE
     }
   };
 
-  // 1. Unificação das Intenções (TiDB Cloud + LocalStorage Fallback) com Chave CGM_LF
+  // 1. Unificação das Intenções (TiDB Cloud + LocalStorage Fallback) com Chave CGM_LF e deduplicação por E-mail+LF
   const todasIntencoes = useMemo(() => {
     const mapa = new Map();
+    const chavesVistas = new Set();
 
-    // 1.1 Do TiDB Cloud
-    (intencoesList || []).forEach(item => {
-      if (!item) return;
+    const registrarItem = (item) => {
+      if (!item || item._resetAll) return;
       const cgm = String(item.cgm_cursista || item.cgm || '').trim();
       const email = String(item.email_cursista || item.email || '').trim().toLowerCase();
       const lf = String(item.linha_funcional || item.lf || '1').trim();
       const keyLf = item.cgm_lf || (cgm ? `${cgm}_${lf}` : (email ? `${email}_${lf}` : null));
-      const keyFallback = cgm ? `cgm_${cgm}` : (email ? `em_${email}` : null);
+      const keyEmailLf = email ? `emlf_${email}_${lf}` : null;
+      const keyCgmLf = cgm ? `cgmlf_${cgm}_${lf}` : null;
 
-      if (keyLf && !mapa.has(keyLf)) {
-        mapa.set(keyLf, item);
-      } else if (keyFallback && !mapa.has(keyFallback)) {
-        mapa.set(keyFallback, item);
+      if ((keyLf && chavesVistas.has(keyLf)) ||
+          (keyEmailLf && chavesVistas.has(keyEmailLf)) ||
+          (keyCgmLf && chavesVistas.has(keyCgmLf))) {
+        return;
       }
-    });
 
-    // 1.2 Do LocalStorage (registros locais salvos pelo navegador)
+      const masterKey = keyLf || keyCgmLf || keyEmailLf || `id_${item.id || mapa.size}`;
+      mapa.set(masterKey, item);
+      if (keyLf) chavesVistas.add(keyLf);
+      if (keyEmailLf) chavesVistas.add(keyEmailLf);
+      if (keyCgmLf) chavesVistas.add(keyCgmLf);
+    };
+
+    // 1.1 Do LocalStorage mais recente primeiro (para refletir gravação imediata)
     try {
       const raw = localStorage.getItem('intencoes_2027_todas');
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
-          parsed.forEach(item => {
-            const cgm = String(item.cgm_cursista || item.cgm || '').trim();
-            const email = String(item.email_cursista || item.email || '').trim().toLowerCase();
-            const lf = String(item.linha_funcional || item.lf || '1').trim();
-            const keyLf = item.cgm_lf || (cgm ? `${cgm}_${lf}` : (email ? `${email}_${lf}` : null));
-            const keyFallback = cgm ? `cgm_${cgm}` : (email ? `em_${email}` : null);
-
-            if (keyLf) {
-              mapa.set(keyLf, item);
-            } else if (keyFallback && !mapa.has(keyFallback)) {
-              mapa.set(keyFallback, item);
-            }
-          });
+          parsed.forEach(registrarItem);
         }
       }
     } catch (e) {
       console.warn('[Painel Admin] Erro ao ler intencoes do localStorage:', e);
     }
 
+    // 1.2 Do TiDB Cloud
+    (intencoesList || []).forEach(registrarItem);
+
     return Array.from(mapa.values());
   }, [intencoesList]);
 
-  // Mapa rápido de consulta de intenções por CGM_LF, por CGM, por E-mail+LF e por E-mail
+  // Mapa rápido de consulta de intenções estritamente por CGM_LF e por E-mail+LF
   const mapaConsultaIntencoes = useMemo(() => {
     const porCgmLf = new Map();
     const porCgm = new Map();
@@ -117,10 +115,11 @@ export default function PainelIntencaoVagasAdmin({ records = [], userRole, userE
       const lf = String(int.linha_funcional || int.lf || '1').trim();
       const chaveMatricula = int.cgm_lf || (cgm ? `${cgm}_${lf}` : (em ? `${em}_${lf}` : null));
 
-      if (chaveMatricula) porCgmLf.set(chaveMatricula, int);
-      if (cgm) porCgm.set(cgm, int);
+      if (chaveMatricula && !porCgmLf.has(chaveMatricula)) porCgmLf.set(chaveMatricula, int);
+      if (cgm && !porCgmLf.has(`${cgm}_${lf}`)) porCgmLf.set(`${cgm}_${lf}`, int);
+      if (cgm && !porCgm.has(cgm)) porCgm.set(cgm, int);
       if (em) {
-        porEmailLf.set(`${em}_${lf}`, int);
+        if (!porEmailLf.has(`${em}_${lf}`)) porEmailLf.set(`${em}_${lf}`, int);
         if (!porEmail.has(em)) porEmail.set(em, int);
       }
     });
@@ -146,22 +145,29 @@ export default function PainelIntencaoVagasAdmin({ records = [], userRole, userE
       if (!mapaUnicos.has(chaveUnica)) {
         const evolucao = calcularEvolucaoCursista2027(r);
         
-        // Busca intenção específica da matrícula (CGM_LF)
+        // Busca intenção específica da matrícula (CGM_LF ou E-mail_LF) sem vazar entre padrões diferentes
         let intencao = mapaConsultaIntencoes.porCgmLf.get(chaveMatricula) ||
-                       (email && mapaConsultaIntencoes.porEmailLf.get(`${email}_${lf}`)) ||
-                       (cgm && mapaConsultaIntencoes.porCgm.get(cgm)) ||
-                       (email && lf === '1' && mapaConsultaIntencoes.porEmail.get(email)) || null;
+                       (email && mapaConsultaIntencoes.porEmailLf.get(`${email}_${lf}`)) || null;
 
         if (intencao) {
-          const intKey = intencao.cgm_lf || `${intencao.cgm_cursista || intencao.cgm || ''}_${intencao.linha_funcional || 1}`;
-          intencoesPareadas.add(intKey);
+          const intLf = String(intencao.linha_funcional || intencao.lf || '1').trim();
+          const intCgm = String(intencao.cgm_cursista || intencao.cgm || '').trim();
+          const intEmail = String(intencao.email_cursista || intencao.email || '').trim().toLowerCase();
+          if (intencao.cgm_lf) intencoesPareadas.add(intencao.cgm_lf);
+          if (intCgm) intencoesPareadas.add(`${intCgm}_${intLf}`);
+          if (intEmail) intencoesPareadas.add(`${intEmail}_${intLf}`);
         }
 
-        // Verifica se houve decisão de optar por apenas uma das matrículas
+        // Verifica se no outro padrão de mesma modalidade houve decisão de optar por apenas uma das matrículas
+        const outroLf = lf === '1' ? '2' : '1';
+        const intencaoOutro = mapaConsultaIntencoes.porCgmLf.get(cgm ? `${cgm}_${outroLf}` : `${email}_${outroLf}`) ||
+                              (email && mapaConsultaIntencoes.porEmailLf.get(`${email}_${outroLf}`)) || null;
+        const decisaoGlobal = intencao?.decisao_duas_matriculas || intencaoOutro?.decisao_duas_matriculas || '';
+
         let dispensadoPorEscolha = false;
-        if (intencao?.decisao_duas_matriculas === 'apenas_padrao_1' && lf === '2') {
+        if (decisaoGlobal === 'apenas_padrao_1' && lf === '2') {
           dispensadoPorEscolha = true;
-        } else if (intencao?.decisao_duas_matriculas === 'apenas_padrao_2' && lf === '1') {
+        } else if (decisaoGlobal === 'apenas_padrao_2' && lf === '1') {
           dispensadoPorEscolha = true;
         }
 
@@ -177,14 +183,23 @@ export default function PainelIntencaoVagasAdmin({ records = [], userRole, userE
       }
     });
 
-    // Garante que qualquer intenção salva que não tenha cruzado com a base ativa (ex: conta de teste, CGM mascarado, etc.) também apareça!
+    // Garante que qualquer intenção salva que não tenha cruzado com a base ativa (ex: conta de teste fora da planilha) apareça 1 única vez
     todasIntencoes.forEach(int => {
       if (!int || int._resetAll) return;
-      const intKey = int.cgm_lf || `${int.cgm_cursista || int.cgm || ''}_${int.linha_funcional || 1}`;
-      if (!intencoesPareadas.has(intKey)) {
-        const lf = String(int.linha_funcional || int.lf || '1').trim();
-        const cgm = String(int.cgm_cursista || int.cgm || '').trim();
-        const email = String(int.email_cursista || int.email || '').trim().toLowerCase();
+      const lf = String(int.linha_funcional || int.lf || '1').trim();
+      const cgm = String(int.cgm_cursista || int.cgm || '').trim();
+      const email = String(int.email_cursista || int.email || '').trim().toLowerCase();
+      const intKey = int.cgm_lf || (cgm ? `${cgm}_${lf}` : `${email}_${lf}`);
+
+      const jaPareado = intencoesPareadas.has(intKey) ||
+                        (cgm && intencoesPareadas.has(`${cgm}_${lf}`)) ||
+                        (email && intencoesPareadas.has(`${email}_${lf}`));
+
+      if (!jaPareado) {
+        intencoesPareadas.add(intKey);
+        if (cgm) intencoesPareadas.add(`${cgm}_${lf}`);
+        if (email) intencoesPareadas.add(`${email}_${lf}`);
+
         const chaveMatricula = int.cgm_lf || (cgm ? `${cgm}_${lf}` : `${email}_${lf}`);
         const fakeRecord = {
           cgm: cgm || '—',

@@ -1312,6 +1312,11 @@ export default function AmbienteCursista({ userEmail, records, observacoes = [],
           cursista={cursistaRecord}
           records={records}
           userEmail={userEmail}
+          onIntencaoSalva={onIntencaoSalva}
+          todosVinculos={cursistaRecords}
+          isModalidadesIguais={analiseDoisPadroes.isModalidadesIguais}
+          isModalidadesDiferentesOuChamamentosDiferentes={analiseDoisPadroes.isModalidadesDiferentesOuChamamentosDiferentes}
+          onTrocarPadrao={cursistaRecords.length > 1 ? () => setSelectedRecordIndex(prev => prev === 0 ? 1 : 0) : null}
         />
       )}
 

@@ -240,12 +240,25 @@ export default async function handler(req, res) {
 
       const obsTexto = `${obsPartes.join(' | ')}||META:${JSON.stringify(metaObj)}`;
 
-      // Remove intenção anterior da mesma linha funcional para evitar duplicatas
+      // Remove intenção anterior da mesma linha funcional (e registros órfãos sem META ou padrão descartado) para evitar duplicatas
+      const decisaoDuas = d.decisao_duas_matriculas || d.decisaoDuasMatriculas || 'independente';
+      const outroLf = lf === '1' ? '2' : '1';
+      const descartouOutro = (lf === '1' && decisaoDuas === 'apenas_padrao_1') || (lf === '2' && decisaoDuas === 'apenas_padrao_2');
+      const emailCursistaNorm = lowerEmail(d.email_cursista || d.email || user.email);
+
       try {
         if (v && v.id) {
           await query('DELETE FROM intencao_matricula WHERE usuario_id = ? AND vinculo_id = ?', [alvo, v.id]);
         }
-        await query('DELETE FROM intencao_matricula WHERE usuario_id = ? AND observacao LIKE ?', [alvo, `%"cgm_lf":"${cgmLf}"%`]);
+        await query('DELETE FROM intencao_matricula WHERE usuario_id = ? AND (observacao LIKE ? OR observacao LIKE ? OR observacao NOT LIKE ?)', [
+          alvo,
+          `%"cgm_lf":"${cgmLf}"%`,
+          `%"linha_funcional":"${lf}"%`,
+          '%||META:%'
+        ]);
+        if (descartouOutro) {
+          await query('DELETE FROM intencao_matricula WHERE usuario_id = ? AND observacao LIKE ?', [alvo, `%"linha_funcional":"${outroLf}"%`]);
+        }
       } catch (eDel) {}
 
       await query(
@@ -268,10 +281,20 @@ export default async function handler(req, res) {
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
           )
         `);
-        await query('DELETE FROM intencao_matricula_2027 WHERE cgm = ?', [cgmLf]);
+        await query('DELETE FROM intencao_matricula_2027 WHERE cgm = ? OR (email = ? AND observacao LIKE ?)', [
+          cgmLf,
+          emailCursistaNorm,
+          `%"linha_funcional":"${lf}"%`
+        ]);
+        if (descartouOutro && emailCursistaNorm) {
+          await query('DELETE FROM intencao_matricula_2027 WHERE email = ? AND observacao LIKE ?', [
+            emailCursistaNorm,
+            `%"linha_funcional":"${outroLf}"%`
+          ]);
+        }
         await query(
           `INSERT INTO intencao_matricula_2027 (cgm, nome_cursista, email, componente, opcao_turno, opcao_modalidade, observacao) VALUES (?,?,?,?,?,?,?)`,
-          [s(cgmLf), s(d.nome_cursista), s(d.email_cursista || d.email || user.email), s(d.componente), turnoVal, horarioVal, s(obsTexto)]
+          [s(cgmLf), s(d.nome_cursista), s(emailCursistaNorm), s(d.componente), turnoVal, horarioVal, s(obsTexto)]
         );
       } catch (eTab2) {}
 

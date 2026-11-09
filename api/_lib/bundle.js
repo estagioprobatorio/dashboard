@@ -291,12 +291,15 @@ export async function buildBundle(user) {
     ).catch(() => []);
 
     const mapIntencoes = new Map();
+    const seenEmailLf = new Set();
     for (const r of rows) {
       const cgmRes = cgmOf(r.usuario_id, r.cgm_ultimos3, 'u_');
       const parsed = parseIntencaoRow(r, cgmRes);
-      const key = parsed.cgm_lf || `${parsed.email}_${parsed.linha_funcional}` || `id_${r.id}`;
-      if (!mapIntencoes.has(key)) {
+      const emailLfKey = parsed.email ? `${parsed.email}_${parsed.linha_funcional}` : null;
+      const key = parsed.cgm_lf || emailLfKey || `id_${r.id}`;
+      if (!mapIntencoes.has(key) && (!emailLfKey || !seenEmailLf.has(emailLfKey))) {
         mapIntencoes.set(key, parsed);
+        if (emailLfKey) seenEmailLf.add(emailLfKey);
       }
     }
 
@@ -305,9 +308,11 @@ export async function buildBundle(user) {
     for (const r2 of rows2027) {
       const parsed2 = parseIntencaoRow(r2, r2.cgm ? String(r2.cgm).split('_')[0] : '');
       if (!canSeeAllIntencoes && parsed2.email !== String(user.email || '').toLowerCase()) continue;
-      const key2 = parsed2.cgm_lf || `${parsed2.email}_${parsed2.linha_funcional}` || `id2_${r2.id}`;
-      if (!mapIntencoes.has(key2)) {
+      const emailLfKey2 = parsed2.email ? `${parsed2.email}_${parsed2.linha_funcional}` : null;
+      const key2 = parsed2.cgm_lf || emailLfKey2 || `id2_${r2.id}`;
+      if (!mapIntencoes.has(key2) && (!emailLfKey2 || !seenEmailLf.has(emailLfKey2))) {
         mapIntencoes.set(key2, parsed2);
+        if (emailLfKey2) seenEmailLf.add(emailLfKey2);
       }
     }
 

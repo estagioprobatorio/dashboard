@@ -399,26 +399,53 @@ export default function IntencaoMatricula2027({
   const lfAtual = String(cursista?.linha_funcional || cursista?.lf || '1').trim();
   const cgmAtual = String(cursista?.cgm || '').trim();
   const cgm_lf = cgmAtual ? `${cgmAtual}_${lfAtual}` : `${(userEmail || '').trim().toLowerCase()}_${lfAtual}`;
+  const [modoRetificacao, setModoRetificacao] = useState(false);
+  const [dispensadoPorOutroPadrao, setDispensadoPorOutroPadrao] = useState(false);
 
   // Carrega registro existente do Cursista específico para esta matrícula (CGM_LF)
   useEffect(() => {
+    setRegistroExistente(null);
+    setSucesso(false);
+    setModoRetificacao(false);
+    setDispensadoPorOutroPadrao(false);
+
     const carregarRegistro = async () => {
       const email = (userEmail || cursista?.email || cursista?.['e-mail'] || '').trim().toLowerCase();
       const cgm = String(cursista?.cgm || '').trim();
       const lf = String(cursista?.linha_funcional || cursista?.lf || '1').trim();
       const chaveMatricula = cgm ? `${cgm}_${lf}` : `${email}_${lf}`;
+      const outroLf = lf === '1' ? '2' : '1';
+      const chaveOutroPadrao = cgm ? `${cgm}_${outroLf}` : `${email}_${outroLf}`;
 
-      // 1. Tenta carregar do LocalStorage por CGM_LF (prioridade máxima para dois padrões)
+      // Verifica se no outro padrão de mesma modalidade o cursista optou por cursar apenas no outro padrão
+      if (isModalidadesIguais) {
+        try {
+          const outroLocal = localStorage.getItem(`intencao_2027_${chaveOutroPadrao}`);
+          if (outroLocal) {
+            const parsedOutro = JSON.parse(outroLocal);
+            const dec = parsedOutro.decisao_duas_matriculas || parsedOutro.decisaoDuasMatriculas;
+            if ((lf === '2' && dec === 'apenas_padrao_1') || (lf === '1' && dec === 'apenas_padrao_2')) {
+              setDispensadoPorOutroPadrao(true);
+            }
+          }
+        } catch (e) {}
+      }
+
+      // 1. Tenta carregar do LocalStorage estritamente por CGM_LF
       try {
         const localLf = localStorage.getItem(`intencao_2027_${chaveMatricula}`);
         if (localLf) {
           const parsed = JSON.parse(localLf);
           setRegistroExistente(parsed);
-          setForm(prev => ({ ...prev, ...parsed }));
+          setForm(prev => ({
+            ...prev,
+            ...parsed,
+            termoAceito: true
+          }));
           return;
         }
 
-        // Tenta buscar na lista geral de intenções
+        // Tenta buscar na lista geral de intenções estritamente por chaveMatricula
         const listaGeralRaw = localStorage.getItem('intencoes_2027_todas');
         if (listaGeralRaw) {
           const listaGeral = JSON.parse(listaGeralRaw);
@@ -428,7 +455,11 @@ export default function IntencaoMatricula2027({
           });
           if (achadoGeral) {
             setRegistroExistente(achadoGeral);
-            setForm(prev => ({ ...prev, ...achadoGeral }));
+            setForm(prev => ({
+              ...prev,
+              ...achadoGeral,
+              termoAceito: true
+            }));
             return;
           }
         }
@@ -436,7 +467,7 @@ export default function IntencaoMatricula2027({
         console.warn('Erro ao ler localStorage por chaveMatricula:', e);
       }
 
-      // 2. Tenta carregar do TiDB Cloud Serverless
+      // 2. Tenta carregar do TiDB Cloud Serverless estritamente para esta matrícula (CGM_LF)
       try {
         const cached = localStorage.getItem('ep_tidb_cached_bundle');
         let listaIntencoes = [];
@@ -447,43 +478,48 @@ export default function IntencaoMatricula2027({
           }
         }
         const achado = listaIntencoes.find(i => {
-          const itemKey = i.cgm_lf || (i.cgm ? `${i.cgm}_${i.linha_funcional || 1}` : null);
+          const iLf = String(i.linha_funcional || i.lf || '1').trim();
+          const itemKey = i.cgm_lf || (i.cgm ? `${i.cgm}_${iLf}` : null);
           if (itemKey && itemKey === chaveMatricula) return true;
-          return (cgm && String(i.cgm) === cgm) || (email && String(i.email || '').trim().toLowerCase() === email);
+          const sameUser = (cgm && String(i.cgm_cursista || i.cgm) === cgm) || (email && String(i.email_cursista || i.email || '').trim().toLowerCase() === email);
+          return sameUser && iLf === lf;
         });
         if (achado) {
           setRegistroExistente(achado);
           setForm(prev => ({
             ...prev,
-            turnoPretendido: achado.opcao_turno || prev.turnoPretendido,
-            horarioPretendido: achado.opcao_modalidade || prev.horarioPretendido,
-            descricaoAtendimentoEspecializado: achado.observacao || ''
+            turnoPretendido: achado.turnoPretendido || achado.opcao_turno || prev.turnoPretendido,
+            horarioPretendido: achado.horarioPretendido || achado.opcao_modalidade || prev.horarioPretendido,
+            necessitaAtendimentoEspecializado: achado.necessitaAtendimentoEspecializado || prev.necessitaAtendimentoEspecializado,
+            descricaoAtendimentoEspecializado: achado.descricaoAtendimentoEspecializado || achado.observacao || '',
+            decisaoDuasMatriculas: achado.decisao_duas_matriculas || prev.decisaoDuasMatriculas,
+            termoAceito: true
           }));
           return;
         }
       } catch (e) {
         console.warn('[Intencao 2027] Falha ao verificar TiDB:', e);
       }
-
-      // 3. Fallback legado simples por CGM
-      try {
-        const key = cgm ? `intencao_2027_cgm_${cgm}` : `intencao_2027_${email}`;
-        const local = localStorage.getItem(key);
-        if (local) {
-          const parsed = JSON.parse(local);
-          setRegistroExistente(parsed);
-          setForm(prev => ({ ...prev, ...parsed }));
-        }
-      } catch (e) {
-        console.error(e);
-      }
     };
 
     carregarRegistro();
-  }, [userEmail, cursista]);
+  }, [userEmail, cursista, isModalidadesIguais]);
 
   const handleSalvar = async (e) => {
     e.preventDefault();
+    if (registroExistente && !modoRetificacao) {
+      alert(`A intenção de vaga para a matrícula ${cgm_lf} já foi registrada (limite de 1 inscrição por matrícula). Utilize o botão "Ver Comprovante" ou "Retificar Opção" caso precise atualizar o turno.`);
+      return;
+    }
+    if (dispensadoPorOutroPadrao) {
+      alert('Esta matrícula está dispensada de preenchimento pois você optou por cursar apenas no outro padrão.');
+      return;
+    }
+    if ((lfAtual === '2' && form.decisaoDuasMatriculas === 'apenas_padrao_1') ||
+        (lfAtual === '1' && form.decisaoDuasMatriculas === 'apenas_padrao_2')) {
+      alert(`Você selecionou cursar apenas no Padrão ${lfAtual === '2' ? '1' : '2'}. Portanto, confirme a inscrição diretamente na aba do Padrão ${lfAtual === '2' ? '1' : '2'}.`);
+      return;
+    }
     if (!form.termoAceito) {
       alert('Para confirmar a pré-inscrição de intenção de vaga para 2027, é obrigatório assinalar o termo de ciência e concordância.');
       return;
@@ -503,7 +539,7 @@ export default function IntencaoMatricula2027({
         ...form,
         termo_aceito: true,
         data_aceite_termo: new Date().toISOString(),
-        id: `intencao-${chaveMatricula}-${Date.now()}`,
+        id: `intencao-${chaveMatricula}`,
         cgm_lf: chaveMatricula,
         linha_funcional: lf,
         nome_cursista: nome,
@@ -536,20 +572,31 @@ export default function IntencaoMatricula2027({
         console.warn('Erro ao salvar intenção via DriveService:', err);
       }
 
-      // 3. Salva no LocalStorage com chave específica por matrícula (CGM_LF)
+      // 3. Salva no LocalStorage com chave específica por matrícula (CGM_LF) e respeita limite de 1 por matrícula
       try {
         const keyLf = `intencao_2027_${chaveMatricula}`;
         localStorage.setItem(keyLf, JSON.stringify(dadosRegistro));
 
-        const keyLegacy = cgm ? `intencao_2027_cgm_${cgm}` : `intencao_2027_${email}`;
-        localStorage.setItem(keyLegacy, JSON.stringify(dadosRegistro));
+        // Se optou por apenas 1 padrão em modalidades iguais, remove eventual inscrição do outro padrão descartado
+        const outroLf = lf === '1' ? '2' : '1';
+        const chaveOutro = cgm ? `${cgm}_${outroLf}` : `${email}_${outroLf}`;
+        const descartouOutro = isModalidadesIguais && (
+          (lf === '1' && form.decisaoDuasMatriculas === 'apenas_padrao_1') ||
+          (lf === '2' && form.decisaoDuasMatriculas === 'apenas_padrao_2')
+        );
+        if (descartouOutro) {
+          localStorage.removeItem(`intencao_2027_${chaveOutro}`);
+        }
 
         const listaGeralRaw = localStorage.getItem('intencoes_2027_todas');
         const listaGeral = listaGeralRaw ? JSON.parse(listaGeralRaw) : [];
         const semDuplicata = listaGeral.filter(item => {
-          const itemKey = item.cgm_lf || (item.cgm_cursista ? `${item.cgm_cursista}_${item.linha_funcional || 1}` : null);
-          if (itemKey && itemKey === chaveMatricula) return false;
-          if (!itemKey && item.cgm_cursista === cgm && item.email_cursista === email) return false;
+          const itemLf = String(item.linha_funcional || item.lf || '1').trim();
+          const itemKey = item.cgm_lf || (item.cgm_cursista ? `${item.cgm_cursista}_${itemLf}` : `${item.email_cursista || ''}_${itemLf}`);
+          if (itemKey === chaveMatricula) return false;
+          if (descartouOutro && itemKey === chaveOutro) return false;
+          if (cgm && String(item.cgm_cursista || item.cgm) === cgm && itemLf === lf) return false;
+          if (email && String(item.email_cursista || item.email || '').toLowerCase() === email && itemLf === lf) return false;
           return true;
         });
         semDuplicata.unshift(dadosRegistro);
@@ -560,6 +607,7 @@ export default function IntencaoMatricula2027({
 
       setRegistroExistente(dadosRegistro);
       setComprovanteAtual(dadosRegistro);
+      setModoRetificacao(false);
       if (typeof onIntencaoSalva === 'function') {
         try { onIntencaoSalva(dadosRegistro); } catch (e) { console.warn(e); }
       }
@@ -609,8 +657,8 @@ export default function IntencaoMatricula2027({
       ...base,
       nome_cursista: base.nome_cursista || nomeExibicao,
       email_cursista: (userEmail || base.email_cursista || cursista?.email || cursista?.['e-mail'] || '').trim().toLowerCase(),
-      cgm_cursista: base.cgm_cursista || cgmBase || cursista?.cgm || '',
-      linha_funcional: base.linha_funcional || linhaFuncionalAtual || '1',
+      cgm_cursista: base.cgm_cursista || cgmAtual || cursista?.cgm || '',
+      linha_funcional: base.linha_funcional || lfAtual || '1',
       cgm_lf: base.cgm_lf || cgm_lf,
       nre: base.nre || nreCursista,
       componente: base.componente || componenteCursista,
@@ -732,7 +780,7 @@ export default function IntencaoMatricula2027({
                   </div>
                   <div>
                     <span style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', display: 'block' }}>Matrícula / CGM_LF:</span>
-                    <strong>{cgm_lf} (Padrão {linhaFuncionalAtual})</strong>
+                    <strong>{cgm_lf} (Padrão {lfAtual})</strong>
                   </div>
                   <div>
                     <span style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', display: 'block' }}>NRE de Lotação:</span>
@@ -1215,12 +1263,35 @@ export default function IntencaoMatricula2027({
                 </div>
               )}
 
+              {dispensadoPorOutroPadrao && (
+                <div style={{
+                  backgroundColor: '#fef3c7',
+                  border: '1px solid #f59e0b',
+                  borderRadius: '10px',
+                  padding: '0.85rem 1.1rem',
+                  fontSize: '0.83rem',
+                  color: '#92400e',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '0.75rem'
+                }}>
+                  <div>
+                    <strong>ℹ️ Matrícula {cgm_lf} dispensada de preenchimento</strong>
+                    <div style={{ fontSize: '0.78rem', color: '#b45309', marginTop: '0.15rem' }}>
+                      Você optou por realizar a formação de 2027 apenas no seu outro padrão (mesma modalidade). O limite de registros pelas regras de negócio já foi atingido.
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {registroExistente && !sucesso && (
                 <div style={{
                   backgroundColor: '#f0fdf4',
-                  border: '1px solid #86efac',
+                  border: '2px solid #86efac',
                   borderRadius: '10px',
-                  padding: '0.85rem 1.1rem',
+                  padding: '0.95rem 1.15rem',
                   fontSize: '0.83rem',
                   color: '#166534',
                   display: 'flex',
@@ -1230,7 +1301,7 @@ export default function IntencaoMatricula2027({
                   gap: '0.75rem'
                 }}>
                   <div>
-                    <strong>✓ Intenção já registrada para a matrícula {cgm_lf}</strong>
+                    <strong>✓ Intenção já registrada para a matrícula {cgm_lf} (Limite de 1 registro por matrícula atingido)</strong>
                     <div style={{ fontSize: '0.77rem', color: '#15803d', marginTop: '0.15rem' }}>
                       🕒 Carimbo de data e hora: <strong>{formatarCarimboDataHora(registroExistente.data_aceite_termo || registroExistente.created_at || registroExistente.timestamp)}</strong> · Turno: <strong>{registroExistente.turnoPretendido || registroExistente.opcao_turno || form.turnoPretendido}</strong>
                     </div>
@@ -1271,6 +1342,41 @@ export default function IntencaoMatricula2027({
                     >
                       🖨️ Imprimir Comprovante
                     </button>
+                    {!modoRetificacao ? (
+                      <button
+                        type="button"
+                        onClick={() => setModoRetificacao(true)}
+                        style={{
+                          backgroundColor: '#fffbeb',
+                          color: '#b45309',
+                          border: '1px solid #fcd34d',
+                          borderRadius: '6px',
+                          padding: '0.4rem 0.75rem',
+                          fontSize: '0.78rem',
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ✏️ Retificar Turno
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setModoRetificacao(false)}
+                        style={{
+                          backgroundColor: '#f1f5f9',
+                          color: '#475569',
+                          border: '1px solid #cbd5e1',
+                          borderRadius: '6px',
+                          padding: '0.4rem 0.75rem',
+                          fontSize: '0.78rem',
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ✕ Cancelar Retificação
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
@@ -1760,27 +1866,58 @@ export default function IntencaoMatricula2027({
                     </button>
                   )}
 
-                  <button
-                    type="submit"
-                    disabled={salvando || !form.termoAceito}
-                    style={{
-                      backgroundColor: form.termoAceito ? '#00984a' : '#94a3b8',
-                      color: '#ffffff',
-                      border: 'none',
-                      borderRadius: '10px',
-                      padding: '0.85rem 1.85rem',
-                      fontSize: '0.95rem',
-                      fontWeight: 800,
-                      cursor: (salvando || !form.termoAceito) ? 'not-allowed' : 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.5rem',
-                      boxShadow: form.termoAceito ? '0 4px 14px rgba(0, 152, 74, 0.3)' : 'none',
-                      transition: 'all 0.2s ease-in-out'
-                    }}
-                  >
-                    <span>{salvando ? 'Gravando...' : `💾 Confirmar Intenção (${cgm_lf})`}</span>
-                  </button>
+                  {registroExistente && !modoRetificacao ? (
+                    <button
+                      type="button"
+                      onClick={() => imprimirComprovanteIntencao2027(montarPayloadComprovante())}
+                      style={{
+                        backgroundColor: '#002d5c',
+                        color: '#ffffff',
+                        border: 'none',
+                        borderRadius: '10px',
+                        padding: '0.85rem 1.85rem',
+                        fontSize: '0.95rem',
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        boxShadow: '0 4px 14px rgba(0, 45, 92, 0.25)'
+                      }}
+                    >
+                      <span>✓ Matrícula {cgm_lf} Já Registrada · 🖨️ Imprimir Comprovante</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="submit"
+                      disabled={salvando || !form.termoAceito || dispensadoPorOutroPadrao}
+                      style={{
+                        backgroundColor: (form.termoAceito && !dispensadoPorOutroPadrao) ? '#00984a' : '#94a3b8',
+                        color: '#ffffff',
+                        border: 'none',
+                        borderRadius: '10px',
+                        padding: '0.85rem 1.85rem',
+                        fontSize: '0.95rem',
+                        fontWeight: 800,
+                        cursor: (salvando || !form.termoAceito || dispensadoPorOutroPadrao) ? 'not-allowed' : 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        boxShadow: (form.termoAceito && !dispensadoPorOutroPadrao) ? '0 4px 14px rgba(0, 152, 74, 0.3)' : 'none',
+                        transition: 'all 0.2s ease-in-out'
+                      }}
+                    >
+                      <span>
+                        {salvando
+                          ? 'Gravando...'
+                          : dispensadoPorOutroPadrao
+                            ? `Matrícula ${cgm_lf} Dispensada`
+                            : modoRetificacao
+                              ? `💾 Salvar Retificação (${cgm_lf})`
+                              : `💾 Confirmar Intenção (${cgm_lf})`}
+                      </span>
+                    </button>
+                  )}
                 </div>
               </div>
 

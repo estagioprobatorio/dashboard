@@ -154,18 +154,24 @@ export const driveDataService = {
       }
     }
 
-    // Salva cópia local
+    // Salva cópia local por matrícula (CGM_LF) respeitando o limite de 1 registro por matrícula
     try {
-      const key = dadosIntencao.cgm_cursista 
-        ? `intencao_2027_cgm_${dadosIntencao.cgm_cursista}` 
-        : `intencao_2027_${dadosIntencao.email_cursista}`;
-      localStorage.setItem(key, JSON.stringify(dadosIntencao));
+      const lf = String(dadosIntencao.linha_funcional || dadosIntencao.lf || '1').trim();
+      const cgm = String(dadosIntencao.cgm_cursista || dadosIntencao.cgm || '').trim();
+      const email = String(dadosIntencao.email_cursista || dadosIntencao.email || '').trim().toLowerCase();
+      const chaveMatricula = dadosIntencao.cgm_lf || (cgm ? `${cgm}_${lf}` : `${email}_${lf}`);
+
+      localStorage.setItem(`intencao_2027_${chaveMatricula}`, JSON.stringify(dadosIntencao));
 
       const lista = JSON.parse(localStorage.getItem('intencoes_2027_todas') || '[]');
-      const filtrada = lista.filter(item => 
-        String(item.cgm_cursista) !== String(dadosIntencao.cgm_cursista) && 
-        item.email_cursista !== dadosIntencao.email_cursista
-      );
+      const filtrada = lista.filter(item => {
+        const itemLf = String(item.linha_funcional || item.lf || '1').trim();
+        const itemKey = item.cgm_lf || (item.cgm_cursista ? `${item.cgm_cursista}_${itemLf}` : `${item.email_cursista || ''}_${itemLf}`);
+        if (itemKey === chaveMatricula) return false;
+        if (cgm && String(item.cgm_cursista || item.cgm) === cgm && itemLf === lf) return false;
+        if (email && String(item.email_cursista || item.email || '').toLowerCase() === email && itemLf === lf) return false;
+        return true;
+      });
       filtrada.unshift(dadosIntencao);
       localStorage.setItem('intencoes_2027_todas', JSON.stringify(filtrada));
     } catch (e) {}
