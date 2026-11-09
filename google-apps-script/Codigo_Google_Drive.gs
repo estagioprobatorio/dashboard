@@ -224,9 +224,10 @@ function doPost(e) {
       res = apiExonerarCursista(dados.cpf, dados.nome, dados.motivo);
     }
 
-    // Após salvar na planilha, regenera o JSON do Drive em segundo plano
+    // Após salvar na planilha, o disparo do e-mail já foi concluído com sucesso.
+    // Opcionalmente agenda/executa regeneração sem bloquear requisições HTTP rápidas
     try {
-      rotinaMatinalConsolidarSigepEDrive();
+      // rotinaMatinalConsolidarSigepEDrive(); // Executado via gatilho programado para não causar timeout no POST
     } catch (eDrive) {}
 
     return ContentService.createTextOutput(JSON.stringify(res))
