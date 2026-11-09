@@ -222,6 +222,16 @@ export default async function handler(req, res) {
         );
       } catch (eTab2) {}
 
+      // Notifica o Google Apps Script para gravação em planilha e disparo do e-mail institucional
+      const scriptUrl = process.env.APPS_SCRIPT_URL || process.env.VITE_APPS_SCRIPT_URL;
+      if (scriptUrl) {
+        fetch(scriptUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'salvar_intencao_2027', dados: d })
+        }).catch(() => null);
+      }
+
       return res.status(200).json({ status: 'success' });
     }
 

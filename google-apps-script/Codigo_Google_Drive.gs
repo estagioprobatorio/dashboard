@@ -879,6 +879,7 @@ function enviarEmailConfirmacaoIntencao(payload) {
 
     MailApp.sendEmail({
       to: destinatario,
+      cc: "jorge.dotti@escola.pr.gov.br, estagioprobatorio@escola.pr.gov.br",
       subject: assunto,
       body: corpoTexto,
       htmlBody: corpoHtml

@@ -252,6 +252,8 @@ export default function IntencaoMatricula2027({
   const [salvando, setSalvando] = useState(false);
   const [sucesso, setSucesso] = useState(false);
   const [registroExistente, setRegistroExistente] = useState(null);
+  const [modalComprovanteAberto, setModalComprovanteAberto] = useState(false);
+  const [comprovanteAtual, setComprovanteAtual] = useState(null);
   const [showInformativoModal, setShowInformativoModal] = useState(() => {
     return sessionStorage.getItem('fechou_informativo_2027') !== 'true';
   });
@@ -556,11 +558,13 @@ export default function IntencaoMatricula2027({
       }
 
       setRegistroExistente(dadosRegistro);
+      setComprovanteAtual(dadosRegistro);
       if (typeof onIntencaoSalva === 'function') {
         try { onIntencaoSalva(dadosRegistro); } catch (e) { console.warn(e); }
       }
       setSucesso(true);
-      setTimeout(() => setSucesso(false), 8000);
+      setModalComprovanteAberto(true);
+      setTimeout(() => setSucesso(false), 12000);
     } catch (eGeral) {
       console.error('[handleSalvar] Erro ao processar intenção:', eGeral);
       alert('Aviso: Os dados foram registrados localmente.');
@@ -600,6 +604,187 @@ export default function IntencaoMatricula2027({
   return (
     <div style={{ maxWidth: '980px', margin: '0 auto', padding: '1rem', boxSizing: 'border-box' }}>
       
+      {/* ── MODAL DE COMPROVANTE OFICIAL DE INTENÇÃO REGISTRADA ── */}
+      {modalComprovanteAberto && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 29, 61, 0.8)',
+          backdropFilter: 'blur(6px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 100000,
+          padding: '1rem'
+        }}>
+          <div style={{
+            backgroundColor: '#ffffff',
+            borderRadius: '16px',
+            maxWidth: '620px',
+            width: '100%',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
+            border: '1px solid #cbd5e1',
+            overflow: 'hidden',
+            animation: 'fadeIn 0.2s ease-out'
+          }}>
+            {/* Cabeçalho do Comprovante */}
+            <div style={{
+              background: 'linear-gradient(135deg, #007a33 0%, #00984a 100%)',
+              padding: '1.25rem 1.5rem',
+              color: '#ffffff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '1rem'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <span style={{ fontSize: '1.6rem' }}>✓</span>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>
+                    Intenção de Vaga Confirmada · 2027
+                  </h3>
+                  <p style={{ margin: 0, fontSize: '0.78rem', color: '#bbf7d0' }}>
+                    Estágio Probatório · SEED-PR
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalComprovanteAberto(false)}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.2)',
+                  border: 'none',
+                  color: '#ffffff',
+                  fontSize: '1.25rem',
+                  fontWeight: 700,
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '50%',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Conteúdo do Comprovante */}
+            <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', maxHeight: '78vh', overflowY: 'auto' }}>
+              
+              {/* Notificação de Envio de E-mail com Cópia para Jorge Dotti e Coordenação */}
+              <div style={{
+                backgroundColor: '#f0fdf4',
+                border: '1px solid #86efac',
+                borderRadius: '10px',
+                padding: '1rem',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '0.75rem'
+              }}>
+                <span style={{ fontSize: '1.3rem' }}>📧</span>
+                <div style={{ fontSize: '0.84rem', color: '#166534', lineHeight: 1.5 }}>
+                  <strong>Confirmação Oficial de Envio:</strong><br />
+                  O comprovante de pré-inscrição foi registrado e emitido para o cursista em <strong>{(userEmail || cursista?.email || cursista?.['e-mail'] || '').trim().toLowerCase()}</strong>.
+                  <div style={{ marginTop: '0.35rem', color: '#15803d', fontSize: '0.78rem' }}>
+                    ✓ <strong>Cópia arquivada para a Coordenação:</strong> jorge.dotti@escola.pr.gov.br e estagioprobatorio@escola.pr.gov.br
+                  </div>
+                </div>
+              </div>
+
+              {/* Tabela de Dados Registrados */}
+              <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1rem' }}>
+                <div style={{ fontWeight: 800, fontSize: '0.8rem', color: '#002d5c', textTransform: 'uppercase', marginBottom: '0.75rem', letterSpacing: '0.04em' }}>
+                  📋 Resumo da Manifestação de Intenção
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.65rem', fontSize: '0.84rem' }}>
+                  <div>
+                    <span style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', display: 'block' }}>Docente:</span>
+                    <strong>{nomeExibicao}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', display: 'block' }}>Matrícula / CGM_LF:</span>
+                    <strong>{cgm_lf}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', display: 'block' }}>NRE de Lotação:</span>
+                    <strong>{nreCursista}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', display: 'block' }}>Componente Curricular:</span>
+                    <strong>{componenteCursista}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', display: 'block' }}>Etapa Pretendida 2027:</span>
+                    <strong style={{ color: '#0072bc' }}>{evolucao.anoNecessario2027 || '2027/1'}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', display: 'block' }}>Dia Formativo Semanal:</span>
+                    <strong>{diaSemanaFixo}</strong>
+                  </div>
+                  <div style={{ gridColumn: '1 / -1', backgroundColor: '#ffffff', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
+                    <span style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', display: 'block' }}>Turno e Horário Escolhidos:</span>
+                    <span style={{ fontSize: '0.95rem', fontWeight: 800, color: '#008744' }}>
+                      {form.turnoPretendido} · {form.horarioPretendido}
+                    </span>
+                  </div>
+                  {form.necessitaAtendimentoEspecializado === 'Sim' && (
+                    <div style={{ gridColumn: '1 / -1', backgroundColor: '#fef3c7', padding: '0.65rem 0.85rem', borderRadius: '8px', border: '1px solid #fde047' }}>
+                      <strong style={{ color: '#92400e', fontSize: '0.8rem', display: 'block' }}>♿ Atendimento Especializado Requisitado:</strong>
+                      <span style={{ fontSize: '0.8rem', color: '#78350f' }}>{form.descricaoAtendimentoEspecializado}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Botões do Modal */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.65rem', marginTop: '0.5rem' }}>
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  style={{
+                    backgroundColor: '#f1f5f9',
+                    color: '#0f172a',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '8px',
+                    padding: '0.65rem 1.1rem',
+                    fontSize: '0.85rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem'
+                  }}
+                >
+                  <span>🖨️</span> Imprimir Comprovante
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModalComprovanteAberto(false)}
+                  style={{
+                    backgroundColor: '#00984a',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '0.65rem 1.25rem',
+                    fontSize: '0.85rem',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  ✓ Concluir
+                </button>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── MODAL INFORMATIVO OFICIAL AO CURSISTA (POPUP AO LOGAR / ACESSAR) ── */}
       {showInformativoModal && (
         <div style={{
@@ -1404,6 +1589,54 @@ export default function IntencaoMatricula2027({
                   Declaro estar ciente de que o preenchimento deste formulário constitui uma <strong>pré-inscrição estritamente necessária para o planejamento e a organização prévia das turmas de 2027</strong>. Concordo que a priorização do turno e do horário solicitados estará <strong>condicionada à confirmação do meu suprimento de aulas no mesmo turno no ano letivo de 2027</strong>, conforme o processo oficial de distribuição e atribuição de vagas da SEED-PR.
                 </label>
               </div>
+
+              {/* BANNER DE CONFIRMAÇÃO DIRETO NA ÁREA DE ENVIO */}
+              {sucesso && (
+                <div style={{
+                  backgroundColor: '#f0fdf4',
+                  border: '2px solid #22c55e',
+                  color: '#15803d',
+                  padding: '1rem 1.25rem',
+                  borderRadius: '10px',
+                  fontSize: '0.9rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '0.75rem',
+                  boxShadow: '0 4px 12px rgba(34, 197, 94, 0.15)',
+                  animation: 'fadeIn 0.3s ease'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                    <span style={{ fontSize: '1.4rem' }}>✓</span>
+                    <div>
+                      <strong>Intenção confirmada com sucesso ({cgm_lf})!</strong>
+                      <div style={{ fontSize: '0.8rem', color: '#166534', marginTop: '0.15rem' }}>
+                        📧 Comprovante enviado para o cursista com cópia institucional para jorge.dotti@escola.pr.gov.br e estagioprobatorio@escola.pr.gov.br.
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setComprovanteAtual(registroExistente || form);
+                      setModalComprovanteAberto(true);
+                    }}
+                    style={{
+                      backgroundColor: '#15803d',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '6px',
+                      padding: '0.45rem 0.85rem',
+                      fontSize: '0.8rem',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    📄 Ver Comprovante
+                  </button>
+                </div>
+              )}
 
               {/* BOTÃO DE CONFIRMAÇÃO E NAVEGAÇÃO DE PADRÕES */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.85rem', marginTop: '0.5rem' }}>

@@ -2,6 +2,8 @@ import React, { useState, useMemo } from 'react';
 import IntencaoMatricula2027, { calcularEvolucaoCursista2027 } from './IntencaoMatricula2027';
 import { tidbService } from '../services/tidbService';
 import { driveDataService } from '../services/driveDataService';
+import { normalizeNre } from '../utils/nreUtils';
+import { normalizeComponenteCanonical } from '../utils/componenteUtils';
 
 export default function PainelIntencaoVagasAdmin({ records = [], userRole, userEmail, intencoesList = [] }) {
   // Aba ativa do Painel Administrativo
