@@ -72,6 +72,30 @@ export default async function handler(req, res) {
   if (action === 'undefined' || action === 'null' || !action) action = 'ping';
 
   try {
+        if (action === 'version' || action === 'meta') {
+      try {
+        const [rAud] = await query('SELECT MAX(id) as max_id, MAX(em) as max_em FROM auditoria').catch(() => [{}]);
+        const [rInt] = await query('SELECT MAX(id) as max_id, MAX(criado_em) as max_em FROM intencao_matricula').catch(() => [{}]);
+        const auditId = (rAud && rAud.max_id) || 0;
+        const auditEm = (rAud && rAud.max_em) ? new Date(rAud.max_em).getTime() : 0;
+        const intId = (rInt && rInt.max_id) || 0;
+        const intEm = (rInt && rInt.max_em) ? new Date(rInt.max_em).getTime() : 0;
+        const version = `v_${auditId}_${auditEm}_${intId}_${intEm}`;
+        res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=120');
+        return res.status(200).json({
+          status: 'ok',
+          version,
+          updated_at: new Date(Math.max(auditEm, intEm) || Date.now()).toISOString()
+        });
+      } catch (err) {
+        return res.status(200).json({
+          status: 'ok',
+          version: 'v_fallback',
+          updated_at: new Date().toISOString()
+        });
+      }
+    }
+
     if (action === 'ping' || action === 'health') {
       try {
         const r = await query('SELECT 1 as ok');
@@ -103,7 +127,10 @@ export default async function handler(req, res) {
     const user = await authenticate(req, { optional: isBundleAction });
 
     if (action === 'me') return res.status(200).json({ id: user.id, email: user.email, nome: user.nome, funcao: user.funcao });
-    if (action === 'bundle' || action === 'get_all') return res.status(200).json(await buildBundle(user));
+    if (action === 'bundle' || action === 'get_all') {
+      res.setHeader('Cache-Control', 'private, max-age=300, stale-while-revalidate=60');
+      return res.status(200).json(await buildBundle(user));
+    }
 
     if (action === 'insert_observacao') {
       exigeFuncao(user, ...STAFF, 'tutor', 'formador');

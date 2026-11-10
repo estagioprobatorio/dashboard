@@ -59,7 +59,7 @@ html, body, #root, .app-container {
 
 body {
   font-family: var(--font-primary);
-  background: url('/fundo.png') center center / cover no-repeat fixed #f1f5f9;
+  background: url('/fundo.webp') center center / cover no-repeat fixed #f1f5f9;
   color: var(--color-text-main);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;

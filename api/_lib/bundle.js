@@ -170,7 +170,7 @@ export async function buildBundle(user) {
 
   // ----- tutores -----
   let tutRows;
-  if (staff || isVisualizador) {
+  if (staff) {
     tutRows = await query(`SELECT u.nome AS tutor_responsavel, u.email_inst AS email_educ, u.email_alt AS email_adm, u.telefone,
       n.nome AS nre_tutor, n.email AS email_nre FROM usuario u LEFT JOIN nre n ON n.id = u.nre_id
       WHERE u.funcao = 'tutor' AND u.ativo = 1 ORDER BY u.nome`);
@@ -186,36 +186,63 @@ export async function buildBundle(user) {
   }
 
   // ----- observações da prática -----
-  let obsWhere = scopeSql('o.usuario_id');
-  let obsP = [...scopeP];
-  if (user.funcao === 'formador') {
-    obsWhere = `(${obsWhere} OR o.formador_id = ? OR o.email_formador = ?)`;
-    obsP.push(user.id, user.email);
-  } else if (user.funcao === 'cursista') {
-    obsWhere = `(o.usuario_id = ? OR o.email_cursista = ?)`;
-    obsP = [user.id, user.email];
+  let observacoes = [];
+  if (staff) {
+    const obsRows = await query(
+      `SELECT o.id, o.id_origem, o.usuario_id, o.formador_id, o.carimbo, o.ano_formativo, o.semestre, o.chamamento,
+              o.modalidade, o.componente, o.tema, o.observacao_realizada, o.is_realizada, o.data_pratica, o.data_observacao,
+              o.data_feedback, o.modalidade_feedback, o.motivo_devolutiva, o.escala_boas_praticas, o.combinados,
+              COALESCE(o.email_cursista, uc.email_inst) AS email_cursista,
+              COALESCE(o.nome_cursista, uc.nome) AS nome_cursista,
+              COALESCE(o.email_formador, uf.email_inst) AS email_formador,
+              COALESCE(o.nome_formador, uf.nome) AS nome_formador,
+              COALESCE(o.nre_exe, nv.nome) AS nre,
+              COALESCE(o.nre_exe, nv.nome) AS nre_exe
+       FROM observacao_pratica o
+       LEFT JOIN usuario uc ON uc.id = o.usuario_id
+       LEFT JOIN usuario uf ON uf.id = o.formador_id
+       LEFT JOIN vinculo vv ON vv.usuario_id = uc.id AND vv.linha_funcional = 1
+       LEFT JOIN nre nv ON nv.id = vv.nre_id
+       WHERE o.carimbo LIKE '%2026%' OR o.data_pratica >= '2026-01-01' OR o.data_observacao >= '2026-01-01'
+       ORDER BY o.id DESC LIMIT 3000`
+    );
+    observacoes = obsRows.map(o => ({
+      ...o,
+      is_realizada: !!o.is_realizada,
+      proposta: o.proposta || o.proposta_pedagogica || '',
+      nre_exe: o.nre_exe || o.nre || ''
+    }));
+  } else if (!isVisualizador && (user.funcao === 'tutor' || user.funcao === 'formador' || user.funcao === 'cursista')) {
+    let obsWhere = scopeSql('o.usuario_id');
+    let obsP = [...scopeP];
+    if (user.funcao === 'formador') {
+      obsWhere = `(${obsWhere} OR o.formador_id = ? OR o.email_formador = ?)`;
+      obsP.push(user.id, user.email);
+    } else if (user.funcao === 'cursista') {
+      obsWhere = `(o.usuario_id = ? OR o.email_cursista = ?)`;
+      obsP.push(user.id, user.email);
+    }
+    const obsRows = await query(
+      `SELECT o.*,
+              COALESCE(o.email_cursista, uc.email_inst) AS email_cursista,
+              COALESCE(o.nome_cursista, uc.nome) AS nome_cursista,
+              COALESCE(o.email_formador, uf.email_inst) AS email_formador,
+              COALESCE(o.nome_formador, uf.nome) AS nome_formador,
+              COALESCE(o.nre_exe, nv.nome) AS nre,
+              COALESCE(o.nre_exe, nv.nome) AS nre_exe
+       FROM observacao_pratica o
+       LEFT JOIN usuario uc ON uc.id = o.usuario_id
+       LEFT JOIN usuario uf ON uf.id = o.formador_id
+       LEFT JOIN vinculo vv ON vv.usuario_id = uc.id AND vv.linha_funcional = 1
+       LEFT JOIN nre nv ON nv.id = vv.nre_id
+       WHERE ${obsWhere} ORDER BY o.id DESC LIMIT 1500`, obsP);
+    observacoes = obsRows.map(o => ({
+      ...o,
+      is_realizada: !!o.is_realizada,
+      proposta: o.proposta || o.proposta_pedagogica || '',
+      nre_exe: o.nre_exe || o.nre || ''
+    }));
   }
-
-  const obsRows = await query(
-    `SELECT o.*,
-            COALESCE(o.email_cursista, uc.email_inst) AS email_cursista,
-            COALESCE(o.nome_cursista, uc.nome) AS nome_cursista,
-            COALESCE(o.email_formador, uf.email_inst) AS email_formador,
-            COALESCE(o.nome_formador, uf.nome) AS nome_formador,
-            COALESCE(o.nre_exe, nv.nome) AS nre,
-            COALESCE(o.nre_exe, nv.nome) AS nre_exe
-     FROM observacao_pratica o
-     LEFT JOIN usuario uc ON uc.id = o.usuario_id
-     LEFT JOIN usuario uf ON uf.id = o.formador_id
-     LEFT JOIN vinculo vv ON vv.usuario_id = uc.id AND vv.linha_funcional = 1
-     LEFT JOIN nre nv ON nv.id = vv.nre_id
-     WHERE ${obsWhere} ORDER BY o.id DESC`, obsP);
-  const observacoes = obsRows.map(o => ({
-    ...o,
-    is_realizada: !!o.is_realizada,
-    proposta: o.proposta || o.proposta_pedagogica || '',
-    nre_exe: o.nre_exe || o.nre || ''
-  }));
 
   // ----- concluintes -----
   const concRows = await query(
@@ -253,8 +280,8 @@ export async function buildBundle(user) {
 
   // ----- movimentações -----
   let movWhere = '1=1'; let movP = [];
-  if (user.funcao === 'formador') movWhere = '0=1';
-  else if (!staff && !isVisualizador) { movWhere = scopeSql('mv.usuario_id'); movP = [...scopeP]; }
+  if (user.funcao === 'formador' || isVisualizador) movWhere = '0=1';
+  else if (!staff) { movWhere = scopeSql('mv.usuario_id'); movP = [...scopeP]; }
   const movRows = await query(
     `SELECT mv.*, u.id AS usuario_id, u.nome AS nome_cursista, u.email_inst AS email, u.cgm_ultimos3, n.nome AS nre, vv.id AS vinculo_id
      FROM movimentacao mv LEFT JOIN usuario u ON u.id = mv.usuario_id
