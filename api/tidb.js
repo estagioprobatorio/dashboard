@@ -134,6 +134,18 @@ export default async function handler(req, res) {
   const action = req.query.action || (req.body && req.body.action) || 'ping';
 
   try {
+        if (action === 'version' || action === 'meta') {
+      try {
+        const [rows] = await executeSql('SELECT MAX(id) as max_id FROM auditoria').catch(() => [[{}]]);
+        const maxId = (rows && rows[0] && rows[0].max_id) || 0;
+        const version = `v_tidb_${maxId}`;
+        res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=60');
+        return res.status(200).json({ status: 'ok', version, updated_at: new Date().toISOString() });
+      } catch (e) {
+        return res.status(200).json({ status: 'ok', version: 'v_tidb_fb', updated_at: new Date().toISOString() });
+      }
+    }
+
     if (action === 'ping' || action === 'test') {
       const result = await executeSql('SELECT 1 as connected, NOW() as server_time');
       return res.status(200).json({ status: 'ok', engine: 'TiDB Cloud Serverless', result });

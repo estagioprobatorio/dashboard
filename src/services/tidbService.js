@@ -13,6 +13,7 @@ import fallbackConcluintes from '../concluintes_fallback.json';
 import { driveDataService } from './driveDataService';
 import { auth } from '../firebase';
 import { loadBundle } from './bundleLoader';
+import { getStoredBundle, saveStoredBundle } from './bundleStorage';
 
 const CACHE_KEY = 'ep_tidb_cached_bundle';
 
@@ -44,18 +45,52 @@ export const tidbService = {
   },
 
   executarCargaBundle: async (options = {}) => {
+    const { forceRefresh = false, userEmail = null } = options;
+    const userKey = userEmail ? String(userEmail).trim().toLowerCase() : 'anon';
     const authHeaders = await getAuthHeaders();
 
-    // 1. Tenta carregar da nova API v2 (com controle de acesso, escopo por função e CGM seguro)
+    // 1. Obter a versão remota leve (poucos bytes)
+    let remoteVersion = null;
+    try {
+      const vCtrl = new AbortController();
+      const vTimeout = setTimeout(() => vCtrl.abort(), 6000);
+      const respVer = await fetch('/api/v2?action=version', {
+        method: 'GET',
+        headers: authHeaders,
+        signal: vCtrl.signal
+      });
+      clearTimeout(vTimeout);
+      if (respVer.ok) {
+        const jsonVer = await respVer.json();
+        remoteVersion = jsonVer?.version || null;
+      }
+    } catch (e) {
+      console.warn('[TiDB Service] Checagem de versão leve indisponível:', e.message);
+    }
+
+    // 2. Se NÃO for forçado o refresh e tivermos versão remota, consulta IndexedDB
+    if (!forceRefresh && remoteVersion) {
+      try {
+        const cached = await getStoredBundle(userKey, remoteVersion);
+        if (cached && (cached.baseCursistas?.length > 0 || cached.total_cursistas > 0 || cached.funcao)) {
+          console.log(`[TiDB Service] Cache IndexedDB válido (versão: ${remoteVersion}). 0 bytes de bundle transferidos.`);
+          return cached;
+        }
+      } catch (idbErr) {
+        console.warn('[TiDB Service] Erro ao consultar IndexedDB:', idbErr.message);
+      }
+    }
+
+    // 3. Tenta carregar da nova API v2 usando a chave estável de versão (&v=) SEM timestamp aleatório
     try {
       console.log('[TiDB Service] Buscando base consolidada da API v2...');
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 20000);
+      const urlV2 = remoteVersion ? `/api/v2?action=bundle&v=${encodeURIComponent(remoteVersion)}` : '/api/v2?action=bundle';
 
-      const respV2 = await fetch(`/api/v2?action=bundle&_t=${Date.now()}`, {
+      const respV2 = await fetch(urlV2, {
         method: 'GET',
         headers: authHeaders,
-        cache: 'no-store',
         signal: controller.signal
       });
       clearTimeout(timeoutId);
@@ -64,10 +99,9 @@ export const tidbService = {
         const pacote = await respV2.json();
         if (pacote && (pacote.baseCursistas?.length > 0 || pacote.total_cursistas > 0 || pacote.funcao)) {
           console.log(`[TiDB Service] [v2] Carregado com sucesso! Função: ${pacote.funcao || 'indefinida'}, ${pacote.total_cursistas || pacote.baseCursistas?.length || 0} cursistas.`);
-          try {
-            localStorage.setItem(CACHE_KEY, JSON.stringify(pacote));
-            localStorage.setItem('ep_tidb_last_sync', new Date().toISOString());
-          } catch (storageErr) {}
+          if (remoteVersion) {
+            saveStoredBundle(userKey, remoteVersion, pacote).catch(() => {});
+          }
           return pacote;
         }
       }
@@ -75,16 +109,16 @@ export const tidbService = {
       console.warn('[TiDB Service] API v2 indisponível ou em fallback:', errV2.message);
     }
 
-    // 2. Fallback para endpoint legado /api/tidb
+    // 4. Fallback para endpoint legado /api/tidb (usando versão estável quando disponível)
     try {
       console.log('[TiDB Service] Buscando base consolidada do endpoint /api/tidb...');
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 25000); // 25s timeout
+      const timeoutId = setTimeout(() => controller.abort(), 25000);
+      const urlLegacy = remoteVersion ? `/api/tidb?action=bundle&v=${encodeURIComponent(remoteVersion)}` : '/api/tidb?action=bundle';
 
-      const response = await fetch(`/api/tidb?action=bundle&_t=${Date.now()}`, {
+      const response = await fetch(urlLegacy, {
         method: 'GET',
         headers: authHeaders,
-        cache: 'no-store',
         signal: controller.signal
       });
       clearTimeout(timeoutId);
@@ -92,29 +126,26 @@ export const tidbService = {
       if (response.ok) {
         const pacote = await response.json();
         if (pacote && (pacote.baseCursistas?.length > 0 || pacote.total_cursistas > 0 || pacote.exonerados?.length > 0 || pacote.concluintes?.length > 0)) {
-          console.log(`[TiDB Service] ${pacote.total_cursistas || pacote.baseCursistas?.length} cursistas, ${pacote.exonerados?.length || 0} exonerados e ${pacote.observacoes?.length || 0} observações carregados do TiDB Cloud!`);
-          try {
-            localStorage.setItem(CACHE_KEY, JSON.stringify(pacote));
-            localStorage.setItem('ep_tidb_last_sync', new Date().toISOString());
-          } catch (storageErr) {}
+          if (remoteVersion) {
+            saveStoredBundle(userKey, remoteVersion, pacote).catch(() => {});
+          }
           return pacote;
         }
       }
     } catch (err) {
-      console.warn('[TiDB Service] Endpoint /api/tidb indisponível ou em carregamento local:', err.message);
+      console.warn('[TiDB Service] Endpoint /api/tidb indisponível:', err.message);
     }
 
-    // 2. Tenta recuperar do Cache Local persistido do TiDB
+    // 5. Fallback de contingência offline: tenta qualquer versão gravada no IndexedDB
     try {
-      const cached = localStorage.getItem(CACHE_KEY);
-      if (cached) {
-        const pacoteCache = JSON.parse(cached);
-        console.log('[TiDB Service] Dados carregados do Cache Local persistido.');
-        return pacoteCache;
+      const fallbackIndexedDB = await getStoredBundle(userKey, null);
+      if (fallbackIndexedDB) {
+        console.log('[TiDB Service] Dados recuperados do IndexedDB local (fallback offline).');
+        return fallbackIndexedDB;
       }
-    } catch (cacheErr) {}
+    } catch (e) {}
 
-    // 3. Fallback inteligente para o Google Drive / Apps Script ou Fallback Local
+    // 6. Fallback final para Google Drive / Fallback local estático
     console.log('[TiDB Service] Ativando fallback para Drive / Arquivos Locais.');
     return driveDataService.carregarPacoteGeral();
   },
