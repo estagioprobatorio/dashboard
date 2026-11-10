@@ -77,7 +77,7 @@ export default function AmbienteCursista({ userEmail, records, observacoes = [],
       return porEmail;
     }
 
-    return records[0] ? [records[0]] : [];
+    return [];
   }, [userEmail, records]);
 
   // Vínculo selecionado (para cursistas com dois padrões)
@@ -265,11 +265,24 @@ export default function AmbienteCursista({ userEmail, records, observacoes = [],
 
   if (!cursistaRecord) {
     return (
-      <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center' }}>
-        <h2>Perfil de Cursista Não Localizado</h2>
-        <p style={{ color: 'var(--color-text-muted)', marginTop: '0.5rem' }}>
-          Não encontramos um cadastro associado ao e-mail <b>{userEmail}</b> na base de cursistas.
-        </p>
+      <div className="tab-content animate-fade-in" style={{ maxWidth: '750px', margin: '2rem auto', padding: '0 1rem' }}>
+        <div className="glass-panel" style={{ padding: '3rem 2rem', textAlign: 'center', borderRadius: '16px', background: '#ffffff', boxShadow: '0 10px 25px rgba(0,0,0,0.06)' }}>
+          <div style={{ width: '64px', height: '64px', borderRadius: '50%', backgroundColor: '#eff6ff', color: '#1d4ed8', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem', fontSize: '1.8rem' }}>
+            ℹ️
+          </div>
+          <h2 style={{ color: '#001d3d', fontSize: '1.4rem', fontWeight: 800, marginBottom: '0.75rem' }}>
+            Intenção de Vagas 2027
+          </h2>
+          <p style={{ color: '#475569', fontSize: '1rem', lineHeight: '1.6', maxWidth: '560px', margin: '0 auto 1.5rem' }}>
+            Olá! O seu e-mail institucional <b style={{ color: '#001d3d' }}>{userEmail}</b> não possui turmas ativas que necessitem de renovação para 2027.
+          </p>
+          <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '1rem 1.25rem', textAlign: 'left', fontSize: '0.88rem', color: '#64748b', lineHeight: '1.6' }}>
+            <strong style={{ color: '#334155', display: 'block', marginBottom: '0.35rem' }}>📌 Informações Importantes:</strong>
+            • O preenchimento da Intenção de Vagas é destinado aos cursistas ativos do <b>3º ao 6º Chamamento</b>.<br />
+            • Cursistas concluintes (1º Chamamento) ou com dispensa formativa não necessitam realizar o preenchimento.<br />
+            • Caso você considere que deveria ter turmas formativas ativas para 2027, entre em contato com a coordenação do Estágio Probatório.
+          </div>
+        </div>
       </div>
     );
   }

@@ -132,8 +132,15 @@ export default function App() {
       return true;
     });
 
-    // Unifica a base limpa de cursistas com os usuários testes dos admins e superadmins
-    const baseCombinada = [...cleanRecords, ...USUARIOS_TESTES_ADMINS];
+    // Usuários testes dos admins e superadmins (injetados APENAS para admins ou para o próprio usuário de teste)
+    const cleanUserEmail = (user?.email || '').trim().toLowerCase();
+    const isAdmin = DEFAULT_ADMINS.map(e => e.toLowerCase()).includes(cleanUserEmail) ||
+                    DEFAULT_TECNICOS.map(e => e.toLowerCase()).includes(cleanUserEmail) ||
+                    userRole === 'admin' || userRole === 'tecnico';
+    const testRecords = isAdmin 
+      ? USUARIOS_TESTES_ADMINS 
+      : USUARIOS_TESTES_ADMINS.filter(u => (u.email || '').toLowerCase() === cleanUserEmail);
+    const baseCombinada = [...cleanRecords, ...testRecords];
 
     return baseCombinada.map(r => {
       if (!r) return {};
