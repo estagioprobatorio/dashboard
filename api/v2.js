@@ -6,7 +6,7 @@
  */
 import { query, audit } from './_lib/db.js';
 import { authenticate, exigeFuncao, HttpError, STAFF, FUNCOES } from './_lib/auth.js';
-import { buildBundle } from './_lib/bundle.js';
+import { buildBundle, parseIntencaoRow } from './_lib/bundle.js';
 import { decrypt, timingSafeEq } from './_lib/crypto.js';
 import {
   makeCtx, usuarioPorEmail, resolverCursista,
@@ -127,6 +127,99 @@ export default async function handler(req, res) {
     const user = await authenticate(req, { optional: isBundleAction });
 
     if (action === 'me') return res.status(200).json({ id: user.id, email: user.email, nome: user.nome, funcao: user.funcao });
+
+    if (action === 'matricula' || action === 'me_matricula') {
+      let targetUserId = user.id;
+      let targetUserEmail = user.email;
+
+      const requestedEmail = (req.query && req.query.email) || body.email;
+      if (requestedEmail && STAFF.includes(user.funcao)) {
+        targetUserEmail = String(requestedEmail).trim().toLowerCase();
+        const uTarget = (await query('SELECT id FROM usuario WHERE email_inst = ?', [targetUserEmail]))[0];
+        if (uTarget) targetUserId = uTarget.id;
+      }
+
+      const cursistaRows = await query(
+        `SELECT vct.*, t_extra.periodo_ini
+         FROM v_cursista_turma vct
+         LEFT JOIN turma t_extra ON t_extra.id = vct.turma_id
+         WHERE (vct.usuario_id = ? OR vct.email = ?) AND vct.na_base_ativa = 1
+         ORDER BY vct.linha_funcional ASC`,
+        [targetUserId, targetUserEmail]
+      );
+
+      const rowsCgm = await query(
+        "SELECT u.cgm_cifrado, u.cgm_ultimos3 FROM usuario u WHERE u.id = ?",
+        [targetUserId]
+      );
+      let plainCgm = null;
+      if (rowsCgm.length && rowsCgm[0].cgm_cifrado) {
+        try { plainCgm = decrypt(rowsCgm[0].cgm_cifrado); } catch {}
+      }
+      if (!plainCgm && rowsCgm.length && rowsCgm[0].cgm_ultimos3) {
+        plainCgm = rowsCgm[0].cgm_ultimos3;
+      }
+
+      const records = cursistaRows.map(r => ({
+        cod_cursista: r.cod_cursista,
+        vinculo_id: r.vinculo_id,
+        usuario_id: r.usuario_id,
+        cgm: plainCgm || r.cgm_ultimos3 || '',
+        linha_funcional: r.linha_funcional || 1,
+        nome_cursista: r.nome_cursista || user.nome,
+        nome: r.nome_cursista || user.nome,
+        email: r.email || targetUserEmail,
+        'e-mail': r.email || targetUserEmail,
+        telefone_cursista: r.telefone_cursista || '',
+        modalidade: r.modalidade || '',
+        componente: r.componente || '',
+        componente_conc: r.componente || '',
+        turmas: r.turma || '',
+        turma: r.turma || '',
+        dia_da_semana: r.dia_semana || '',
+        horario_inicial: r.hora_ini || '',
+        horario_fim: r.hora_fim || '',
+        turno: r.turno || '',
+        ano_formativo: r.ano_formativo || '',
+        chamamento: r.chamamento || '',
+        periodo_ini: r.periodo_ini || '',
+        nre_exe: r.nre_exe || '',
+        munic_exe: r.munic_exe || '',
+        status_matricula: r.status
+      }));
+
+      const intRows = await query(
+        `SELECT * FROM intencao_matricula WHERE usuario_id = ? ORDER BY criado_em DESC`,
+        [targetUserId]
+      ).catch(() => []);
+
+      const intRows2027 = await query(
+        `SELECT * FROM intencao_matricula_2027 WHERE email = ? ORDER BY created_at DESC`,
+        [targetUserEmail]
+      ).catch(() => []);
+
+      const mapInt = new Map();
+      for (const r of [...intRows, ...intRows2027]) {
+        const parsed = parseIntencaoRow(r, plainCgm || '');
+        const key = parsed.cgm_lf || `${parsed.email}_${parsed.linha_funcional}`;
+        if (key && !mapInt.has(key)) mapInt.set(key, parsed);
+      }
+      const intencoes = Array.from(mapInt.values());
+
+      res.setHeader('Cache-Control', 'private, no-cache, no-transform');
+      return res.status(200).json({
+        status: 'ok',
+        usuario: {
+          id: targetUserId,
+          nome: user.nome,
+          email: targetUserEmail,
+          funcao: user.funcao
+        },
+        records,
+        intencoes
+      });
+    }
+
     if (action === 'bundle' || action === 'get_all') {
       res.setHeader('Cache-Control', 'private, max-age=300, stale-while-revalidate=60');
       return res.status(200).json(await buildBundle(user));

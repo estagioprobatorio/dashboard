@@ -151,6 +151,19 @@ export default async function handler(req, res) {
       return res.status(200).json({ status: 'ok', engine: 'TiDB Cloud Serverless', result });
     }
 
+    if (action === 'matricula' || action === 'me_matricula') {
+      const email = (req.query && req.query.email) || (req.body && req.body.email) || '';
+      const cleanEmail = String(email).trim().toLowerCase();
+      let records = [];
+      let intencoes = [];
+      if (cleanEmail) {
+        records = await executeSql('SELECT * FROM cursistas WHERE LOWER(email) = ? OR LOWER(e-mail) = ?', [cleanEmail, cleanEmail]).catch(() => []);
+        intencoes = await executeSql('SELECT * FROM intencao_matricula_2027 WHERE LOWER(email) = ? ORDER BY created_at DESC', [cleanEmail]).catch(() => []);
+      }
+      res.setHeader('Cache-Control', 'private, no-cache, no-transform');
+      return res.status(200).json({ status: 'ok', records, intencoes });
+    }
+
     if (action === 'bundle' || action === 'get_all') {
       const [cursistas, tutores, observacoes, concluintes, exonerados, movimentacoes, diario, intencoes, observacoesTutor] = await Promise.all([
         executeSql('SELECT * FROM cursistas ORDER BY nome_cursista ASC').catch(() => []),

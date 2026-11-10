@@ -212,9 +212,12 @@ export default function App() {
     });
     if (isCursista) return 'cursista';
 
-    // Regra 6: Contas institucionais da SEED/PR não cadastradas em turmas entram como Administradores
+    // Regra 6: Contas institucionais da SEED/PR não cadastradas em turmas
     if (cleanEmail.endsWith('@escola.pr.gov.br') || cleanEmail.endsWith('@seed.pr.gov.br')) {
-      return 'admin';
+      if (dataBase && dataBase.length > 50) {
+        return 'admin';
+      }
+      return 'cursista';
     }
 
     return 'unauthorized';
@@ -303,9 +306,50 @@ export default function App() {
     let isMounted = true;
 
     async function carregarDadosBanco() {
+      if (!user?.email) {
+        setIsLoading(false);
+        return;
+      }
+
       setIsLoading(true);
       try {
-        console.log('[App] Carregando dados consolidados (API v2 / TiDB Cloud / Drive)...');
+        const cleanEmail = user.email.trim().toLowerCase();
+        const isStaticAdminOrTecnico = 
+          DEFAULT_ADMINS.map(e => e.toLowerCase()).includes(cleanEmail) ||
+          DEFAULT_TECNICOS.map(e => e.toLowerCase()).includes(cleanEmail);
+
+        // Cursistas: rota direta ultraleve (< 2 kB) sem baixar o bundle de 5.6 MB
+        if (!isStaticAdminOrTecnico) {
+          console.log('[App] Carregando perfil leve de matrícula para:', cleanEmail);
+          const matriculaData = await tidbService.obterDadosMatricula(cleanEmail);
+          if (!isMounted) return;
+
+          if (matriculaData && matriculaData.status === 'ok') {
+            const func = matriculaData.usuario?.funcao;
+
+            if (!['admin', 'superadmin', 'tecnico', 'tutor'].includes(func)) {
+              console.log('[App] Cursista autenticado com dados leves (< 2 kB):', matriculaData.records?.length, 'vínculo(s)');
+              setUserRole('cursista');
+              if (matriculaData.records && Array.isArray(matriculaData.records)) {
+                setRecords(matriculaData.records);
+              }
+              if (matriculaData.intencoes && Array.isArray(matriculaData.intencoes)) {
+                setIntencoes2027List(matriculaData.intencoes);
+                matriculaData.intencoes.forEach(int => {
+                  const key = int.cgm_lf || (int.cgm ? `${int.cgm}_${int.linha_funcional}` : null);
+                  if (key) {
+                    try { localStorage.setItem('intencao_2027_' + key, JSON.stringify(int)); } catch (e) {}
+                  }
+                });
+              }
+              setFirebaseActive(true);
+              setIsLoading(false);
+              return; // Economiza 5.6 MB por cursista!
+            }
+          }
+        }
+
+        console.log('[App] Carregando dados consolidados administrativos (API v2 / TiDB Cloud / Drive)...');
         const pacote = await loadBundle({ userEmail: user?.email });
         if (!isMounted) return;
 

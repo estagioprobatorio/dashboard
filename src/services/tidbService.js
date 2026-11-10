@@ -44,6 +44,52 @@ export const tidbService = {
     return loadBundle(options);
   },
 
+  /**
+   * Endpoint leve de matrícula (< 50 kB):
+   * Retorna exclusivamente o(s) vínculo(s) do próprio usuário logado e suas intenções salvas.
+   * Não baixa base geral, observações, tutores, concluintes nem movimentações.
+   */
+  obterDadosMatricula: async (userEmail = null) => {
+    const authHeaders = await getAuthHeaders();
+    const emailParam = userEmail ? `&email=${encodeURIComponent(userEmail)}` : '';
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+      const resp = await fetch(`/api/v2?action=matricula${emailParam}`, {
+        method: 'GET',
+        headers: authHeaders,
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (resp.ok) {
+        const json = await resp.json();
+        if (json && json.status === 'ok' && Array.isArray(json.records)) {
+          return json;
+        }
+      }
+    } catch (e) {
+      console.warn('[TiDB Service] Falha v2, tentando fallback tidb action=matricula:', e.message);
+    }
+
+    try {
+      const respFb = await fetch(`/api/tidb?action=matricula${emailParam}`, {
+        method: 'GET',
+        headers: authHeaders
+      });
+      if (respFb.ok) {
+        const jsonFb = await respFb.json();
+        if (jsonFb && jsonFb.status === 'ok' && Array.isArray(jsonFb.records)) {
+          return jsonFb;
+        }
+      }
+    } catch (eFb) {
+      console.warn('[TiDB Service] Falha ao carregar fallback matricula:', eFb.message);
+    }
+    return null;
+  },
+
   executarCargaBundle: async (options = {}) => {
     const { forceRefresh = false, userEmail = null } = options;
     const userKey = userEmail ? String(userEmail).trim().toLowerCase() : 'anon';

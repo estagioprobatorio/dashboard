@@ -15,7 +15,7 @@ const SCOPE_USERS = {
   cursista: 'SELECT ? AS usuario_id'
 };
 
-function parseIntencaoRow(r, cgmResolved) {
+export function parseIntencaoRow(r, cgmResolved) {
   const rawObs = String(r.observacao || '');
   let obsText = rawObs;
   let meta = {};
