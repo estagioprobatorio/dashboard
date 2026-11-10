@@ -12,6 +12,7 @@ import fallbackObservacoes from '../observacoes_fallback.json';
 import fallbackConcluintes from '../concluintes_fallback.json';
 import { driveDataService } from './driveDataService';
 import { auth } from '../firebase';
+import { loadBundle } from './bundleLoader';
 
 const CACHE_KEY = 'ep_tidb_cached_bundle';
 
@@ -38,7 +39,11 @@ export const tidbService = {
   /**
    * Carrega todos os dados consolidados (API v2 segura com fallback para v1 e Drive)
    */
-  carregarPacoteGeral: async () => {
+  carregarPacoteGeral: async (options) => {
+    return loadBundle(options);
+  },
+
+  executarCargaBundle: async (options = {}) => {
     const authHeaders = await getAuthHeaders();
 
     // 1. Tenta carregar da nova API v2 (com controle de acesso, escopo por função e CGM seguro)

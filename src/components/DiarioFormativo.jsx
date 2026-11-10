@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { loadBundle } from '../services/bundleLoader';
 import { supabase, isConfigured as isSupabaseConfigured } from '../supabase';
 import { tidbService } from '../services/tidbService';
 

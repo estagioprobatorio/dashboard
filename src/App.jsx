@@ -32,6 +32,7 @@ import { HistoricoTurmasContext } from './utils/HistoricoTurmasContext';
 
 import { driveDataService } from './services/driveDataService';
 import { tidbService } from './services/tidbService';
+import { loadBundle, clearBundleMemoryCache } from './services/bundleLoader';
 import { salvarObservacaoIntegrada, getObservacoesLocaisNovas } from './utils/observacoesSyncService';
 import { normalizeString } from './utils/aiPedagogicalService';
 import { normalizeNre } from './utils/nreUtils';
@@ -304,7 +305,7 @@ export default function App() {
       setIsLoading(true);
       try {
         console.log('[App] Carregando dados consolidados (API v2 / TiDB Cloud / Drive)...');
-        const pacote = await tidbService.carregarPacoteGeral();
+        const pacote = await loadBundle({ userEmail: user?.email });
         if (!isMounted) return;
 
         if (pacote) {
@@ -394,6 +395,7 @@ export default function App() {
   };
 
   const handleLogout = async () => {
+    clearBundleMemoryCache();
     localStorage.removeItem('ep_user_session');
     if (isFirebaseConfigured && auth) {
       try { await signOut(auth); } catch (e) {}
