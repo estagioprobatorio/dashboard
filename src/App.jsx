@@ -33,6 +33,7 @@ import { HistoricoTurmasContext } from './utils/HistoricoTurmasContext';
 import { driveDataService } from './services/driveDataService';
 import { tidbService } from './services/tidbService';
 import { loadBundle, clearBundleMemoryCache } from './services/bundleLoader';
+import brasaoParana from './assets/brasao_parana.svg';
 import { salvarObservacaoIntegrada, getObservacoesLocaisNovas } from './utils/observacoesSyncService';
 import { normalizeString } from './utils/aiPedagogicalService';
 import { normalizeNre } from './utils/nreUtils';
@@ -1006,7 +1007,7 @@ export default function App() {
             </button>
 
             <img 
-              src="/brasao_parana.svg" 
+              src={brasaoParana} 
               alt="Brasão do Paraná" 
               style={{ width: '32px', height: 'auto', objectFit: 'contain' }} 
             />
@@ -1451,7 +1452,7 @@ export default function App() {
 
       {/* Rodapé com o Brasão do Paraná */}
       <footer style={{ backgroundColor: 'var(--color-primary-dark)', color: 'rgba(255,255,255,0.7)', padding: '1.5rem', textAlign: 'center', fontSize: '0.8rem', marginTop: 'auto', borderTop: '4px solid var(--color-accent-green)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
-        <img src="/brasao_parana.svg" alt="Brasão do Paraná" style={{ height: '36px', width: 'auto', opacity: 0.9 }} />
+        <img src={brasaoParana} alt="Brasão do Paraná" style={{ height: '36px', width: 'auto', opacity: 0.9 }} />
         <p>© 2026 Estágio Probatório - Secretaria da Educação do Estado do Paraná (SEED-PR)</p>
         <p style={{ fontSize: '0.75rem', opacity: 0.6 }}>Ambientes de Acesso por Perfil (RBAC Google Workspace) & Sincronização de Turmas</p>
       </footer>

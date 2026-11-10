@@ -126,7 +126,7 @@ export default function FormularioChamadoTutor({ userEmail, tutorData, onClose, 
           flexShrink: 0
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <img src="/brasao_parana.svg" alt="Brasão do Paraná" style={{ height: '36px', width: 'auto' }} />
+            <img src={brasaoParana} alt="Brasão do Paraná" style={{ height: '36px', width: 'auto' }} />
             <div>
               <span style={{ fontSize: '0.7rem', backgroundColor: 'var(--color-accent-green)', color: '#fff', padding: '0.15rem 0.5rem', borderRadius: '4px', textTransform: 'uppercase', fontWeight: 800 }}>
                 Estágio Probatório SEED/PR

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import brasaoParana from '../assets/brasao_parana.svg';
 import { getAppsScriptUrl } from '../services/driveDataService';
 import { auth, googleProvider, isConfigured as isFirebaseConfigured } from '../firebase';
 import { signInWithPopup } from 'firebase/auth';
@@ -184,7 +185,7 @@ export default function Login({ onLoginSuccess }) {
           <div style={{ position: 'relative', zIndex: 2 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
               <img
-                src="/brasao_parana.svg"
+                src={brasaoParana}
                 alt="Brasão do Paraná"
                 style={{ width: '42px', height: 'auto', filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))' }}
                 onError={(e) => { e.currentTarget.style.display = 'none'; }}
