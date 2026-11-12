@@ -140,8 +140,9 @@ export default async function handler(req, res) {
       }
 
       const cursistaRows = await query(
-        `SELECT vct.*, t_extra.periodo_ini
+        `SELECT vct.*, COALESCE(m_extra.periodo_ini, t_extra.periodo_ini) AS periodo_ini
          FROM v_cursista_turma vct
+         LEFT JOIN matricula m_extra ON m_extra.id = vct.matricula_id
          LEFT JOIN turma t_extra ON t_extra.id = vct.turma_id
          WHERE (vct.usuario_id = ? OR vct.email = ?) AND vct.na_base_ativa = 1
          ORDER BY vct.linha_funcional ASC`,

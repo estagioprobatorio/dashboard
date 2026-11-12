@@ -128,8 +128,9 @@ export async function buildBundle(user) {
   else if (user.funcao === 'cursista') { whereBase += ' AND vct.usuario_id = ?'; pBase.push(user.id); }
 
   const baseRows = await query(
-    `SELECT vct.*, t_extra.periodo_ini
+    `SELECT vct.*, COALESCE(m_extra.periodo_ini, t_extra.periodo_ini) AS periodo_ini
      FROM v_cursista_turma vct
+     LEFT JOIN matricula m_extra ON m_extra.id = vct.matricula_id
      LEFT JOIN turma t_extra ON t_extra.id = vct.turma_id
      WHERE ${whereBase}
      ORDER BY vct.nome_cursista ASC`,
