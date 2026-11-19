@@ -310,6 +310,15 @@ export default async function handler(req, res) {
 
     if (action === 'insert_intencao' || action === 'salvar_intencao_2027') {
       exigeFuncao(user, ...STAFF, 'tutor', 'cursista');
+
+      const PRAZO_ENCERRAMENTO_MS = new Date('2026-11-19T12:00:00-03:00').getTime();
+      if (Date.now() >= PRAZO_ENCERRAMENTO_MS && !['superadmin', 'admin'].includes(user.funcao)) {
+        return res.status(403).json({
+          status: 'closed',
+          error: 'O período para manifestação de intenção de vagas 2027 encerrou-se em 19/11/2026 às 12h00. Dúvidas: estagioprobatorio@escola.pr.gov.br'
+        });
+      }
+
       const d = body.data || body.dados || {};
       const alvo = await alvoCursista(user, d.email_cursista || d.email, d.nome_cursista);
       const lf = d.linha_funcional ? String(d.linha_funcional).trim() : '1';

@@ -28,6 +28,7 @@ import CentralDocumentos from './components/CentralDocumentos';
 import BuscaGlobalPessoasModal from './components/BuscaGlobalPessoasModal';
 import DossieCursistaModal from './components/DossieCursistaModal';
 import PainelIntencaoVagasAdmin from './components/PainelIntencaoVagasAdmin';
+import TelaEncerramentoIntencao from './components/TelaEncerramentoIntencao';
 import { HistoricoTurmasContext } from './utils/HistoricoTurmasContext';
 
 import { driveDataService } from './services/driveDataService';
@@ -45,7 +46,10 @@ import observacoesFallback from './observacoes_fallback.json';
 import fallbackConcluintes from './concluintes_fallback.json';
 import { USUARIOS_TESTES_ADMINS } from './data_usuarios_testes_admins';
 
+export const PRAZO_ENCERRAMENTO_INTENCAO_MS = new Date('2026-11-19T12:00:00-03:00').getTime();
+
 export default function App() {
+  const [prazoEncerrado, setPrazoEncerrado] = useState(() => Date.now() >= PRAZO_ENCERRAMENTO_INTENCAO_MS);
   const [macroPilar, setMacroPilar] = useState('pedagogica'); // 'pedagogica' | 'administrativa'
   const [activeTab, setActiveTab] = useState('inicio');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -73,6 +77,20 @@ export default function App() {
 
   // Papel ativo (Real ou Simulado)
   const effectiveRole = simulatedRole || userRole;
+
+  // Temporizador para encerramento automático pontual às 12h00
+  useEffect(() => {
+    const diff = PRAZO_ENCERRAMENTO_INTENCAO_MS - Date.now();
+    if (diff <= 0) {
+      setPrazoEncerrado(true);
+      return;
+    }
+    const timer = setTimeout(() => {
+      console.log('[App] 12h00 atingido! Encerrando sistema de intenção de vagas 2027.');
+      setPrazoEncerrado(true);
+    }, diff);
+    return () => clearTimeout(timer);
+  }, []);
 
   // 2. Enriquecer os registros de cursistas com os dados da tabela de tutores se estiverem em branco na planilha de origem
   const enrichedRecords = useMemo(() => {
@@ -327,6 +345,15 @@ export default function App() {
 
         // Cursistas: rota direta ultraleve (< 2 kB) sem baixar o bundle de 5.6 MB
         if (!isStaticAdminOrTecnico) {
+          if (Date.now() >= PRAZO_ENCERRAMENTO_INTENCAO_MS) {
+            console.log('[App] Prazo de matrícula encerrado às 12h. Exibindo tela estática (0 origin transfer) para:', cleanEmail);
+            setUserRole('cursista');
+            setPrazoEncerrado(true);
+            setFirebaseActive(true);
+            setIsLoading(false);
+            return;
+          }
+
           console.log('[App] Carregando perfil leve de matrícula para:', cleanEmail);
           const matriculaData = await tidbService.obterDadosMatricula(cleanEmail);
           if (!isMounted) return;
@@ -872,6 +899,15 @@ export default function App() {
 
     // Se o perfil ativo for Cursista (acesso restrito unicamente à Intenção de Vagas 2027 nesta fase)
     if (effectiveRole === 'cursista') {
+      const isRealAdmin = ['admin', 'superadmin', 'tecnico'].includes(userRole);
+      if (!isRealAdmin && (prazoEncerrado || Date.now() >= PRAZO_ENCERRAMENTO_INTENCAO_MS)) {
+        return (
+          <TelaEncerramentoIntencao 
+            userEmail={effectiveEmail} 
+            onLogout={handleLogout} 
+          />
+        );
+      }
       return (
         <AmbienteCursista 
           userEmail={effectiveEmail} 

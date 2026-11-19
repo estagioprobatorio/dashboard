@@ -569,6 +569,11 @@ export default function IntencaoMatricula2027({
 
   const handleSalvar = async (e) => {
     e.preventDefault();
+    const PRAZO_MS = new Date('2026-11-19T12:00:00-03:00').getTime();
+    if (Date.now() >= PRAZO_MS && !['admin', 'superadmin'].includes(userRole) && !isSimulacao) {
+      alert('O prazo oficial para manifestação de preferência de turno e horário encerrou-se em 19/11/2026 às 12h00. Dúvidas: estagioprobatorio@escola.pr.gov.br');
+      return;
+    }
     if (registroExistente) {
       alert(`A intenção de vaga para a matrícula ${cgm_lf} já foi registrada com sucesso.`);
       return;
