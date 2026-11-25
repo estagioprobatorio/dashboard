@@ -188,42 +188,18 @@ export async function buildBundle(user) {
 
   // ----- observações da prática -----
   let observacoes = [];
-  if (staff) {
-    const obsRows = await query(
-      `SELECT o.id, o.id_origem, o.usuario_id, o.formador_id, o.carimbo, o.ano_formativo, o.semestre, o.chamamento,
-              o.modalidade, o.componente, o.tema, o.observacao_realizada, o.is_realizada, o.data_pratica, o.data_observacao,
-              o.data_feedback, o.modalidade_feedback, o.motivo_devolutiva, o.escala_boas_praticas, o.combinados,
-              COALESCE(o.email_cursista, uc.email_inst) AS email_cursista,
-              COALESCE(o.nome_cursista, uc.nome) AS nome_cursista,
-              COALESCE(o.email_formador, uf.email_inst) AS email_formador,
-              COALESCE(o.nome_formador, uf.nome) AS nome_formador,
-              COALESCE(o.nre_exe, nv.nome) AS nre,
-              COALESCE(o.nre_exe, nv.nome) AS nre_exe
-       FROM observacao_pratica o
-       LEFT JOIN usuario uc ON uc.id = o.usuario_id
-       LEFT JOIN usuario uf ON uf.id = o.formador_id
-       LEFT JOIN vinculo vv ON vv.usuario_id = uc.id AND vv.linha_funcional = 1
-       LEFT JOIN nre nv ON nv.id = vv.nre_id
-       WHERE o.carimbo LIKE '%2026%' OR o.data_pratica >= '2026-01-01' OR o.data_observacao >= '2026-01-01'
-       ORDER BY o.id DESC LIMIT 3000`
-    );
-    observacoes = obsRows.map(o => ({
-      ...o,
-      is_realizada: !!o.is_realizada,
-      proposta: o.proposta || o.proposta_pedagogica || '',
-      nre_exe: o.nre_exe || o.nre || ''
-    }));
-  } else if (!isVisualizador && (user.funcao === 'tutor' || user.funcao === 'formador' || user.funcao === 'cursista')) {
-    let obsWhere = scopeSql('o.usuario_id');
-    let obsP = [...scopeP];
+  try {
+    let obsWhere = '1=1';
+    let obsP = [];
     if (user.funcao === 'formador') {
-      obsWhere = `(${obsWhere} OR o.formador_id = ? OR o.email_formador = ?)`;
+      obsWhere = '(o.formador_id = ? OR o.email_formador = ?)';
       obsP.push(user.id, user.email);
     } else if (user.funcao === 'cursista') {
-      obsWhere = `(o.usuario_id = ? OR o.email_cursista = ?)`;
+      obsWhere = '(o.usuario_id = ? OR o.email_cursista = ?)';
       obsP.push(user.id, user.email);
     }
-    const obsRows = await query(
+
+    let obsRows = await query(
       `SELECT o.*,
               COALESCE(o.email_cursista, uc.email_inst) AS email_cursista,
               COALESCE(o.nome_cursista, uc.nome) AS nome_cursista,
@@ -236,13 +212,26 @@ export async function buildBundle(user) {
        LEFT JOIN usuario uf ON uf.id = o.formador_id
        LEFT JOIN vinculo vv ON vv.usuario_id = uc.id AND vv.linha_funcional = 1
        LEFT JOIN nre nv ON nv.id = vv.nre_id
-       WHERE ${obsWhere} ORDER BY o.id DESC LIMIT 1500`, obsP);
-    observacoes = obsRows.map(o => ({
-      ...o,
-      is_realizada: !!o.is_realizada,
-      proposta: o.proposta || o.proposta_pedagogica || '',
-      nre_exe: o.nre_exe || o.nre || ''
-    }));
+       WHERE ${obsWhere}
+       ORDER BY o.id DESC LIMIT 5000`,
+      obsP
+    ).catch(async () => {
+      return await query(
+        `SELECT o.* FROM observacoes_pratica o WHERE ${obsWhere} ORDER BY o.id DESC LIMIT 5000`,
+        obsP
+      ).catch(() => []);
+    });
+
+    if (Array.isArray(obsRows)) {
+      observacoes = obsRows.map(o => ({
+        ...o,
+        is_realizada: !!(o.is_realizada !== false && o.is_realizada !== 0),
+        proposta: o.proposta || o.proposta_pedagogica || '',
+        nre_exe: o.nre_exe || o.nre || ''
+      }));
+    }
+  } catch (errObs) {
+    console.warn('[bundle] Erro ao carregar observações da prática:', errObs.message);
   }
 
   // ----- concluintes -----

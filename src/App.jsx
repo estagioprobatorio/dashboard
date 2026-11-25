@@ -20,6 +20,7 @@ import AmbienteCursista from './components/AmbienteCursista';
 import ObservacaoPratica from './components/ObservacaoPratica';
 import ObservacoesOverview from './components/ObservacoesOverview';
 import AcompanhamentoObservacoesCards from './components/AcompanhamentoObservacoesCards';
+import EncerramentoFormativo from './components/EncerramentoFormativo';
 import Concluintes from './components/Concluintes';
 import Exonerados from './components/Exonerados';
 import Movimentacoes from './components/Movimentacoes';
@@ -339,22 +340,14 @@ export default function App() {
       setIsLoading(true);
       try {
         const cleanEmail = user.email.trim().toLowerCase();
-        const isStaticAdminOrTecnico = 
+        const roleInicial = resolveUserRole(cleanEmail, enrichedRecords);
+        const isStaffOrTutor = ['admin', 'superadmin', 'tecnico', 'tutor'].includes(roleInicial) ||
           DEFAULT_ADMINS.map(e => e.toLowerCase()).includes(cleanEmail) ||
-          DEFAULT_TECNICOS.map(e => e.toLowerCase()).includes(cleanEmail);
+          DEFAULT_TECNICOS.map(e => e.toLowerCase()).includes(cleanEmail) ||
+          DEFAULT_TUTORES.map(e => e.toLowerCase()).includes(cleanEmail);
 
-        // Cursistas: rota direta ultraleve (< 2 kB) sem baixar o bundle de 5.6 MB
-        if (!isStaticAdminOrTecnico) {
-          if (Date.now() >= PRAZO_ENCERRAMENTO_INTENCAO_MS) {
-            console.log('[App] Prazo de matrícula encerrado às 12h. Exibindo tela estática (0 origin transfer) para:', cleanEmail);
-            setUserRole('cursista');
-            setPrazoEncerrado(true);
-            setFirebaseActive(true);
-            setIsLoading(false);
-            return;
-          }
-
-          console.log('[App] Carregando perfil leve de matrícula para:', cleanEmail);
+        // Apenas cursistas comuns passam pela rota leve e encerramento da intenção de vagas
+        if (!isStaffOrTutor) {
           const matriculaData = await tidbService.obterDadosMatricula(cleanEmail);
           if (!isMounted) return;
 
@@ -362,6 +355,15 @@ export default function App() {
             const func = matriculaData.usuario?.funcao;
 
             if (!['admin', 'superadmin', 'tecnico', 'tutor'].includes(func)) {
+              if (Date.now() >= PRAZO_ENCERRAMENTO_INTENCAO_MS) {
+                console.log('[App] Prazo de matrícula encerrado às 12h. Exibindo tela estática para cursista:', cleanEmail);
+                setUserRole('cursista');
+                setPrazoEncerrado(true);
+                setFirebaseActive(true);
+                setIsLoading(false);
+                return;
+              }
+
               console.log('[App] Cursista autenticado com dados leves (< 2 kB):', matriculaData.records?.length, 'vínculo(s)');
               setUserRole('cursista');
               if (matriculaData.records && Array.isArray(matriculaData.records)) {
@@ -986,6 +988,16 @@ export default function App() {
             onNovaObservacao={handleNovaObservacao}
           />
         );
+      case 'encerramento_formativo':
+        return (
+          <EncerramentoFormativo 
+            cursistas={enrichedRecords} 
+            observacoes={filteredObservacoesForView || observacoesList} 
+            tutores={tutoresList}
+            userRole={effectiveRole}
+            userEmail={effectiveEmail}
+          />
+        );
 
       // 🏛️ GESTÃO ADMINISTRATIVA
       case 'panorama':
@@ -1348,6 +1360,18 @@ export default function App() {
                     <span className="console-nav-icon">👤</span>
                     {!isSidebarCollapsed && <span className="console-nav-text">Acompanhamento do Cursista</span>}
                   </button>
+
+                  {(isSuperAdminTutor || userRole === 'admin' || userRole === 'tecnico' || effectiveRole === 'tutor' || userRole === 'tutor') && (
+                    <button
+                      type="button"
+                      className={`console-nav-item ${activeTab === 'encerramento_formativo' ? 'active' : ''}`}
+                      onClick={() => { setMacroPilar('pedagogica'); setActiveTab('encerramento_formativo'); }}
+                      title="Encerramento Formativo (Temas 6 e 7 - 2º Semestre)"
+                    >
+                      <span className="console-nav-icon">🎯</span>
+                      {!isSidebarCollapsed && <span className="console-nav-text">Encerramento Formativo</span>}
+                    </button>
+                  )}
 
                   {(isSuperAdminTutor || userRole === 'admin' || userRole === 'tecnico' || effectiveRole === 'tutor' || userRole === 'tutor') && (
                     <button

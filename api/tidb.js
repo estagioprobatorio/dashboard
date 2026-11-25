@@ -4,6 +4,30 @@
  */
 
 import mysql from 'mysql2/promise';
+import zlib from 'zlib';
+
+/**
+ * Resposta JSON otimizada com compressão GZIP e Cache-Control explícito.
+ * Reduz em até 95% a transferência de saída (Fast Origin Transfer) das Serverless Functions.
+ */
+function sendJson(req, res, statusCode, data, cacheControl = null) {
+  if (cacheControl) {
+    res.setHeader('Cache-Control', cacheControl);
+  }
+  const payload = typeof data === 'string' ? data : JSON.stringify(data);
+  const acceptEncoding = (req.headers && req.headers['accept-encoding']) || '';
+
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+
+  if (payload.length > 1024 && /\bgzip\b/i.test(acceptEncoding)) {
+    res.setHeader('Content-Encoding', 'gzip');
+    res.setHeader('Vary', 'Accept-Encoding');
+    const gzipped = zlib.gzipSync(Buffer.from(payload, 'utf-8'), { level: 6 });
+    return res.status(statusCode).send(gzipped);
+  }
+
+  return res.status(statusCode).send(payload);
+}
 
 let pool = null;
 
@@ -139,10 +163,9 @@ export default async function handler(req, res) {
         const [rows] = await executeSql('SELECT MAX(id) as max_id FROM auditoria').catch(() => [[{}]]);
         const maxId = (rows && rows[0] && rows[0].max_id) || 0;
         const version = `v_tidb_${maxId}`;
-        res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=60');
-        return res.status(200).json({ status: 'ok', version, updated_at: new Date().toISOString() });
+        return sendJson(req, res, 200, { status: 'ok', version, updated_at: new Date().toISOString() }, 'public, max-age=60, s-maxage=60, stale-while-revalidate=120');
       } catch (e) {
-        return res.status(200).json({ status: 'ok', version: 'v_tidb_fb', updated_at: new Date().toISOString() });
+        return sendJson(req, res, 200, { status: 'ok', version: 'v_tidb_fb', updated_at: new Date().toISOString() }, 'public, max-age=30, s-maxage=30');
       }
     }
 
@@ -160,15 +183,14 @@ export default async function handler(req, res) {
         records = await executeSql('SELECT * FROM cursistas WHERE LOWER(email) = ? OR LOWER(e-mail) = ?', [cleanEmail, cleanEmail]).catch(() => []);
         intencoes = await executeSql('SELECT * FROM intencao_matricula_2027 WHERE LOWER(email) = ? ORDER BY created_at DESC', [cleanEmail]).catch(() => []);
       }
-      res.setHeader('Cache-Control', 'private, no-cache, no-transform');
-      return res.status(200).json({ status: 'ok', records, intencoes });
+      return sendJson(req, res, 200, { status: 'ok', records, intencoes }, 'private, no-cache, no-transform');
     }
 
     if (action === 'bundle' || action === 'get_all') {
       const [cursistas, tutores, observacoes, concluintes, exonerados, movimentacoes, diario, intencoes, observacoesTutor] = await Promise.all([
         executeSql('SELECT * FROM cursistas ORDER BY nome_cursista ASC').catch(() => []),
         executeSql('SELECT * FROM tutores ORDER BY tutor_responsavel ASC').catch(() => []),
-        executeSql('SELECT * FROM observacoes_pratica ORDER BY id DESC').catch(() => []),
+        executeSql('SELECT * FROM observacao_pratica ORDER BY id DESC').catch(() => executeSql('SELECT * FROM observacoes_pratica ORDER BY id DESC').catch(() => [])),
         executeSql('SELECT * FROM cursistas_concluintes ORDER BY nome_cursista ASC').catch(() => []),
         executeSql('SELECT * FROM exonerados ORDER BY nome_cursista ASC').catch(() => []),
         executeSql('SELECT * FROM movimentacoes ORDER BY timestamp DESC LIMIT 5000').catch(() => []),
@@ -177,7 +199,7 @@ export default async function handler(req, res) {
         executeSql('SELECT * FROM observacoes_tutor ORDER BY id ASC').catch(() => [])
       ]);
 
-      return res.status(200).json({
+      const bundlePayload = {
         status: 'success',
         source: 'TiDB Cloud Serverless',
         atualizado_em: new Date().toISOString(),
@@ -244,7 +266,10 @@ export default async function handler(req, res) {
             tema: r.tema || ''
           };
         })
-      });
+      };
+
+      return sendJson(req, res, 200, bundlePayload, 'public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400');
+    }
     }
 
     if (action === 'normalize_nres_db') {

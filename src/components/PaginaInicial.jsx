@@ -48,6 +48,26 @@ export default function PaginaInicial({
       disponivel: true
     },
     {
+      id: 'encerramento_formativo',
+      tab: 'encerramento_formativo',
+      macroPilar: 'pedagogica',
+      titulo: 'Encerramento Formativo',
+      categoria: '2º Semestre • Temas 6 e 7',
+      subtitulo: 'Acompanhamento de Implementação',
+      descricao: 'Painel para verificar se os formadores preencheram as observações de implementação dos Temas 6 e 7 para cada cursista do 2º semestre.',
+      icone: (
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+          <polyline points="22 4 12 14.01 9 11.01"></polyline>
+        </svg>
+      ),
+      corDestaque: '#6366f1',
+      bgIcone: 'rgba(99, 102, 241, 0.1)',
+      badge: 'Temas 6 e 7',
+      badgeCor: '#6366f1',
+      disponivel: userRole === 'admin' || userRole === 'tecnico' || userRole === 'tutor' || isSuperAdminTutor
+    },
+    {
       id: 'observacoes',
       tab: 'observacoes',
       macroPilar: 'pedagogica',

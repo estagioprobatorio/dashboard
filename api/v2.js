@@ -4,6 +4,7 @@
  *  - Planilhas (Apps Script): header x-sync-token = SYNC_TOKEN; ações sync_*_bulk (mesmos payloads de antes).
  * CORS restrito a ALLOWED_ORIGINS (padrão: localhost em desenvolvimento).
  */
+import zlib from 'zlib';
 import { query, audit } from './_lib/db.js';
 import { authenticate, exigeFuncao, HttpError, STAFF, FUNCOES } from './_lib/auth.js';
 import { buildBundle, parseIntencaoRow } from './_lib/bundle.js';
@@ -37,6 +38,29 @@ function applyCors(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Sync-Token');
   res.setHeader('Cache-Control', 'no-store');
+}
+
+/**
+ * Resposta JSON otimizada com compressão GZIP e Cache-Control explícito.
+ * Reduz em até 95% a transferência de saída (Fast Origin Transfer) das Serverless Functions.
+ */
+function sendJson(req, res, statusCode, data, cacheControl = null) {
+  if (cacheControl) {
+    res.setHeader('Cache-Control', cacheControl);
+  }
+  const payload = typeof data === 'string' ? data : JSON.stringify(data);
+  const acceptEncoding = (req.headers && req.headers['accept-encoding']) || '';
+
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+
+  if (payload.length > 1024 && /\bgzip\b/i.test(acceptEncoding)) {
+    res.setHeader('Content-Encoding', 'gzip');
+    res.setHeader('Vary', 'Accept-Encoding');
+    const gzipped = zlib.gzipSync(Buffer.from(payload, 'utf-8'), { level: 6 });
+    return res.status(statusCode).send(gzipped);
+  }
+
+  return res.status(statusCode).send(payload);
 }
 
 const podeGerenciar = (user, funcaoAlvo) =>
@@ -81,18 +105,17 @@ export default async function handler(req, res) {
         const intId = (rInt && rInt.max_id) || 0;
         const intEm = (rInt && rInt.max_em) ? new Date(rInt.max_em).getTime() : 0;
         const version = `v_${auditId}_${auditEm}_${intId}_${intEm}`;
-        res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=120');
-        return res.status(200).json({
+        return sendJson(req, res, 200, {
           status: 'ok',
           version,
           updated_at: new Date(Math.max(auditEm, intEm) || Date.now()).toISOString()
-        });
+        }, 'public, max-age=60, s-maxage=60, stale-while-revalidate=120');
       } catch (err) {
-        return res.status(200).json({
+        return sendJson(req, res, 200, {
           status: 'ok',
           version: 'v_fallback',
           updated_at: new Date().toISOString()
-        });
+        }, 'public, max-age=30, s-maxage=30');
       }
     }
 
@@ -207,8 +230,7 @@ export default async function handler(req, res) {
       }
       const intencoes = Array.from(mapInt.values());
 
-      res.setHeader('Cache-Control', 'private, no-cache, no-transform');
-      return res.status(200).json({
+      return sendJson(req, res, 200, {
         status: 'ok',
         usuario: {
           id: targetUserId,
@@ -218,12 +240,12 @@ export default async function handler(req, res) {
         },
         records,
         intencoes
-      });
+      }, 'private, no-cache, no-transform');
     }
 
     if (action === 'bundle' || action === 'get_all') {
-      res.setHeader('Cache-Control', 'private, max-age=300, stale-while-revalidate=60');
-      return res.status(200).json(await buildBundle(user));
+      const bundleData = await buildBundle(user);
+      return sendJson(req, res, 200, bundleData, 'public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400');
     }
 
     if (action === 'insert_observacao') {
