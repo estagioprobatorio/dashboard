@@ -78,7 +78,8 @@ function onOpen() {
       .addItem('🚪 Sincronizar Servidores Exonerados', 'sincronizarAbaExoneradosMenu')
       .addItem('🎓 Sincronizar Concluintes', 'sincronizarAbaConcluintesMenu')
       .addItem('👨‍🏫 Sincronizar Tutores Regionais', 'sincronizarAbaTutoresMenu')
-      .addItem('📋 Sincronizar Observações da Prática', 'sincronizarObservacoesPraticaMenu')
+      .addItem('⚡ Sincronizar Observações (Apenas 2º Semestre - RÁPIDO)', 'sincronizarObservacoes2SemestreMenu')
+      .addItem('📋 Sincronizar Observações da Prática (Todas)', 'sincronizarObservacoesPraticaMenu')
       .addItem('🕵️ Sincronizar Observações do Tutor', 'sincronizarObservacoesTutorMenu')
       .addItem('🔀 Sincronizar Movimentações', 'sincronizarAbaMovimentacoesMenu')
       .addSeparator()
@@ -194,6 +195,16 @@ function sincronizarManualComAlerta() {
       SpreadsheetApp.getUi().alert('Erro na Sincronização', err.toString(), SpreadsheetApp.getUi().ButtonSet.OK);
     } catch (e) {}
   }
+}
+
+function sincronizarObservacoes2SemestreMenu() {
+  SpreadsheetApp.getActiveSpreadsheet().toast('Sincronizando observações do 2º Semestre (Temas 6 e 7)...', 'TiDB Serverless', 10);
+  var res = sincronizarAbaObservacoes2SemestreParaTiDB();
+  var msg = '✓ Sincronização do 2º Semestre Concluída!\n\n' +
+            'Total enviado ao TiDB: ' + (res.total || 0) + ' observações.\n\n' +
+            (res.relatorio ? res.relatorio.join('\n') : '') +
+            '\n\n💡 Agora acesse o painel "Encerramento Formativo" e clique em "🔄 Recarregar Banco".';
+  SpreadsheetApp.getUi().alert('Observações 2º Semestre', msg, SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
 function sincronizarObservacoesPraticaMenu() {
@@ -1152,7 +1163,7 @@ function mapRowToObservation(headers, row, sheetName, sheetId, rowNumber, config
 
 function enviarLoteObservacoesParaTiDB(observacoes) {
   if (!observacoes || observacoes.length === 0) return 0;
-  var BATCH_SIZE = 400;
+  var BATCH_SIZE = 150;
   var totalSinc = 0;
   for (var b = 0; b < observacoes.length; b += BATCH_SIZE) {
     var lote = observacoes.slice(b, b + BATCH_SIZE);
@@ -1176,19 +1187,18 @@ function enviarLoteObservacoesParaTiDB(observacoes) {
   return totalSinc;
 }
 
-function sincronizarAbaObservacoesParaTiDB() {
-  Logger.log('Sincronizando a partir das 4 planilhas externas de Formadores...');
+function processarPlanilhasObservacao(planilhas) {
   var totalGeral = 0;
   var relatorio = [];
   var startTime = Date.now();
 
-  for (var p = 0; p < PLANILHAS_OBSERVACOES_FORMADOR.length; p++) {
+  for (var p = 0; p < planilhas.length; p++) {
     // Guarda de segurança contra timeout (máximo 4.5 minutos de execução)
     if (Date.now() - startTime > 260000) {
-      relatorio.push('⏱️ Tempo limite preventivo atingido (demais planilhas serão processadas no próximo disparo).');
+      relatorio.push('⏱️ Tempo limite preventivo atingido.');
       break;
     }
-    var cfg = PLANILHAS_OBSERVACOES_FORMADOR[p];
+    var cfg = planilhas[p];
     try {
       var extSs = SpreadsheetApp.openById(cfg.id);
       var extAba = getSheetByGid(extSs, cfg.gid);
@@ -1227,6 +1237,19 @@ function sincronizarAbaObservacoesParaTiDB() {
   }
 
   return { total: totalGeral, relatorio: relatorio };
+}
+
+function sincronizarAbaObservacoes2SemestreParaTiDB() {
+  Logger.log('Sincronizando observações do 2º Semestre...');
+  var planilhas2Sem = PLANILHAS_OBSERVACOES_FORMADOR.filter(function(p) {
+    return p.sigla && p.sigla.indexOf('2SEM') !== -1;
+  });
+  return processarPlanilhasObservacao(planilhas2Sem);
+}
+
+function sincronizarAbaObservacoesParaTiDB() {
+  Logger.log('Sincronizando a partir das 4 planilhas externas de Formadores...');
+  return processarPlanilhasObservacao(PLANILHAS_OBSERVACOES_FORMADOR);
 }
 
 

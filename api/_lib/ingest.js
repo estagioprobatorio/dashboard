@@ -444,47 +444,122 @@ export async function ingestMovimentacoes(items) {
   return { sincronizados: ok, rejeitados: ctx.rej };
 }
 
-/* ---------------- observaÃ§Ãµes da prÃ¡tica ---------------- */
+/* ---------------- observações da prática ---------------- */
 export async function ingestObservacoes(items) {
   const ctx = makeCtx();
-  let ok = 0;
+  if (!Array.isArray(items) || items.length === 0) {
+    return { sincronizados: 0, rejeitados: ctx.rej };
+  }
+
+  // 1. Coleta e-mails únicos para pré-busca em massa (reduz 1600 round-trips seriais para poucas queries)
+  const allEmailsSet = new Set();
+  const validItems = [];
   for (const o of items) {
     const emCurs = lowerEmail(o.email_cursista);
-    if (!emCurs) { reject(ctx, 'observacao_sem_email_cursista'); continue; }
-    const cur = await usuarioPorEmail(ctx, { email: emCurs, nome: o.nome_cursista, funcao: 'cursista' });
+    if (!emCurs) {
+      reject(ctx, 'observacao_sem_email_cursista');
+      continue;
+    }
+    allEmailsSet.add(emCurs);
     const emForm = lowerEmail(o.email_formador);
-    const form = emForm ? await usuarioPorEmail(ctx, { email: emForm, nome: o.nome_formador, funcao: 'formador' }) : null;
-    const mat = cur ? (await query(
-      `SELECT m.id FROM matricula m JOIN vinculo v ON v.id = m.vinculo_id
-       LEFT JOIN turma t ON t.id = m.turma_id LEFT JOIN componente c ON c.id = t.componente_id
-       WHERE v.usuario_id = ? ORDER BY (c.nome = ?) DESC, m.na_base_ativa DESC, m.id LIMIT 1`, [cur.id, s(o.componente) || ''])
-    )[0] : null;
-    const idOrig = s(o.id_origem || o.id) || `OBS_${sha(emCurs, o.carimbo, o.tema, o.data_observacao, o.data_pratica)}`;
-    await query(
-      `INSERT INTO observacao_pratica (id_origem, usuario_id, matricula_id, formador_id, carimbo, ano_formativo, semestre, chamamento, modalidade,
-         componente, tema, email_cursista, nome_cursista, email_formador, nome_formador, tutor_responsavel, turma, nre_exe, munic_exe, proposta,
-         observacao_realizada, is_realizada, data_pratica, data_observacao, data_feedback, modalidade_feedback, motivo_devolutiva,
-         link_gravacao_pratica, link_planejamento, link_pdp, proposta_pedagogica, link_gravacao_feedback, nivel_planejamento, nivel_pratica,
-         questionamentos_propositivos, proposicoes_sugestoes, combinados, quem_observou, tutor_tecnico_observador)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-       ON DUPLICATE KEY UPDATE matricula_id = COALESCE(VALUES(matricula_id), matricula_id), formador_id = COALESCE(VALUES(formador_id), formador_id),
-         email_cursista = VALUES(email_cursista), nome_cursista = VALUES(nome_cursista), email_formador = VALUES(email_formador), nome_formador = VALUES(nome_formador),
-         tutor_responsavel = COALESCE(VALUES(tutor_responsavel), tutor_responsavel), turma = COALESCE(VALUES(turma), turma),
-         nre_exe = COALESCE(VALUES(nre_exe), nre_exe), munic_exe = COALESCE(VALUES(munic_exe), munic_exe), proposta = COALESCE(VALUES(proposta), proposta),
-         data_pratica = VALUES(data_pratica), data_feedback = VALUES(data_feedback), nivel_planejamento = VALUES(nivel_planejamento), nivel_pratica = VALUES(nivel_pratica),
-         tema = VALUES(tema), proposta_pedagogica = VALUES(proposta_pedagogica), quem_observou = VALUES(quem_observou),
-         tutor_tecnico_observador = VALUES(tutor_tecnico_observador)`,
-      [idOrig, cur ? cur.id : null, mat ? mat.id : null, form ? form.id : null, s(o.carimbo), s(o.ano_formativo), s(o.semestre), s(o.chamamento), s(o.modalidade),
-        s(o.componente), s(o.tema), emCurs, s(o.nome_cursista) || '', emForm, s(o.nome_formador) || null, s(o.tutor_responsavel) || null, s(o.turma) || null,
-        s(o.nre_exe || o.nre) || null, s(o.munic_exe || o.municipio) || null, s(o.proposta || o.proposta_pedagogica) || null,
-        s(o.observacao_realizada) || 'Sim', o.is_realizada !== false && o.is_realizada !== 0 ? 1 : 0,
-        parseDate(o.data_pratica || o.data_implementacao), parseDate(o.data_observacao), parseDate(o.data_feedback), s(o.modalidade_feedback),
-        s(o.motivo_devolutiva), s(o.link_gravacao_pratica), s(o.link_planejamento || o.link_pdp), s(o.link_pdp || o.link_planejamento),
-        s(o.proposta_pedagogica || o.proposta), s(o.link_gravacao_feedback), s(o.nivel_planejamento), s(o.nivel_pratica),
-        s(o.questionamentos_propositivos), s(o.proposicoes_sugestoes), s(o.combinados),
-        s(o.quem_observou) || (o.tutor_tecnico_observador ? 'Tutor/Técnico' : 'Formador'), s(o.tutor_tecnico_observador)]
-    );
-    ok++;
+    if (emForm) allEmailsSet.add(emForm);
+    validItems.push({ ...o, _emCurs: emCurs, _emForm: emForm });
+  }
+
+  const allEmails = Array.from(allEmailsSet);
+  const userMap = new Map();
+  if (allEmails.length > 0) {
+    for (let i = 0; i < allEmails.length; i += 500) {
+      const batchEmails = allEmails.slice(i, i + 500);
+      const placeholders = batchEmails.map(() => '?').join(',');
+      const rows = await query(`SELECT id, email_inst, funcao FROM usuario WHERE email_inst IN (${placeholders})`, batchEmails);
+      for (const r of rows) {
+        userMap.set(lowerEmail(r.email_inst), r);
+      }
+    }
+  }
+
+  // 2. Pré-carrega matrículas dos cursistas identificados
+  const userIds = Array.from(new Set(Array.from(userMap.values()).map(u => u.id)));
+  const matriculaMap = new Map();
+  if (userIds.length > 0) {
+    for (let i = 0; i < userIds.length; i += 500) {
+      const batchIds = userIds.slice(i, i + 500);
+      const placeholders = batchIds.map(() => '?').join(',');
+      const matRows = await query(
+        `SELECT v.usuario_id, m.id, c.nome as componente_nome, m.na_base_ativa
+         FROM matricula m
+         JOIN vinculo v ON v.id = m.vinculo_id
+         LEFT JOIN turma t ON t.id = m.turma_id
+         LEFT JOIN componente c ON c.id = t.componente_id
+         WHERE v.usuario_id IN (${placeholders})
+         ORDER BY m.na_base_ativa DESC, m.id`,
+        batchIds
+      );
+      for (const m of matRows) {
+        if (!matriculaMap.has(m.usuario_id)) matriculaMap.set(m.usuario_id, []);
+        matriculaMap.get(m.usuario_id).push(m);
+      }
+    }
+  }
+
+  // 3. Inserções concorrentes em blocos de 25
+  let ok = 0;
+  const CHUNK_SIZE = 25;
+  for (let i = 0; i < validItems.length; i += CHUNK_SIZE) {
+    const chunk = validItems.slice(i, i + CHUNK_SIZE);
+    await Promise.all(chunk.map(async (o) => {
+      try {
+        let cur = userMap.get(o._emCurs);
+        if (!cur) {
+          cur = await usuarioPorEmail(ctx, { email: o._emCurs, nome: o.nome_cursista, funcao: 'cursista' });
+          if (cur) userMap.set(o._emCurs, cur);
+        }
+
+        let form = o._emForm ? userMap.get(o._emForm) : null;
+        if (!form && o._emForm) {
+          form = await usuarioPorEmail(ctx, { email: o._emForm, nome: o.nome_formador, funcao: 'formador' });
+          if (form) userMap.set(o._emForm, form);
+        }
+
+        let matId = null;
+        if (cur && matriculaMap.has(cur.id)) {
+          const mats = matriculaMap.get(cur.id);
+          const compTarget = (s(o.componente) || '').toLowerCase();
+          const match = mats.find(m => m.componente_nome && m.componente_nome.toLowerCase() === compTarget) || mats[0];
+          if (match) matId = match.id;
+        }
+
+        const idOrig = s(o.id_origem || o.id) || `OBS_${sha(o._emCurs, o.carimbo, o.tema, o.data_observacao, o.data_pratica)}`;
+        await query(
+          `INSERT INTO observacao_pratica (id_origem, usuario_id, matricula_id, formador_id, carimbo, ano_formativo, semestre, chamamento, modalidade,
+             componente, tema, email_cursista, nome_cursista, email_formador, nome_formador, tutor_responsavel, turma, nre_exe, munic_exe, proposta,
+             observacao_realizada, is_realizada, data_pratica, data_observacao, data_feedback, modalidade_feedback, motivo_devolutiva,
+             link_gravacao_pratica, link_planejamento, link_pdp, proposta_pedagogica, link_gravacao_feedback, nivel_planejamento, nivel_pratica,
+             questionamentos_propositivos, proposicoes_sugestoes, combinados, quem_observou, tutor_tecnico_observador)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+           ON DUPLICATE KEY UPDATE matricula_id = COALESCE(VALUES(matricula_id), matricula_id), formador_id = COALESCE(VALUES(formador_id), formador_id),
+             email_cursista = VALUES(email_cursista), nome_cursista = VALUES(nome_cursista), email_formador = VALUES(email_formador), nome_formador = VALUES(nome_formador),
+             tutor_responsavel = COALESCE(VALUES(tutor_responsavel), tutor_responsavel), turma = COALESCE(VALUES(turma), turma),
+             nre_exe = COALESCE(VALUES(nre_exe), nre_exe), munic_exe = COALESCE(VALUES(munic_exe), munic_exe), proposta = COALESCE(VALUES(proposta), proposta),
+             data_pratica = VALUES(data_pratica), data_feedback = VALUES(data_feedback), nivel_planejamento = VALUES(nivel_planejamento), nivel_pratica = VALUES(nivel_pratica),
+             tema = VALUES(tema), proposta_pedagogica = VALUES(proposta_pedagogica), quem_observou = VALUES(quem_observou),
+             tutor_tecnico_observador = VALUES(tutor_tecnico_observador)`,
+          [idOrig, cur ? cur.id : null, matId, form ? form.id : null, s(o.carimbo), s(o.ano_formativo), s(o.semestre), s(o.chamamento), s(o.modalidade),
+            s(o.componente), s(o.tema), o._emCurs, s(o.nome_cursista) || '', o._emForm, s(o.nome_formador) || null, s(o.tutor_responsavel) || null, s(o.turma) || null,
+            s(o.nre_exe || o.nre) || null, s(o.munic_exe || o.municipio) || null, s(o.proposta || o.proposta_pedagogica) || null,
+            s(o.observacao_realizada) || 'Sim', o.is_realizada !== false && o.is_realizada !== 0 ? 1 : 0,
+            parseDate(o.data_pratica || o.data_implementacao), parseDate(o.data_observacao), parseDate(o.data_feedback), s(o.modalidade_feedback),
+            s(o.motivo_devolutiva), s(o.link_gravacao_pratica), s(o.link_planejamento || o.link_pdp), s(o.link_pdp || o.link_planejamento),
+            s(o.proposta_pedagogica || o.proposta), s(o.link_gravacao_feedback), s(o.nivel_planejamento), s(o.nivel_pratica),
+            s(o.questionamentos_propositivos), s(o.proposicoes_sugestoes), s(o.combinados),
+            s(o.quem_observou) || (o.tutor_tecnico_observador ? 'Tutor/Técnico' : 'Formador'), s(o.tutor_tecnico_observador)]
+        );
+        ok++;
+      } catch (errRow) {
+        reject(ctx, `erro_linha_obs: ${errRow.message}`);
+      }
+    }));
   }
   return { sincronizados: ok, rejeitados: ctx.rej };
 }
