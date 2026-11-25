@@ -519,6 +519,30 @@ export default function App() {
     return salva;
   };
 
+  // Recarrega forçadamente os dados mais recentes do TiDB Cloud (limpando IndexedDB e cache de memória)
+  const handleForceRefresh = async () => {
+    setIsLoading(true);
+    try {
+      clearBundleMemoryCache();
+      const { clearStoredBundle } = await import('./services/bundleStorage');
+      await clearStoredBundle();
+      const pacote = await loadBundle({ forceRefresh: true, userEmail: user?.email });
+      if (pacote) {
+        if (pacote.baseCursistas && Array.isArray(pacote.baseCursistas)) setRecords(pacote.baseCursistas);
+        if (pacote.tutores && Array.isArray(pacote.tutores)) setTutoresList(pacote.tutores);
+        if (pacote.observacoes && Array.isArray(pacote.observacoes)) setObservacoesList(pacote.observacoes);
+        if (pacote.concluintes && Array.isArray(pacote.concluintes)) setConcluintesList(pacote.concluintes);
+        if (pacote.exonerados && Array.isArray(pacote.exonerados)) setExoneradosList(pacote.exonerados);
+        if (pacote.movimentacoes && Array.isArray(pacote.movimentacoes)) setMovimentacoesList(pacote.movimentacoes);
+        if (pacote.observacoesTutor && Array.isArray(pacote.observacoesTutor)) setObservacoesTutorList(pacote.observacoesTutor);
+      }
+    } catch (err) {
+      console.warn('[App] Erro ao recarregar dados do banco:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const [simulatedEmail, setSimulatedEmail] = useState('');
 
   // Histórico de turmas do cursista: visível apenas para Admin e Técnico (respeita simulação de perfil)
@@ -996,6 +1020,7 @@ export default function App() {
             tutores={tutoresList}
             userRole={effectiveRole}
             userEmail={effectiveEmail}
+            onForceRefresh={handleForceRefresh}
           />
         );
 

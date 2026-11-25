@@ -100,11 +100,13 @@ export default async function handler(req, res) {
       try {
         const [rAud] = await query('SELECT MAX(id) as max_id, MAX(em) as max_em FROM auditoria').catch(() => [{}]);
         const [rInt] = await query('SELECT MAX(id) as max_id, MAX(criado_em) as max_em FROM intencao_matricula').catch(() => [{}]);
+        const [rObs] = await query('SELECT MAX(id) as max_id FROM observacao_pratica').catch(() => [{}]);
         const auditId = (rAud && rAud.max_id) || 0;
         const auditEm = (rAud && rAud.max_em) ? new Date(rAud.max_em).getTime() : 0;
         const intId = (rInt && rInt.max_id) || 0;
         const intEm = (rInt && rInt.max_em) ? new Date(rInt.max_em).getTime() : 0;
-        const version = `v_${auditId}_${auditEm}_${intId}_${intEm}`;
+        const obsId = (rObs && rObs.max_id) || 0;
+        const version = `v_${auditId}_${auditEm}_${intId}_${intEm}_${obsId}`;
         return sendJson(req, res, 200, {
           status: 'ok',
           version,
