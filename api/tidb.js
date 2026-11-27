@@ -196,7 +196,20 @@ export default async function handler(req, res) {
         executeSql('SELECT * FROM movimentacoes ORDER BY timestamp DESC LIMIT 5000').catch(() => []),
         executeSql('SELECT * FROM diario_formativo ORDER BY data_registro DESC LIMIT 500').catch(() => []),
         executeSql('SELECT * FROM intencao_matricula_2027 ORDER BY created_at DESC').catch(() => []),
-        executeSql('SELECT * FROM observacoes_tutor ORDER BY id ASC').catch(() => [])
+        executeSql(`
+          SELECT ot.*, 
+                 COALESCE(t.nome, ot.tutor) AS tutor, 
+                 COALESCE(t.email_inst, ot.tutor_email) AS tutor_email, 
+                 COALESCE(f.nome, ot.formador) AS formador, 
+                 COALESCE(f.email_inst, ot.formador_email) AS formador_email, 
+                 COALESCE(n.nome, ot.nre) AS nre_nome,
+                 ot.registrado_em AS ts_registrado
+          FROM observacao_tutor ot 
+          LEFT JOIN usuario t ON t.id = ot.tutor_id 
+          LEFT JOIN usuario f ON f.id = ot.formador_id 
+          LEFT JOIN nre n ON n.id = ot.nre_id 
+          ORDER BY ot.id ASC
+        `).catch(() => []).then(r => (r && r.length > 0) ? r : executeSql('SELECT * FROM observacoes_tutor ORDER BY id ASC').catch(() => []))
       ]);
 
       const bundlePayload = {
@@ -385,6 +398,14 @@ export default async function handler(req, res) {
 
         for (let j = 0; j < batch.length; j++) {
           const r = batch[j];
+          // Desconsidera concluintes da aba DADOS (subir apenas cursistas ativos)
+          const compStr = String(r.componente || r.componente_conc || '').toUpperCase();
+          const sitStr = String(r.situacao || r.status || '').toUpperCase();
+          const turmStr = String(r.turmas || r.turma || '').toUpperCase();
+          if (compStr.includes('CONCLUINTE') || sitStr.includes('CONCLUINTE') || turmStr.includes('CONCLUINTE')) {
+            continue;
+          }
+
           let cod = r.cod_cursista || (r.cgm ? `${r.cgm}_${r.turmas || ''}` : `CURS_${Date.now()}_${i + j}`);
           placeholders.push('(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
           values.push(
@@ -859,15 +880,41 @@ export default async function handler(req, res) {
     }
 
     if (action === 'get_observacoes_tutor') {
-      const rows = await executeSql('SELECT * FROM observacoes_tutor ORDER BY id ASC').catch(() => []);
+      let rows = await executeSql(`
+        SELECT ot.*, 
+               COALESCE(t.nome, ot.tutor) AS tutor, 
+               COALESCE(t.email_inst, ot.tutor_email) AS tutor_email, 
+               COALESCE(f.nome, ot.formador) AS formador, 
+               COALESCE(f.email_inst, ot.formador_email) AS formador_email, 
+               COALESCE(n.nome, ot.nre) AS nre_nome,
+               ot.registrado_em AS ts_registrado
+        FROM observacao_tutor ot 
+        LEFT JOIN usuario t ON t.id = ot.tutor_id 
+        LEFT JOIN usuario f ON f.id = ot.formador_id 
+        LEFT JOIN nre n ON n.id = ot.nre_id 
+        ORDER BY ot.id ASC
+      `).catch(() => []);
+
+      if (!rows || rows.length === 0) {
+        rows = await executeSql('SELECT * FROM observacoes_tutor ORDER BY id ASC').catch(() => []);
+      }
+
       const formatted = rows.map(r => {
         let rubrics = [];
         try {
-          rubrics = typeof r.rubrics_json === 'string' ? JSON.parse(r.rubrics_json) : (r.rubrics_json || []);
+          if (Array.isArray(r.rubricas)) {
+            rubrics = r.rubricas;
+          } else if (typeof r.rubricas === 'string') {
+            rubrics = JSON.parse(r.rubricas);
+          } else if (typeof r.rubrics_json === 'string') {
+            rubrics = JSON.parse(r.rubrics_json);
+          } else {
+            rubrics = r.rubrics_json || [];
+          }
         } catch(e) {}
         return {
           id: r.id_origem || `obs-tidb-${r.id}`,
-          timestamp: r.timestamp ? formatMySqlTimestamp(r.timestamp) : '',
+          timestamp: r.ts_registrado || (r.timestamp ? formatMySqlTimestamp(r.timestamp) : '') || r.registrado_em || '',
           tutorEmail: r.tutor_email || '',
           tutor: r.tutor || '',
           formador: r.formador || '',
@@ -888,7 +935,7 @@ export default async function handler(req, res) {
           destaques: r.destaques || '',
           desenvolver: r.desenvolver || '',
           encaminhamentos: r.encaminhamentos || '',
-          nre: r.nre || '',
+          nre: r.nre_nome || r.nre || '',
           tema: r.tema || ''
         };
       });

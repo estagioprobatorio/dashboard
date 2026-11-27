@@ -71,6 +71,7 @@ export default function EncerramentoFormativo({
   });
 
   const [filtroFormador, setFiltroFormador] = useState('');
+  const [filtroNreFormador, setFiltroNreFormador] = useState('');
   const [filtroCursista, setFiltroCursista] = useState('');
   const [filtroTema, setFiltroTema] = useState('todos'); // 'todos', 'tema6', 'tema7'
   const [filtroStatus, setFiltroStatus] = useState('todos'); // 'todos', 'concluido', 'parcial', 'pendente', 't6_pendente', 't7_pendente'
@@ -172,6 +173,7 @@ export default function EncerramentoFormativo({
           formador: formadorFinal,
           tutor: tutorFinal,
           nre: normalizeNre(c.nre_exe || c.nre_tutor || c.nre || ''),
+          nre_formador: normalizeNre(c.nre_formador || ''),
           componente: c.componente || c.componente_conc || 'Geral',
           turma: c.turmas || c.turma || '',
           tema6: obsData.tema6,
@@ -237,11 +239,20 @@ export default function EncerramentoFormativo({
     return Array.from(setF).sort();
   }, [baseConsolidada]);
 
+  const listaNresFormador = useMemo(() => {
+    const setN = new Set();
+    baseConsolidada.forEach(item => {
+      if (item.nre_formador) setN.add(item.nre_formador);
+    });
+    return Array.from(setN).sort();
+  }, [baseConsolidada]);
+
   // Aplicação dos filtros
   const dadosFiltrados = useMemo(() => {
     return baseConsolidada.filter(item => {
       if (filtroTutor && item.tutor !== filtroTutor) return false;
       if (filtroFormador && item.formador !== filtroFormador) return false;
+      if (filtroNreFormador && item.nre_formador !== filtroNreFormador) return false;
 
       if (filtroCursista) {
         const busca = filtroCursista.toLowerCase();
@@ -617,6 +628,31 @@ export default function EncerramentoFormativo({
               <option value="">Todos os Formadores ({listaFormadores.length})</option>
               {listaFormadores.map(f => (
                 <option key={f} value={f}>{f}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Filtro NRE Formador */}
+          <div>
+            <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '0.3rem' }}>
+              🏢 NRE Formador:
+            </label>
+            <select
+              value={filtroNreFormador}
+              onChange={e => { setFiltroNreFormador(e.target.value); setCurrentPage(1); }}
+              style={{
+                width: '100%',
+                padding: '0.45rem 0.65rem',
+                fontSize: '0.82rem',
+                borderRadius: '6px',
+                border: '1px solid #cbd5e1',
+                backgroundColor: '#ffffff',
+                color: '#1e293b'
+              }}
+            >
+              <option value="">Todos os NREs Formador ({listaNresFormador.length})</option>
+              {listaNresFormador.map(n => (
+                <option key={n} value={n}>{n}</option>
               ))}
             </select>
           </div>

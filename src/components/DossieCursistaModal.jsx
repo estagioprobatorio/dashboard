@@ -4,6 +4,7 @@ import FormularioInserirObservacao from './FormularioInserirObservacao';
 import CurvaEvolucaoPedagogica from './CurvaEvolucaoPedagogica';
 import HistoricoTurmasCursista from './HistoricoTurmasCursista';
 import ExplicacaoAdequacaoAdmin from './ExplicacaoAdequacaoAdmin';
+import ContadorTempoEstagio from './ContadorTempoEstagio';
 import { getObservacoes2024PorCursista } from '../utils/observacoes2024Service';
 import { parseScore, scoreLabel, gerarDiagnosticoCursistaIA, getNivelInfo, normalizeString } from '../utils/aiPedagogicalService';
 import { getFormadorEmail } from '../utils/formadoresUtils';
@@ -290,6 +291,12 @@ export default function DossieCursistaModal({
 
           {/* GUIA DIDÁTICO PARA ADMIN & SUPERADMIN SOBRE A EQUIPARAÇÃO 2024/2025 -> 2026 */}
           <ExplicacaoAdequacaoAdmin userRole={userRole} userEmail={userEmail} compact={true} />
+
+          {/* CONTADOR DE TEMPO EM ESTÁGIO PROBATÓRIO (3 ANOS / 1095 DIAS) */}
+          <ContadorTempoEstagio 
+            periodoIni={cursista?.periodo_ini || cursista?.data_posse || cursista?.dt_posse || cursista?.inicio_estagio} 
+            diasAfastamento={cursista?.dias_afastamento} 
+          />
 
           {/* CARDS DE KPIS */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '1rem' }}>

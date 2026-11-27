@@ -260,6 +260,14 @@ export async function ingestCursistas(items, { runId, final }) {
   const ctx = makeCtx();
   let ok = 0;
   for (const r of items) {
+    // Desconsidera cursistas concluintes (1º chamamento ou geral) presentes na aba DADOS
+    const compStr = s(r.componente || r.componente_conc || '').toUpperCase();
+    const sitStr = s(r.situacao || r.status || '').toUpperCase();
+    const turmStr = s(r.turmas || r.turma || '').toUpperCase();
+    if (compStr.includes('CONCLUINTE') || sitStr.includes('CONCLUINTE') || turmStr.includes('CONCLUINTE')) {
+      continue;
+    }
+
     const res = await resolverCursista(ctx, r);
     if (!res || !res.vinculoId) continue;
 
@@ -567,36 +575,82 @@ export async function ingestObservacoes(items) {
 /* ---------------- observações do tutor (acompanhamento de formadores) ---------------- */
 export async function ingestObservacoesTutor(items) {
   const ctx = makeCtx();
-  let ok = 0;
+  if (!Array.isArray(items) || items.length === 0) {
+    return { sincronizados: 0, rejeitados: ctx.rej };
+  }
+
+  // 1. Pré-busca em massa de e-mails de tutores e formadores
+  const emailsSet = new Set();
+  const validItems = [];
   for (let i = 0; i < items.length; i++) {
     const o = items[i];
-    const tutorEmail = o.tutorEmail || o.tutor_email || o.email_tutor;
-    const tutorNome = o.tutor || o.tutor_nome || o.nome_tutor;
-    const formadorEmail = o.formadorEmail || o.formador_email || o.email_formador;
-    const formadorNome = o.formador || o.formador_nome || o.nome_formador;
-    const ts = o.timestamp || o.registrado_em || o.carimbo || o.data_registro;
-    const acaoObs = o.acaoObservada || o.acao_observada;
-    const tut = await usuarioPorEmail(ctx, { email: tutorEmail, nome: tutorNome, funcao: 'tutor' });
-    const form = await usuarioPorEmail(ctx, { email: formadorEmail, nome: formadorNome, funcao: 'formador' });
-    const nid = await nreId(ctx, o.nre, null);
-    const idOrig = String(o.id || o.id_origem || `OBS_TUT_${sha(tutorEmail, ts, acaoObs, i)}`);
-    const avg = o.avgScore !== null && o.avgScore !== undefined && !isNaN(o.avgScore) ? Number(o.avgScore) : null;
-    await query(
-      `INSERT INTO observacao_tutor (id_origem, tutor_id, formador_id, registrado_em, acao_acompanhamento, acao_observada, data_observacao,
-         link_acao_observada, data_feedback, link_feedback, links_complementares, modalidade, avg_score, checklist_realizadas,
-         checklist_nao_realizadas, outros_registros, destaques, desenvolver, encaminhamentos, nre_id, tema, rubricas)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-       ON DUPLICATE KEY UPDATE tutor_id = VALUES(tutor_id), formador_id = VALUES(formador_id), avg_score = VALUES(avg_score),
-         rubricas = VALUES(rubricas), destaques = VALUES(destaques), desenvolver = VALUES(desenvolver), encaminhamentos = VALUES(encaminhamentos),
-         nre_id = VALUES(nre_id), tema = VALUES(tema), modalidade = VALUES(modalidade)`,
-      [idOrig, tut ? tut.id : null, form ? form.id : null, parseDateTime(ts), s(o.acaoAcompanhamento || o.acao_acompanhamento),
-        s(acaoObs), s(o.dataObservacao || o.data_observacao), s(o.linkAcaoObservada || o.link_acao_observada),
-        s(o.dataFeedback || o.data_feedback), s(o.linkFeedback || o.link_feedback), s(o.linksComplementares || o.links_complementares),
-        s(o.modalidade), avg, s(o.checklistRealizadas || o.checklist_realizadas), s(o.checklistNaoRealizadas || o.checklist_nao_realizadas),
-        s(o.outrosRegistros || o.outros_registros), s(o.destaques), s(o.desenvolver), s(o.encaminhamentos), nid, s(o.tema),
-        JSON.stringify(o.rubrics || o.rubricas || [])]
-    );
-    ok++;
+    const tutorEmail = lowerEmail(o.tutorEmail || o.tutor_email || o.email_tutor);
+    const formadorEmail = lowerEmail(o.formadorEmail || o.formador_email || o.email_formador);
+    if (tutorEmail) emailsSet.add(tutorEmail);
+    if (formadorEmail) emailsSet.add(formadorEmail);
+    validItems.push({ ...o, _tEmail: tutorEmail, _fEmail: formadorEmail, _idx: i });
+  }
+
+  const allEmails = Array.from(emailsSet);
+  const userMap = new Map();
+  if (allEmails.length > 0) {
+    for (let i = 0; i < allEmails.length; i += 500) {
+      const batch = allEmails.slice(i, i + 500);
+      const rows = await query(`SELECT id, email_inst, funcao FROM usuario WHERE email_inst IN (${batch.map(() => '?').join(',')})`, batch);
+      for (const r of rows) {
+        userMap.set(lowerEmail(r.email_inst), r);
+      }
+    }
+  }
+
+  // 2. Inserção em blocos concorrentes de 25
+  let ok = 0;
+  const CHUNK_SIZE = 25;
+  for (let i = 0; i < validItems.length; i += CHUNK_SIZE) {
+    const chunk = validItems.slice(i, i + CHUNK_SIZE);
+    await Promise.all(chunk.map(async (o) => {
+      try {
+        const tutorNome = o.tutor || o.tutor_nome || o.nome_tutor;
+        const formadorNome = o.formador || o.formador_nome || o.nome_formador;
+        const ts = o.timestamp || o.registrado_em || o.carimbo || o.data_registro;
+        const acaoObs = o.acaoObservada || o.acao_observada;
+
+        let tut = o._tEmail ? userMap.get(o._tEmail) : null;
+        if (!tut && o._tEmail) {
+          tut = await usuarioPorEmail(ctx, { email: o._tEmail, nome: tutorNome, funcao: 'tutor' });
+          if (tut) userMap.set(o._tEmail, tut);
+        }
+
+        let form = o._fEmail ? userMap.get(o._fEmail) : null;
+        if (!form && o._fEmail) {
+          form = await usuarioPorEmail(ctx, { email: o._fEmail, nome: formadorNome, funcao: 'formador' });
+          if (form) userMap.set(o._fEmail, form);
+        }
+
+        const nid = await nreId(ctx, o.nre, null);
+        const idOrig = String(o.id || o.id_origem || `OBS_TUT_${sha(o._tEmail, ts, acaoObs, o._idx)}`);
+        const avg = o.avgScore !== null && o.avgScore !== undefined && !isNaN(o.avgScore) ? Number(o.avgScore) : null;
+
+        await query(
+          `INSERT INTO observacao_tutor (id_origem, tutor_id, formador_id, registrado_em, acao_acompanhamento, acao_observada, data_observacao,
+             link_acao_observada, data_feedback, link_feedback, links_complementares, modalidade, avg_score, checklist_realizadas,
+             checklist_nao_realizadas, outros_registros, destaques, desenvolver, encaminhamentos, nre_id, tema, rubricas)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+           ON DUPLICATE KEY UPDATE tutor_id = VALUES(tutor_id), formador_id = VALUES(formador_id), avg_score = VALUES(avg_score),
+             rubricas = VALUES(rubricas), destaques = VALUES(destaques), desenvolver = VALUES(desenvolver), encaminhamentos = VALUES(encaminhamentos),
+             nre_id = VALUES(nre_id), tema = VALUES(tema), modalidade = VALUES(modalidade)`,
+          [idOrig, tut ? tut.id : null, form ? form.id : null, parseDateTime(ts), s(o.acaoAcompanhamento || o.acao_acompanhamento),
+            s(acaoObs), s(o.dataObservacao || o.data_observacao), s(o.linkAcaoObservada || o.link_acao_observada),
+            s(o.dataFeedback || o.data_feedback), s(o.linkFeedback || o.link_feedback), s(o.linksComplementares || o.links_complementares),
+            s(o.modalidade), avg, s(o.checklistRealizadas || o.checklist_realizadas), s(o.checklistNaoRealizadas || o.checklist_nao_realizadas),
+            s(o.outrosRegistros || o.outros_registros), s(o.destaques), s(o.desenvolver), s(o.encaminhamentos), nid, s(o.tema),
+            JSON.stringify(o.rubrics || o.rubricas || [])]
+        );
+        ok++;
+      } catch (errRow) {
+        reject(ctx, `erro_obs_tutor: ${errRow.message}`);
+      }
+    }));
   }
   return { sincronizados: ok, rejeitados: ctx.rej };
 }

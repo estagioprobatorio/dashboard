@@ -1,4 +1,6 @@
 import React from 'react';
+import ContadorTempoEstagio from './ContadorTempoEstagio';
+import { calcularTempoEstagio, parsePeriodoIni } from '../utils/tempoEstagioUtils';
 
 export default function CardVidaFuncional({ cursista, userPhoto }) {
   if (!cursista) {
@@ -19,20 +21,15 @@ export default function CardVidaFuncional({ cursista, userPhoto }) {
   const vinculo = cursista.vinculo || 'QPM';
   const cargaHoraria = cursista.carga_horaria || '20h';
 
-  // Cálculos do Estágio Probatório
-  const parseDate = (dateStr) => {
-    if (!dateStr) return null;
-    const d = new Date(dateStr);
-    return isNaN(d.getTime()) ? null : d;
-  };
-
-  const inicioEstagioDate = parseDate(cursista.inicio_estagio) || new Date(2024, 6, 12); // Fallback: 12/07/2024
+  // Cálculos do Estágio Probatório a partir de periodo_ini
+  const rawInicio = cursista.periodo_ini || cursista.data_posse || cursista.dt_posse || cursista.inicio_estagio;
+  const inicioEstagioDate = parsePeriodoIni(rawInicio) || new Date(2024, 6, 12); // Fallback: 12/07/2024
   const diasAfastamento = Number(cursista.dias_afastamento || 0);
 
-  // Data de término = início + 36 meses + afastamentos
-  const fimEstagioDate = new Date(inicioEstagioDate);
-  fimEstagioDate.setMonth(fimEstagioDate.getMonth() + 36);
-  fimEstagioDate.setDate(fimEstagioDate.getDate() - 1 + diasAfastamento);
+  const tempoCalculado = calcularTempoEstagio(rawInicio || inicioEstagioDate, diasAfastamento);
+
+  // Data de término = início + 1095 dias + afastamentos
+  const fimEstagioDate = tempoCalculado?.dtFim || new Date(inicioEstagioDate.getTime() + (1095 + diasAfastamento) * 24 * 60 * 60 * 1000);
 
   // Data limite da avaliação formativa = fimEstagio - 90 dias
   const dataLimiteAF = new Date(fimEstagioDate);
@@ -41,8 +38,7 @@ export default function CardVidaFuncional({ cursista, userPhoto }) {
   const today = new Date();
 
   // Dias restantes para o fim do estágio
-  const diffTimeEP = fimEstagioDate.getTime() - today.getTime();
-  const diasRestantesEP = Math.max(0, Math.ceil(diffTimeEP / (1000 * 60 * 60 * 24)));
+  const diasRestantesEP = tempoCalculado?.diasRestantes ?? Math.max(0, Math.ceil((fimEstagioDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
 
   // Dias restantes para o prazo final da avaliação formativa
   const diffTimeAF = dataLimiteAF.getTime() - today.getTime();
@@ -319,6 +315,80 @@ export default function CardVidaFuncional({ cursista, userPhoto }) {
         </div>
 
       </div>
+
+      {/* 3.1 Contador de Tempo em Estágio Probatório (Dias, Semanas, Meses) */}
+      {tempoCalculado && (
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.9))',
+          border: '1px solid rgba(0, 152, 74, 0.35)',
+          borderRadius: '16px',
+          padding: '1.25rem',
+          marginBottom: '1.5rem',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.2)'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{ fontSize: '1.3rem' }}>⏱️</span>
+              <div>
+                <h4 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800, color: '#ffffff' }}>
+                  Contador do Estágio Probatório (3 Anos / 1.095 Dias)
+                </h4>
+                <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                  Posse: <b>{tempoCalculado.inicioFormatado}</b> • Conclusão prevista: <b>{tempoCalculado.fimFormatado}</b>
+                </div>
+              </div>
+            </div>
+            <span style={{
+              padding: '0.25rem 0.75rem',
+              borderRadius: '20px',
+              fontSize: '0.78rem',
+              fontWeight: 700,
+              background: tempoCalculado.concluido ? 'rgba(59, 130, 246, 0.2)' : 'rgba(34, 197, 94, 0.2)',
+              color: tempoCalculado.concluido ? '#60a5fa' : '#4ade80',
+              border: `1px solid ${tempoCalculado.concluido ? '#3b82f6' : '#22c55e'}`
+            }}>
+              {tempoCalculado.concluido ? 'Concluído (1095 dias)' : `${tempoCalculado.percentual}% Cumprido`}
+            </span>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
+            <div style={{ background: 'rgba(255,255,255,0.05)', padding: '0.75rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)' }}>
+              <div style={{ fontSize: '0.68rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700 }}>DIAS CUMPRIDOS</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#ffffff', margin: '0.15rem 0' }}>
+                {tempoCalculado.diasDecorridos} <span style={{ fontSize: '0.75rem', color: '#64748b' }}>/ 1.095</span>
+              </div>
+              <div style={{ fontSize: '0.7rem', color: '#4ade80' }}>Restam {tempoCalculado.diasRestantes} dias</div>
+            </div>
+
+            <div style={{ background: 'rgba(255,255,255,0.05)', padding: '0.75rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)' }}>
+              <div style={{ fontSize: '0.68rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700 }}>SEMANAS</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#ffffff', margin: '0.15rem 0' }}>
+                {tempoCalculado.semanasDecorridas} <span style={{ fontSize: '0.75rem', color: '#64748b' }}>/ 156</span>
+              </div>
+              <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Restam {tempoCalculado.semanasRestantes} sem.</div>
+            </div>
+
+            <div style={{ background: 'rgba(255,255,255,0.05)', padding: '0.75rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)' }}>
+              <div style={{ fontSize: '0.68rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700 }}>MESES</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#ffffff', margin: '0.15rem 0' }}>
+                {tempoCalculado.mesesDecorridos} <span style={{ fontSize: '0.75rem', color: '#64748b' }}>/ 36</span>
+              </div>
+              <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Restam {tempoCalculado.mesesRestantes} meses</div>
+            </div>
+          </div>
+
+          <div>
+            <div style={{ width: '100%', height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden' }}>
+              <div style={{
+                width: `${tempoCalculado.percentual}%`,
+                height: '100%',
+                background: 'linear-gradient(90deg, #00984a 0%, #22c55e 70%, #3b82f6 100%)',
+                borderRadius: '4px'
+              }} />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 4. Bloco Especial: Regra dos 90 Dias (Avaliação Formativa) */}
       <div style={{

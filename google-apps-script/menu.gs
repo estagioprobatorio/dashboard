@@ -362,6 +362,7 @@ function sincronizarAbaDadosParaTiDB() {
   var idxHorarioFim = getIdx(["horario final", "horario_fim", "fim"]);
   var idxFormador = getIdx(["nome formador", "formador"]);
   var idxEmailFormador = getIdx(["e-mail formador", "email formador"]);
+  var idxNreFormador = getIdx(["nre_formador", "nre formador", "nre de atuacao", "nre atuacao"]);
   var idxTutor = getIdx(["tutor responsavel", "tutor"]);
   var idxEmailTutor = getIdx(["e-mail tutor", "email tutor"]);
   var idxSituacao = getIdx(["situacao", "status"]);
@@ -412,6 +413,16 @@ function sincronizarAbaDadosParaTiDB() {
 
     var cgm = idxCgm !== -1 ? String(row[idxCgm] || "").trim() : "";
     var turmas = idxTurma !== -1 ? String(row[idxTurma] || "").trim() : "";
+    var componenteVal = idxComponente !== -1 ? String(row[idxComponente] || "").trim() : "";
+    var situacaoVal = idxSituacao !== -1 ? String(row[idxSituacao] || "").trim() : "Ativo";
+
+    // Regra: Desconsidera cursistas concluintes presentes na aba DADOS (subir apenas ativos)
+    var compUpper = componenteVal.toUpperCase();
+    var sitUpper = situacaoVal.toUpperCase();
+    var turmUpper = turmas.toUpperCase();
+    if (compUpper.indexOf("CONCLUINTE") !== -1 || sitUpper.indexOf("CONCLUINTE") !== -1 || turmUpper.indexOf("CONCLUINTE") !== -1) {
+      continue;
+    }
 
     // Leitura da Linha Funcional: pelo cabeçalho ou pela Coluna AK (índice 36)
     var lf = idxLinhaFuncional !== -1 ? String(row[idxLinhaFuncional] || "").trim() : "";
@@ -439,7 +450,7 @@ function sincronizarAbaDadosParaTiDB() {
       rg: idxRg !== -1 ? String(row[idxRg] || "").trim() : null,
       turmas: turmas || null,
       modalidade: idxModalidade !== -1 ? String(row[idxModalidade] || "").trim() : null,
-      componente: idxComponente !== -1 ? String(row[idxComponente] || "").trim() : null,
+      componente: componenteVal || null,
       chamamento: idxChamamento !== -1 ? String(row[idxChamamento] || "").trim() : null,
       ano_formativo: idxAnoFormativo !== -1 ? String(row[idxAnoFormativo] || "").trim() : null,
       semestre_inicio: idxSemestreInicio !== -1 ? String(row[idxSemestreInicio] || "").trim() : null,
@@ -453,14 +464,15 @@ function sincronizarAbaDadosParaTiDB() {
       horario_fim: horarioFimVal,
       nome_formador: idxFormador !== -1 ? String(row[idxFormador] || "").trim() : null,
       email_formador: idxEmailFormador !== -1 ? String(row[idxEmailFormador] || "").trim().toLowerCase() : null,
+      nre_formador: idxNreFormador !== -1 ? String(row[idxNreFormador] || "").trim() : null,
       tutor_responsavel: idxTutor !== -1 ? String(row[idxTutor] || "").trim() : null,
       email_tutor: idxEmailTutor !== -1 ? String(row[idxEmailTutor] || "").trim().toLowerCase() : null,
-      situacao: idxSituacao !== -1 ? String(row[idxSituacao] || "").trim() : "Ativo",
+      situacao: situacaoVal,
       observacao: idxObs !== -1 ? String(row[idxObs] || "").trim() : null
     });
   }
 
-  var BATCH_SIZE = 400;
+  var BATCH_SIZE = 150;
   var totalSinc = 0;
   var runId = 'sync_gs_' + Date.now();
 
@@ -1259,11 +1271,38 @@ function sincronizarAbaObservacoesParaTiDB() {
  * -----------------------------------------------------------------------------------------
  */
 function sincronizarAbaObservacoesTutoriaParaTiDB() {
-  if (!PLANILHA_OBSERVACOES_TUTOR_ID) return { total: 0 };
   Logger.log('Sincronizando observações de tutoria...');
   try {
-    var ssTutor = SpreadsheetApp.openById(PLANILHA_OBSERVACOES_TUTOR_ID);
-    var aba = ssTutor.getSheets()[0];
+    var ssTutor = null;
+    var aba = null;
+
+    // 1. Tenta carregar da planilha externa configurada
+    if (PLANILHA_OBSERVACOES_TUTOR_ID) {
+      try {
+        ssTutor = SpreadsheetApp.openById(PLANILHA_OBSERVACOES_TUTOR_ID);
+        if (ssTutor && ssTutor.getSheets().length > 0) {
+          aba = ssTutor.getSheets()[0];
+          if (aba.getLastRow() < 2) aba = null;
+        }
+      } catch (errExt) {
+        Logger.log('Aviso ao abrir planilha externa de tutoria: ' + errExt.toString());
+      }
+    }
+
+    // 2. Se a externa falhar ou não tiver dados, busca na planilha mestra atual
+    if (!aba) {
+      var ssMestra = obterPlanilhaMestra();
+      aba = ssMestra.getSheetByName("Tutor_Insights") || 
+            ssMestra.getSheetByName("Observações do Tutor") || 
+            ssMestra.getSheetByName("Observacao_Tutor") ||
+            ssMestra.getSheetByName("Respostas");
+    }
+
+    if (!aba) {
+      Logger.log('Nenhuma aba de observação de tutoria localizada.');
+      return { total: 0 };
+    }
+
     var dados = aba.getDataRange().getValues();
     if (dados.length < 2) return { total: 0 };
 
@@ -1284,32 +1323,54 @@ function sincronizarAbaObservacoesTutoriaParaTiDB() {
       return -1;
     }
 
-    var idxCarimbo = getIdx(["carimbo", "data hora", "timestamp"]);
-    var idxEmailTutor = getIdx(["e-mail tutor", "email tutor", "tutor", "email institucional do tutor"]);
-    var idxNomeTutor = getIdx(["nome tutor", "tutor responsavel", "nome do tutor"]);
-    var idxEmailFormador = getIdx(["e-mail formador", "email formador", "formador"]);
-    var idxNomeFormador = getIdx(["nome formador", "nome do formador"]);
-    var idxNre = getIdx(["nre"]);
-    var idxAcaoAcomp = getIdx(["acao acompanhamento", "acao"]);
-    var idxDataObs = getIdx(["data observacao", "data"]);
-    var idxLinkAcao = getIdx(["link acao observada", "link gravacao", "link"]);
-    var idxDestaques = getIdx(["destaques"]);
-    var idxDesenvolver = getIdx(["pontos a desenvolver", "desenvolver"]);
-    var idxEncaminhamentos = getIdx(["encaminhamentos"]);
+    var idxCarimbo = getIdx(["carimbo", "data hora", "timestamp", "data/hora"]);
+    var idxEmailTutor = getIdx(["e-mail tutor", "email tutor", "endereco de e-mail", "e-mail institucional", "email institucional", "tutor email"]);
+    var idxNomeTutor = getIdx(["nome tutor", "tutor responsavel", "nome do tutor", "tutor (a)"]);
+    var idxEmailFormador = getIdx(["e-mail formador", "email formador", "e-mail do formador", "email do formador", "formador email"]);
+    var idxNomeFormador = getIdx(["nome formador", "nome do formador", "formador acompanhado", "qual formador", "formador"]);
+    var idxNre = getIdx(["nre de atuacao", "nre atuacao", "nre"]);
+    var idxAcaoAcomp = getIdx(["acao acompanhamento", "acao", "modalidade"]);
+    var idxDataObs = getIdx(["data observacao", "data da observacao", "data"]);
+    var idxLinkAcao = getIdx(["link acao observada", "link gravacao", "link", "drive"]);
+    var idxDestaques = getIdx(["destaques", "pontos fortes", "aspectos positivos"]);
+    var idxDesenvolver = getIdx(["pontos a desenvolver", "desenvolver", "fragilidades"]);
+    var idxEncaminhamentos = getIdx(["encaminhamentos", "combinados", "proximos passos"]);
 
     var lista = [];
     for (var i = 1; i < dados.length; i++) {
       var row = dados[i];
-      var emailTut = idxEmailTutor !== -1 ? String(row[idxEmailTutor] || "").trim().toLowerCase() : "";
-      var emailForm = idxEmailFormador !== -1 ? String(row[idxEmailFormador] || "").trim().toLowerCase() : "";
-      if (!emailTut && !emailForm) continue;
+      var rawEmailTut = idxEmailTutor !== -1 ? String(row[idxEmailTutor] || "").trim().toLowerCase() : "";
+      var rawNomeTut = idxNomeTutor !== -1 ? String(row[idxNomeTutor] || "").trim() : "";
+      var rawEmailForm = idxEmailFormador !== -1 ? String(row[idxEmailFormador] || "").trim().toLowerCase() : "";
+      var rawNomeForm = idxNomeFormador !== -1 ? String(row[idxNomeFormador] || "").trim() : "";
+
+      var emailTut = rawEmailTut.includes('@') ? rawEmailTut : "";
+      var nomeTut = rawNomeTut || (!rawEmailTut.includes('@') ? rawEmailTut : "");
+
+      var emailForm = rawEmailForm.includes('@') ? rawEmailForm : "";
+      var nomeForm = rawNomeForm || (!rawEmailForm.includes('@') ? rawEmailForm : "");
+
+      // Se ainda não encontrou email do tutor, varre a linha por um endereço @escola ou @educacao
+      if (!emailTut) {
+        for (var c = 0; c < row.length; c++) {
+          var val = String(row[c] || "").trim().toLowerCase();
+          if (val.includes('@') && !val.includes(' ') && (val.includes('@escola.pr.gov.br') || val.includes('@educacao.pr.gov.br'))) {
+            emailTut = val;
+            break;
+          }
+        }
+      }
+
+      if (!emailTut && !nomeTut && !emailForm && !nomeForm) continue;
 
       lista.push({
         carimbo: idxCarimbo !== -1 ? String(row[idxCarimbo] || "").trim() : null,
-        email_tutor: emailTut,
-        nome_tutor: idxNomeTutor !== -1 ? String(row[idxNomeTutor] || "").trim() : null,
-        email_formador: emailForm,
-        nome_formador: idxNomeFormador !== -1 ? String(row[idxNomeFormador] || "").trim() : null,
+        email_tutor: emailTut || null,
+        nome_tutor: nomeTut || null,
+        tutor: nomeTut || null,
+        email_formador: emailForm || null,
+        nome_formador: nomeForm || null,
+        formador: nomeForm || null,
         nre: idxNre !== -1 ? String(row[idxNre] || "").trim() : null,
         acao_acompanhamento: idxAcaoAcomp !== -1 ? String(row[idxAcaoAcomp] || "").trim() : null,
         data_observacao: idxDataObs !== -1 ? String(row[idxDataObs] || "").trim() : null,
@@ -2236,6 +2297,7 @@ function apiProcessarMovimentacao(dados) {
   var idxTurma = getIdx(["turmas", "turma"]);
   var idxFormador = getIdx(["nome formador", "formador"]);
   var idxEmailFormador = getIdx(["e-mail formador", "email formador"]);
+  var idxNreFormador = getIdx(["nre_formador", "nre formador", "nre de atuacao", "nre atuacao"]);
   var idxTutor = getIdx(["tutor responsavel", "tutor"]);
   var idxEmailTutor = getIdx(["e-mail tutor", "email tutor"]);
   var idxLinhaFuncional = getIdx(["linha funcional", "linha_funcional", "lf", "padrao", "vinculo"]);
