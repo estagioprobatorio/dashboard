@@ -170,24 +170,35 @@ export async function resolverCursista(ctx, r, { criarVinculo = true } = {}) {
       reject(ctx, 'cursista_sem_identificacao');
       return null;
     }
-    const ins = await query(
-      `INSERT INTO usuario (email_inst, nome, funcao, telefone, nre_id, cgm_hash, cgm_cifrado, cgm_ultimos3, cpf_hash, cpf_cifrado, rg_cifrado)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-      [
-        em || null,
-        nome || (em ? em.split('@')[0].replace(/\./g, ' ').toUpperCase() : (cpfN ? `CURSISTA CPF ${cpfN.slice(-4)}` : 'CURSISTA')),
-        'cursista',
-        s(r.telefone_cursista || r.telefone),
-        nreEx || null,
-        cgm ? hmacHex(cgm) : null,
-        cgm ? encrypt(cgm) : null,
-        cgm ? cgm.slice(-3) : null,
-        cpfN ? hmacHex(cpfN) : null,
-        cpfN ? encrypt(cpfN) : null,
-        rgStr ? encrypt(rgStr) : null
-      ]
-    );
-    u = { id: ins.insertId, funcao: 'cursista' };
+    try {
+      const ins = await query(
+        `INSERT INTO usuario (email_inst, nome, funcao, telefone, nre_id, cgm_hash, cgm_cifrado, cgm_ultimos3, cpf_hash, cpf_cifrado, rg_cifrado)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+        [
+          em || null,
+          nome || (em ? em.split('@')[0].replace(/\./g, ' ').toUpperCase() : (cpfN ? `CURSISTA CPF ${cpfN.slice(-4)}` : 'CURSISTA')),
+          'cursista',
+          s(r.telefone_cursista || r.telefone),
+          nreEx || null,
+          cgm ? hmacHex(cgm) : null,
+          cgm ? encrypt(cgm) : null,
+          cgm ? cgm.slice(-3) : null,
+          cpfN ? hmacHex(cpfN) : null,
+          cpfN ? encrypt(cpfN) : null,
+          rgStr ? encrypt(rgStr) : null
+        ]
+      );
+      u = { id: ins.insertId, funcao: 'cursista' };
+    } catch (errDup) {
+      if (errDup && (errDup.code === 'ER_DUP_ENTRY' || errDup.errno === 1062)) {
+        if (em) u = (await query('SELECT id, funcao FROM usuario WHERE email_inst = ?', [em]))[0];
+        if (!u && cgm) u = (await query('SELECT id, funcao FROM usuario WHERE cgm_hash = ?', [hmacHex(cgm)]))[0];
+        if (!u && cpfN) u = (await query('SELECT id, funcao FROM usuario WHERE cpf_hash = ?', [hmacHex(cpfN)]))[0];
+        if (!u) throw errDup;
+      } else {
+        throw errDup;
+      }
+    }
   }
 
   if (!criarVinculo) return { usuarioId: u.id, vinculoId: null };

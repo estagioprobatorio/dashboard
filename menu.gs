@@ -527,29 +527,63 @@ function sincronizarAbaDadosParaTiDB() {
     });
   }
 
-  var BATCH_SIZE = 250;
+  var BATCH_SIZE = 80;
+  var PARALLEL_REQS = 5;
   var totalSinc = 0;
   var runId = 'sync_gs_' + Date.now();
+  var endpoint = obterEndpointApi('sync_cursistas_bulk');
 
+  var lotes = [];
   for (var b = 0; b < cursistas.length; b += BATCH_SIZE) {
-    var lote = cursistas.slice(b, b + BATCH_SIZE);
-    var endpoint = obterEndpointApi('sync_cursistas_bulk');
-    var options = obterOpcoesHttp({
-      action: 'sync_cursistas_bulk',
-      cursistas: lote,
-      run_id: runId,
-      final: (b + BATCH_SIZE >= cursistas.length)
-    });
+    lotes.push(cursistas.slice(b, b + BATCH_SIZE));
+  }
 
-    try {
-      var resp = UrlFetchApp.fetch(endpoint, options);
-      if (resp.getResponseCode() === 200) {
-        totalSinc += lote.length;
-      } else {
-        Logger.log('Aviso ao sincronizar cursistas: ' + resp.getContentText());
+  if (lotes.length > 1) {
+    var lotesParalelos = lotes.slice(0, lotes.length - 1);
+    for (var p = 0; p < lotesParalelos.length; p += PARALLEL_REQS) {
+      var grupo = lotesParalelos.slice(p, p + PARALLEL_REQS);
+      var reqs = grupo.map(function(lote) {
+        var opt = obterOpcoesHttp({
+          action: 'sync_cursistas_bulk',
+          cursistas: lote,
+          run_id: runId,
+          final: false
+        });
+        opt.url = endpoint;
+        return opt;
+      });
+      try {
+        var resps = UrlFetchApp.fetchAll(reqs);
+        for (var rIdx = 0; rIdx < resps.length; rIdx++) {
+          if (resps[rIdx].getResponseCode() === 200) {
+            totalSinc += grupo[rIdx].length;
+          } else {
+            Logger.log('Aviso ao sincronizar lote cursistas: ' + resps[rIdx].getContentText());
+          }
+        }
+      } catch (err) {
+        Logger.log('Erro no fetchAll de cursistas: ' + err.toString());
       }
-    } catch (err) {
-      Logger.log('Erro ao sincronizar cursistas: ' + err.toString());
+    }
+  }
+
+  if (lotes.length > 0) {
+    var ultimoLote = lotes[lotes.length - 1];
+    var finalOpt = obterOpcoesHttp({
+      action: 'sync_cursistas_bulk',
+      cursistas: ultimoLote,
+      run_id: runId,
+      final: true
+    });
+    try {
+      var respFinal = UrlFetchApp.fetch(endpoint, finalOpt);
+      if (respFinal.getResponseCode() === 200) {
+        totalSinc += ultimoLote.length;
+      } else {
+        Logger.log('Aviso no lote final de cursistas: ' + respFinal.getContentText());
+      }
+    } catch (errF) {
+      Logger.log('Erro no lote final de cursistas: ' + errF.toString());
     }
   }
 
