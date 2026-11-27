@@ -69,7 +69,7 @@ export default function Panorama({ data = [], concluintes = [] }) {
     } else if (temFiltroAtivo) {
       totalCursistasAtivos = ativosFiltrados.length;
     } else {
-      totalCursistasAtivos = 3624;
+      totalCursistasAtivos = ativosFiltrados.length;
     }
 
     // 2. Concluintes do 1º Chamamento (Certificados)
