@@ -1213,7 +1213,15 @@ function mapRowToObservation(headers, row, sheetName, sheetId, rowNumber, config
     modalidade_feedback: getVal(["modalidade de feedback formativo", "modalidade de feedback"]) || (isRealizada ? "Diálogo formativo" : null),
     motivo_devolutiva: getVal(["motivo da realização de feedback", "qual foi o motivo"]),
     link_gravacao_pratica: getVal(["link da gravação da prática pedagógica", "link da gravação da prática"]),
-    link_planejamento: getVal(["link do documento de planejamento", "link do pdp"]),
+    link_planejamento: (() => {
+      var l = getVal(["link do documento de planejamento", "link do pdp", "link do plano", "documento de planejamento", "link pdp"]);
+      if (!l) return null;
+      var str = String(l).trim();
+      if (!str.startsWith("http://") && !str.startsWith("https://") && (str.indexOf("google.com") !== -1 || str.indexOf("youtu") !== -1)) {
+        str = "https://" + str;
+      }
+      return str.replace(/\s+/g, "");
+    })(),
     link_gravacao_feedback: getVal(["link da gravação do diálogo formativo", "link da gravação do feedback"]),
     nivel_planejamento: nivelPlanejamento || (isRealizada ? "SUPERA" : null),
     nivel_pratica: nivelPratica || (isRealizada ? "ATENDE INTEGRALMENTE" : null),

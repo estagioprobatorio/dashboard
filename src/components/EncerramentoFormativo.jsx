@@ -6,6 +6,26 @@ import { normalizeNre } from '../utils/nreUtils';
  * Estilizado 100% com o Design System oficial da SEED-PR / Estágio Probatório.
  */
 
+// Formata e sanitiza links externos de forma resiliente
+export const formatExternalUrl = (rawUrl) => {
+  if (!rawUrl) return '';
+  let url = String(rawUrl).trim().replace(/[\r\n\t]/g, '').trim();
+  if (!url || url.length < 5) return '';
+  const matchHttp = url.match(/https?:\/\/[^\s"'<>,;]+/i);
+  if (matchHttp) {
+    url = matchHttp[0];
+  } else if (/^(drive|docs|classroom|forms)\.google\.com/i.test(url) || /^youtu/i.test(url) || /^www\./i.test(url)) {
+    url = 'https://' + url;
+  } else if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    if (!url.includes('.') || url.includes(' ')) return '';
+    url = 'https://' + url;
+  }
+  if (url.includes('google.com')) {
+    url = url.replace(/\s+/g, '');
+  }
+  return url;
+};
+
 // Filtra observações exclusivas do 2º Semestre
 const isObs2Semestre = (obs) => {
   if (!obs) return false;
@@ -110,8 +130,8 @@ export default function EncerramentoFormativo({
           data: obs.data_pratica || obs.data_observacao || obs.carimbo || '',
           formador: obs.nome_formador || '',
           temaOriginal: obs.tema,
-          linkGravacao: obs.link_gravacao_pratica || '',
-          linkPlanejamento: obs.link_planejamento || obs.link_pdp || '',
+          linkGravacao: formatExternalUrl(obs.link_gravacao_pratica || ''),
+          linkPlanejamento: formatExternalUrl(obs.link_planejamento || obs.link_pdp || ''),
           observacao: obs
         };
       } else if (isTema7(obs.tema)) {
@@ -121,8 +141,8 @@ export default function EncerramentoFormativo({
           data: obs.data_pratica || obs.data_observacao || obs.carimbo || '',
           formador: obs.nome_formador || '',
           temaOriginal: obs.tema,
-          linkGravacao: obs.link_gravacao_pratica || '',
-          linkPlanejamento: obs.link_planejamento || obs.link_pdp || '',
+          linkGravacao: formatExternalUrl(obs.link_gravacao_pratica || ''),
+          linkPlanejamento: formatExternalUrl(obs.link_planejamento || obs.link_pdp || ''),
           observacao: obs
         };
       }
@@ -811,23 +831,54 @@ export default function EncerramentoFormativo({
                               🗓️ {c.tema6.data}
                             </div>
                           )}
-                          {c.tema6?.linkGravacao && (
-                            <a 
-                              href={c.tema6.linkGravacao} 
-                              target="_blank" 
-                              rel="noreferrer"
-                              style={{
-                                display: 'inline-block',
-                                fontSize: '0.68rem',
-                                color: '#0284c7',
-                                textDecoration: 'none',
-                                marginTop: '0.2rem',
-                                fontWeight: 600
-                              }}
-                            >
-                              🎥 Gravação
-                            </a>
-                          )}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', marginTop: '0.3rem', alignItems: 'center' }}>
+                            {c.tema6?.linkPlanejamento && (
+                              <a 
+                                href={c.tema6.linkPlanejamento} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                title="Abrir Plano de Aula / PDP"
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.2rem',
+                                  fontSize: '0.68rem',
+                                  color: '#15803d',
+                                  backgroundColor: '#f0fdf4',
+                                  border: '1px solid #bbf7d0',
+                                  padding: '0.15rem 0.45rem',
+                                  borderRadius: '6px',
+                                  textDecoration: 'none',
+                                  fontWeight: 700
+                                }}
+                              >
+                                📄 Plano / PDP
+                              </a>
+                            )}
+                            {c.tema6?.linkGravacao && (
+                              <a 
+                                href={c.tema6.linkGravacao} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                title="Abrir Gravação da Prática"
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.2rem',
+                                  fontSize: '0.68rem',
+                                  color: '#0284c7',
+                                  backgroundColor: '#f0f9ff',
+                                  border: '1px solid #bae6fd',
+                                  padding: '0.15rem 0.45rem',
+                                  borderRadius: '6px',
+                                  textDecoration: 'none',
+                                  fontWeight: 700
+                                }}
+                              >
+                                🎥 Gravação
+                              </a>
+                            )}
+                          </div>
                         </div>
                       ) : (
                         <span style={{
@@ -866,23 +917,54 @@ export default function EncerramentoFormativo({
                               🗓️ {c.tema7.data}
                             </div>
                           )}
-                          {c.tema7?.linkGravacao && (
-                            <a 
-                              href={c.tema7.linkGravacao} 
-                              target="_blank" 
-                              rel="noreferrer"
-                              style={{
-                                display: 'inline-block',
-                                fontSize: '0.68rem',
-                                color: '#0284c7',
-                                textDecoration: 'none',
-                                marginTop: '0.2rem',
-                                fontWeight: 600
-                              }}
-                            >
-                              🎥 Gravação
-                            </a>
-                          )}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', marginTop: '0.3rem', alignItems: 'center' }}>
+                            {c.tema7?.linkPlanejamento && (
+                              <a 
+                                href={c.tema7.linkPlanejamento} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                title="Abrir Plano de Aula / PDP"
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.2rem',
+                                  fontSize: '0.68rem',
+                                  color: '#15803d',
+                                  backgroundColor: '#f0fdf4',
+                                  border: '1px solid #bbf7d0',
+                                  padding: '0.15rem 0.45rem',
+                                  borderRadius: '6px',
+                                  textDecoration: 'none',
+                                  fontWeight: 700
+                                }}
+                              >
+                                📄 Plano / PDP
+                              </a>
+                            )}
+                            {c.tema7?.linkGravacao && (
+                              <a 
+                                href={c.tema7.linkGravacao} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                title="Abrir Gravação da Prática"
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.2rem',
+                                  fontSize: '0.68rem',
+                                  color: '#0284c7',
+                                  backgroundColor: '#f0f9ff',
+                                  border: '1px solid #bae6fd',
+                                  padding: '0.15rem 0.45rem',
+                                  borderRadius: '6px',
+                                  textDecoration: 'none',
+                                  fontWeight: 700
+                                }}
+                              >
+                                🎥 Gravação
+                              </a>
+                            )}
+                          </div>
                         </div>
                       ) : (
                         <span style={{
@@ -1106,6 +1188,10 @@ export default function EncerramentoFormativo({
                     </div>
                   )}
                 </div>
+              </div>
+
+              <div style={{ marginTop: '1.25rem', padding: '0.75rem 1rem', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', fontSize: '0.76rem', color: '#1e40af', lineHeight: 1.45 }}>
+                💡 <b>Dica de Acesso aos Documentos e Vídeos:</b> Se o Google Docs ou YouTube acusar "Você precisa de acesso" ou erro ao abrir, certifique-se de que o seu navegador esteja conectado com a sua conta institucional <b>@escola.pr.gov.br</b>, pois a grande maioria dos planos de aula e gravações é compartilhada exclusivamente dentro do domínio SEED-PR.
               </div>
             </div>
 
