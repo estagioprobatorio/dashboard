@@ -269,68 +269,97 @@ export async function resolverCursista(ctx, r, { criarVinculo = true } = {}) {
 /* ---------------- cursistas (aba DADOS) ---------------- */
 export async function ingestCursistas(items, { runId, final }) {
   const ctx = makeCtx();
-  let ok = 0;
-  for (const r of items) {
-    // Desconsidera cursistas concluintes (1º chamamento ou geral) presentes na aba DADOS
+
+  // Pré-aquecimento em massa das tabelas de dimensão (evita centenas de SELECTs sequenciais)
+  const [nres, comps, ciclos, turmas] = await Promise.all([
+    query('SELECT id, nome FROM nre').catch(() => []),
+    query('SELECT id, nome FROM componente').catch(() => []),
+    query('SELECT id, ano_formativo, chamamento FROM ciclo').catch(() => []),
+    query('SELECT id, codigo FROM turma').catch(() => [])
+  ]);
+  for (const x of nres) ctx.nre.set(x.nome, x.id);
+  for (const x of comps) ctx.comp.set(x.nome, x.id);
+  for (const x of ciclos) ctx.ciclo.set(`${x.ano_formativo}|${x.chamamento}`, x.id);
+  for (const x of turmas) ctx.turma.set(x.codigo, x.id);
+
+  const validItems = items.filter(r => {
     const compStr = s(r.componente || r.componente_conc || '').toUpperCase();
     const sitStr = s(r.situacao || r.status || '').toUpperCase();
     const turmStr = s(r.turmas || r.turma || '').toUpperCase();
-    if (compStr.includes('CONCLUINTE') || sitStr.includes('CONCLUINTE') || turmStr.includes('CONCLUINTE')) {
-      continue;
-    }
+    return !(compStr.includes('CONCLUINTE') || sitStr.includes('CONCLUINTE') || turmStr.includes('CONCLUINTE'));
+  });
 
-    const res = await resolverCursista(ctx, r);
-    if (!res || !res.vinculoId) continue;
+  const matRows = [];
+  let ok = 0;
+  const CHUNK_SIZE = 15;
 
-    // vÃ­nculo: atualiza municÃ­pio/NRE de exercÃ­cio
-    await query('UPDATE vinculo SET municipio = COALESCE(?, municipio), nre_id = COALESCE(?, nre_id), cargo = COALESCE(?, cargo) WHERE id = ?',
-      [s(r.munic_exe), await nreId(ctx, r.nre_exe, null), s(r.cargo), res.vinculoId]);
+  for (let i = 0; i < validItems.length; i += CHUNK_SIZE) {
+    const chunk = validItems.slice(i, i + CHUNK_SIZE);
+    await Promise.all(chunk.map(async (r) => {
+      const res = await resolverCursista(ctx, r);
+      if (!res || !res.vinculoId) return;
 
-    const codigo = s(r.turmas || r.turma);
-    let turmaId = null;
-    const cid = await cicloId(ctx, r.ano_formativo, r.chamamento);
-    if (codigo) {
-      if (!ctx.turma.has(codigo)) {
-        const compId = await componenteId(ctx, r.componente || r.componente_conc);
-        const nreTutor = await nreId(ctx, r.nre_tutor, r.email_nre || r['e-mail_nre']);
-        const nreForm = await nreId(ctx, r.nre_formador, null);
-        const form = await usuarioPorEmail(ctx, {
-          email: r.email_formador || r['e-mail_formador'], nome: r.nome_formador, funcao: 'formador',
-          telefone: r.telefone_formador, nre_id: nreForm, cpf: r.cpf_formador, rg: r.rg_formador
-        });
-        const tut = await usuarioPorEmail(ctx, {
-          email: r.email_tutor, nome: r.tutor_responsavel, funcao: 'tutor', telefone: r.telefone_tutor, nre_id: nreTutor
-        });
-        await query(
-          `INSERT INTO turma (codigo, ciclo_id, componente_id, formador_id, tutor_id, modalidade, turno, dia_semana, hora_ini, hora_fim, id_classroom, link, periodo_ini)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
-           ON DUPLICATE KEY UPDATE ciclo_id = COALESCE(VALUES(ciclo_id), ciclo_id), componente_id = COALESCE(VALUES(componente_id), componente_id),
-             formador_id = COALESCE(VALUES(formador_id), formador_id), tutor_id = COALESCE(VALUES(tutor_id), tutor_id),
-             modalidade = COALESCE(VALUES(modalidade), modalidade), turno = COALESCE(VALUES(turno), turno),
-             dia_semana = COALESCE(VALUES(dia_semana), dia_semana), hora_ini = COALESCE(VALUES(hora_ini), hora_ini),
-             hora_fim = COALESCE(VALUES(hora_fim), hora_fim), id_classroom = COALESCE(VALUES(id_classroom), id_classroom),
-             link = COALESCE(VALUES(link), link), periodo_ini = COALESCE(VALUES(periodo_ini), periodo_ini)`,
-          [codigo, cid, compId, form ? form.id : null, tut ? tut.id : null, s(r.modalidade), s(r.turno), s(r.dia_da_semana),
-            cleanTime(r.horario_inicial), cleanTime(r.horario_fim), s(r.id_classroom), s(r.link || r.link_classroom || r['Link Classroom']), s(r.periodo_ini)]
-        );
-        ctx.turma.set(codigo, (await query('SELECT id FROM turma WHERE codigo = ?', [codigo]))[0].id);
+      await query('UPDATE vinculo SET municipio = COALESCE(?, municipio), nre_id = COALESCE(?, nre_id), cargo = COALESCE(?, cargo) WHERE id = ?',
+        [s(r.munic_exe), await nreId(ctx, r.nre_exe, null), s(r.cargo), res.vinculoId]);
+
+      const codigo = s(r.turmas || r.turma);
+      let turmaId = null;
+      const cid = await cicloId(ctx, r.ano_formativo, r.chamamento);
+      if (codigo) {
+        if (!ctx.turma.has(codigo)) {
+          const compId = await componenteId(ctx, r.componente || r.componente_conc);
+          const nreTutor = await nreId(ctx, r.nre_tutor, r.email_nre || r['e-mail_nre']);
+          const nreForm = await nreId(ctx, r.nre_formador, null);
+          const form = await usuarioPorEmail(ctx, {
+            email: r.email_formador || r['e-mail_formador'], nome: r.nome_formador, funcao: 'formador',
+            telefone: r.telefone_formador, nre_id: nreForm, cpf: r.cpf_formador, rg: r.rg_formador
+          });
+          const tut = await usuarioPorEmail(ctx, {
+            email: r.email_tutor, nome: r.tutor_responsavel, funcao: 'tutor', telefone: r.telefone_tutor, nre_id: nreTutor
+          });
+          await query(
+            `INSERT INTO turma (codigo, ciclo_id, componente_id, formador_id, tutor_id, modalidade, turno, dia_semana, hora_ini, hora_fim, id_classroom, link, periodo_ini)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+             ON DUPLICATE KEY UPDATE ciclo_id = COALESCE(VALUES(ciclo_id), ciclo_id), componente_id = COALESCE(VALUES(componente_id), componente_id),
+               formador_id = COALESCE(VALUES(formador_id), formador_id), tutor_id = COALESCE(VALUES(tutor_id), tutor_id),
+               modalidade = COALESCE(VALUES(modalidade), modalidade), turno = COALESCE(VALUES(turno), turno),
+               dia_semana = COALESCE(VALUES(dia_semana), dia_semana), hora_ini = COALESCE(VALUES(hora_ini), hora_ini),
+               hora_fim = COALESCE(VALUES(hora_fim), hora_fim), id_classroom = COALESCE(VALUES(id_classroom), id_classroom),
+               link = COALESCE(VALUES(link), link), periodo_ini = COALESCE(VALUES(periodo_ini), periodo_ini)`,
+            [codigo, cid, compId, form ? form.id : null, tut ? tut.id : null, s(r.modalidade), s(r.turno), s(r.dia_da_semana),
+              cleanTime(r.horario_inicial), cleanTime(r.horario_fim), s(r.id_classroom), s(r.link || r.link_classroom || r['Link Classroom']), s(r.periodo_ini)]
+          );
+          const tRow = (await query('SELECT id FROM turma WHERE codigo = ?', [codigo]))[0];
+          if (tRow) ctx.turma.set(codigo, tRow.id);
+        }
+        turmaId = ctx.turma.get(codigo) || null;
       }
-      turmaId = ctx.turma.get(codigo);
-    }
 
-    const cgmClean = normalizeDigits(r.cgm);
-    const lfClean = res.lf || parseInt(String(r.linha_funcional || r['Linha Funcional'] || 1).replace(/\D/g, ''), 10) || 1;
-    const codCursista = s(r.cod_cursista) || (cgmClean ? `${cgmClean}_${lfClean}` : `V${res.vinculoId}T${turmaId || 0}`);
+      const cgmClean = normalizeDigits(r.cgm);
+      const lfClean = res.lf || parseInt(String(r.linha_funcional || r['Linha Funcional'] || 1).replace(/\D/g, ''), 10) || 1;
+      const codCursista = s(r.cod_cursista) || (cgmClean ? `${cgmClean}_${lfClean}` : `V${res.vinculoId}T${turmaId || 0}`);
 
-    await query(
-      `INSERT INTO matricula (cod_cursista, vinculo_id, turma_id, ciclo_id, status, na_base_ativa, sync_run, obs_cursista)
-       VALUES (?,?,?,?, 'ATIVA', 1, ?, ?)
-       ON DUPLICATE KEY UPDATE na_base_ativa = 1, sync_run = VALUES(sync_run),
-         ciclo_id = COALESCE(VALUES(ciclo_id), ciclo_id), obs_cursista = COALESCE(VALUES(obs_cursista), obs_cursista)`,
-      [codCursista, res.vinculoId, turmaId, cid, runId || null, s(r.observacoes_cursista)]
-    );
-    ok++;
+      matRows.push([codCursista, res.vinculoId, turmaId, cid, runId || null, s(r.observacoes_cursista)]);
+    }));
   }
+
+  if (matRows.length > 0) {
+    const MAT_BATCH = 50;
+    for (let m = 0; m < matRows.length; m += MAT_BATCH) {
+      const slice = matRows.slice(m, m + MAT_BATCH);
+      const placeholders = slice.map(() => "(?,?,?,?,'ATIVA',1,?,?)").join(',');
+      const flatParams = slice.flat();
+      await query(
+        `INSERT INTO matricula (cod_cursista, vinculo_id, turma_id, ciclo_id, status, na_base_ativa, sync_run, obs_cursista)
+         VALUES ${placeholders}
+         ON DUPLICATE KEY UPDATE na_base_ativa = 1, sync_run = VALUES(sync_run),
+           ciclo_id = COALESCE(VALUES(ciclo_id), ciclo_id), obs_cursista = COALESCE(VALUES(obs_cursista), obs_cursista)`,
+        flatParams
+      );
+      ok += slice.length;
+    }
+  }
+
   if (final && runId) {
     await query('UPDATE matricula SET na_base_ativa = 0 WHERE na_base_ativa = 1 AND (sync_run IS NULL OR sync_run <> ?)', [runId]);
   }
