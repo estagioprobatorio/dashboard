@@ -613,32 +613,54 @@ export async function ingestObservacoes(items) {
 }
 
 /* ---------------- observações do tutor (acompanhamento de formadores) ---------------- */
-export async function ingestObservacoesTutor(items) {
+export async function ingestObservacoesTutor(items, { cleanLegacy = false } = {}) {
   const ctx = makeCtx();
+  if (cleanLegacy) {
+    await query("DELETE FROM observacao_tutor WHERE id_origem LIKE 'OBS_TUT_%' AND id_origem NOT LIKE 'OBS_TUT_L%'").catch(() => {});
+  }
   if (!Array.isArray(items) || items.length === 0) {
     return { sincronizados: 0, rejeitados: ctx.rej };
   }
 
-  // 1. Pré-busca em massa de e-mails de tutores e formadores
+  // 1. Pré-busca em massa de e-mails e nomes de tutores e formadores
   const emailsSet = new Set();
+  const namesSet = new Set();
   const validItems = [];
   for (let i = 0; i < items.length; i++) {
     const o = items[i];
     const tutorEmail = lowerEmail(o.tutorEmail || o.tutor_email || o.email_tutor);
     const formadorEmail = lowerEmail(o.formadorEmail || o.formador_email || o.email_formador);
+    const tutorNome = s(o.tutor || o.tutor_nome || o.nome_tutor);
+    const formadorNome = s(o.formador || o.formador_nome || o.nome_formador);
     if (tutorEmail) emailsSet.add(tutorEmail);
     if (formadorEmail) emailsSet.add(formadorEmail);
-    validItems.push({ ...o, _tEmail: tutorEmail, _fEmail: formadorEmail, _idx: i });
+    if (tutorNome) namesSet.add(tutorNome.toUpperCase());
+    if (formadorNome) namesSet.add(formadorNome.toUpperCase());
+    validItems.push({ ...o, _tEmail: tutorEmail, _fEmail: formadorEmail, _tNome: tutorNome, _fNome: formadorNome, _idx: i });
   }
 
   const allEmails = Array.from(emailsSet);
   const userMap = new Map();
+  const userByName = new Map();
   if (allEmails.length > 0) {
     for (let i = 0; i < allEmails.length; i += 500) {
       const batch = allEmails.slice(i, i + 500);
-      const rows = await query(`SELECT id, email_inst, funcao FROM usuario WHERE email_inst IN (${batch.map(() => '?').join(',')})`, batch);
+      const rows = await query(`SELECT id, email_inst, nome, funcao FROM usuario WHERE email_inst IN (${batch.map(() => '?').join(',')})`, batch);
       for (const r of rows) {
-        userMap.set(lowerEmail(r.email_inst), r);
+        if (r.email_inst) userMap.set(lowerEmail(r.email_inst), r);
+        if (r.nome) userByName.set(String(r.nome).trim().toUpperCase(), r);
+      }
+    }
+  }
+  const allNames = Array.from(namesSet);
+  if (allNames.length > 0) {
+    for (let i = 0; i < allNames.length; i += 500) {
+      const batch = allNames.slice(i, i + 500);
+      const rows = await query(`SELECT id, email_inst, nome, funcao FROM usuario WHERE UPPER(nome) IN (${batch.map(() => '?').join(',')})`, batch).catch(() => []);
+      for (const r of rows) {
+        if (r.nome && !userByName.has(String(r.nome).trim().toUpperCase())) {
+          userByName.set(String(r.nome).trim().toUpperCase(), r);
+        }
       }
     }
   }
@@ -650,18 +672,20 @@ export async function ingestObservacoesTutor(items) {
     const chunk = validItems.slice(i, i + CHUNK_SIZE);
     await Promise.all(chunk.map(async (o) => {
       try {
-        const tutorNome = o.tutor || o.tutor_nome || o.nome_tutor;
-        const formadorNome = o.formador || o.formador_nome || o.nome_formador;
+        const tutorNome = o._tNome;
+        const formadorNome = o._fNome;
         const ts = o.timestamp || o.registrado_em || o.carimbo || o.data_registro;
         const acaoObs = o.acaoObservada || o.acao_observada;
 
         let tut = o._tEmail ? userMap.get(o._tEmail) : null;
+        if (!tut && tutorNome) tut = userByName.get(tutorNome.toUpperCase()) || null;
         if (!tut && o._tEmail) {
           tut = await usuarioPorEmail(ctx, { email: o._tEmail, nome: tutorNome, funcao: 'tutor' });
           if (tut) userMap.set(o._tEmail, tut);
         }
 
         let form = o._fEmail ? userMap.get(o._fEmail) : null;
+        if (!form && formadorNome) form = userByName.get(formadorNome.toUpperCase()) || null;
         if (!form && o._fEmail) {
           form = await usuarioPorEmail(ctx, { email: o._fEmail, nome: formadorNome, funcao: 'formador' });
           if (form) userMap.set(o._fEmail, form);
@@ -676,8 +700,14 @@ export async function ingestObservacoesTutor(items) {
              link_acao_observada, data_feedback, link_feedback, links_complementares, modalidade, avg_score, checklist_realizadas,
              checklist_nao_realizadas, outros_registros, destaques, desenvolver, encaminhamentos, nre_id, tema, rubricas)
            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-           ON DUPLICATE KEY UPDATE tutor_id = VALUES(tutor_id), formador_id = VALUES(formador_id), avg_score = VALUES(avg_score),
-             rubricas = VALUES(rubricas), destaques = VALUES(destaques), desenvolver = VALUES(desenvolver), encaminhamentos = VALUES(encaminhamentos),
+           ON DUPLICATE KEY UPDATE tutor_id = VALUES(tutor_id), formador_id = VALUES(formador_id),
+             acao_acompanhamento = VALUES(acao_acompanhamento), acao_observada = VALUES(acao_observada),
+             data_observacao = VALUES(data_observacao), link_acao_observada = VALUES(link_acao_observada),
+             data_feedback = VALUES(data_feedback), link_feedback = VALUES(link_feedback),
+             links_complementares = VALUES(links_complementares), avg_score = VALUES(avg_score),
+             rubricas = VALUES(rubricas), checklist_realizadas = VALUES(checklist_realizadas),
+             checklist_nao_realizadas = VALUES(checklist_nao_realizadas), outros_registros = VALUES(outros_registros),
+             destaques = VALUES(destaques), desenvolver = VALUES(desenvolver), encaminhamentos = VALUES(encaminhamentos),
              nre_id = VALUES(nre_id), tema = VALUES(tema), modalidade = VALUES(modalidade)`,
           [idOrig, tut ? tut.id : null, form ? form.id : null, parseDateTime(ts), s(o.acaoAcompanhamento || o.acao_acompanhamento),
             s(acaoObs), s(o.dataObservacao || o.data_observacao), s(o.linkAcaoObservada || o.link_acao_observada),

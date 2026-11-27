@@ -1461,13 +1461,42 @@ function sincronizarAbaObservacoesTutoriaParaTiDB() {
     var idxDesenvolver = getIdx(["pontos a desenvolver", "desenvolver", "fragilidades"]);
     var idxEncaminhamentos = getIdx(["encaminhamentos", "combinados", "proximos passos"]);
 
+    var CRITERIOS_MOD = {
+      "Diálogo Formativo": [
+        "Planejamento e prazo", "Etapas do diálogo formativo", "Materiais formativos",
+        "Questionamentos propositivos", "Análise por evidências", "Acolhimento e escuta ativa",
+        "Mediação de conflitos", "Sugestão de materiais e repertório",
+        "Construção conjunta de combinados", "Gestão do tempo (10 a 20 min)"
+      ],
+      "Devolutiva": [
+        "Planejamento e prazo", "Etapas da devolutiva", "Materiais formativos",
+        "Análise por evidências", "Sugestão de materiais e repertório", "Gestão do tempo (5 a 10 min)"
+      ],
+      "Encontro Formativo": [
+        "Condução a partir do roteiro", "Orientação por PDP e rubrica",
+        "Transposição didática e contextualização", "Gestão da interação",
+        "Comunicação e clima formativo", "Competência digital", "Gestão do tempo"
+      ]
+    };
+    function scoreRubrica(v) {
+      if (!v) return null;
+      var u = String(v).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+      if (u.indexOf("NAO ATENDEU") !== -1 && u.indexOf("PARCIALMENTE") === -1) return 0;
+      if (u.indexOf("PARCIALMENTE") !== -1) return 1;
+      if (u.indexOf("SUPEROU") !== -1) return 3;
+      if (u.indexOf("INTEGRALMENTE") !== -1 || (u.indexOf("ATENDEU") !== -1 && u.indexOf("PARCIALMENTE") === -1)) return 2;
+      return null;
+    }
+
     var lista = [];
     for (var i = 1; i < dados.length; i++) {
       var row = dados[i];
-      var rawEmailTut = idxEmailTutor !== -1 ? String(row[idxEmailTutor] || "").trim().toLowerCase() : "";
-      var rawNomeTut = idxNomeTutor !== -1 ? String(row[idxNomeTutor] || "").trim() : "";
-      var rawEmailForm = idxEmailFormador !== -1 ? String(row[idxEmailFormador] || "").trim().toLowerCase() : "";
-      var rawNomeForm = idxNomeFormador !== -1 ? String(row[idxNomeFormador] || "").trim() : "";
+      var rawEmailTut = idxEmailTutor !== -1 ? String(row[idxEmailTutor] || "").trim().toLowerCase() : String(row[1] || "").trim().toLowerCase();
+      var rawNomeTut = idxNomeTutor !== -1 ? String(row[idxNomeTutor] || "").trim() : (String(row[2] || "").trim() || String(row[3] || "").trim());
+      var rawEmailForm = idxEmailFormador !== -1 ? String(row[idxEmailFormador] || "").trim().toLowerCase() : String(row[6] || "").trim().toLowerCase();
+      var rawNomeForm = idxNomeFormador !== -1 ? String(row[idxNomeFormador] || "").trim() : (String(row[4] || "").trim() || String(row[5] || "").trim());
+      if (!rawNomeForm && row.length > 5) rawNomeForm = String(row[4] || "").trim() || String(row[5] || "").trim();
+      if (!rawEmailForm && row.length > 6 && String(row[6] || "").indexOf("@") !== -1) rawEmailForm = String(row[6] || "").trim().toLowerCase();
 
       var emailTut = rawEmailTut.includes('@') ? rawEmailTut : "";
       var nomeTut = rawNomeTut || (!rawEmailTut.includes('@') ? rawEmailTut : "");
@@ -1491,8 +1520,8 @@ function sincronizarAbaObservacoesTutoriaParaTiDB() {
       if (!temaVal && row.length > 45 && row[45]) {
         temaVal = String(row[45] || "").trim();
       }
-      var acaoAcompVal = idxAcaoAcomp !== -1 ? String(row[idxAcaoAcomp] || "").trim() : "";
-      var acaoObsVal = idxAcaoObs !== -1 ? String(row[idxAcaoObs] || "").trim() : "";
+      var acaoAcompVal = idxAcaoAcomp !== -1 ? String(row[idxAcaoAcomp] || "").trim() : String(row[7] || "").trim();
+      var acaoObsVal = idxAcaoObs !== -1 ? String(row[idxAcaoObs] || "").trim() : String(row[8] || "").trim();
       var modVal = idxModalidade !== -1 ? String(row[idxModalidade] || "").trim() : "";
       if (!modVal && (acaoObsVal || acaoAcompVal)) {
         var combined = (acaoObsVal + " " + acaoAcompVal).toLowerCase();
@@ -1501,31 +1530,57 @@ function sincronizarAbaObservacoesTutoriaParaTiDB() {
         else if (combined.indexOf("diálogo") !== -1 || combined.indexOf("dialogo") !== -1) modVal = "Diálogo Formativo";
       }
 
+      var rubrics = [];
+      if (modVal === "Diálogo Formativo") {
+        rubrics = CRITERIOS_MOD["Diálogo Formativo"].map(function(crit, rIdx) {
+          var rv = String(row[14 + rIdx] || "").trim();
+          return { criterio: crit, value: rv, score: scoreRubrica(rv) };
+        });
+      } else if (modVal === "Devolutiva") {
+        rubrics = CRITERIOS_MOD["Devolutiva"].map(function(crit, rIdx) {
+          var rv = String(row[24 + rIdx] || "").trim();
+          return { criterio: crit, value: rv, score: scoreRubrica(rv) };
+        });
+      } else if (modVal === "Encontro Formativo") {
+        rubrics = CRITERIOS_MOD["Encontro Formativo"].map(function(crit, rIdx) {
+          var rv = String(row[30 + rIdx] || "").trim();
+          return { criterio: crit, value: rv, score: scoreRubrica(rv) };
+        });
+      }
+      var scored = rubrics.filter(function(x) { return x.score !== null; });
+      var avgScore = null;
+      if (scored.length > 0) {
+        var sum = scored.reduce(function(acc, x) { return acc + x.score; }, 0);
+        avgScore = parseFloat((sum / scored.length).toFixed(2));
+      }
+
       lista.push({
         id_origem: "OBS_TUT_L" + (i + 1),
-        carimbo: idxCarimbo !== -1 ? formatCellDate(row[idxCarimbo]) : null,
+        carimbo: idxCarimbo !== -1 ? formatCellDate(row[idxCarimbo]) : formatCellDate(row[0]),
         email_tutor: emailTut || null,
         nome_tutor: nomeTut || null,
         tutor: nomeTut || null,
         email_formador: emailForm || null,
         nome_formador: nomeForm || null,
         formador: nomeForm || null,
-        nre: idxNre !== -1 ? String(row[idxNre] || "").trim() : null,
+        nre: (idxNre !== -1 ? String(row[idxNre] || "").trim() : "") || (row.length > 44 ? String(row[44] || "").trim() : "") || null,
         acao_acompanhamento: acaoAcompVal || null,
         acao_observada: acaoObsVal || null,
         modalidade: modVal || null,
         tema: temaVal || null,
-        data_observacao: idxDataObs !== -1 ? formatOnlyDate(row[idxDataObs]) : null,
-        link_acao_observada: idxLinkAcao !== -1 ? String(row[idxLinkAcao] || "").trim() : null,
-        data_feedback: idxDataFeedback !== -1 ? formatOnlyDate(row[idxDataFeedback]) : null,
-        link_feedback: idxLinkFeedback !== -1 ? String(row[idxLinkFeedback] || "").trim() : null,
-        links_complementares: idxLinksComp !== -1 ? String(row[idxLinksComp] || "").trim() : null,
-        checklist_realizadas: idxCheckReal !== -1 ? String(row[idxCheckReal] || "").trim() : null,
-        checklist_nao_realizadas: idxCheckNaoReal !== -1 ? String(row[idxCheckNaoReal] || "").trim() : null,
-        outros_registros: idxOutros !== -1 ? String(row[idxOutros] || "").trim() : null,
-        destaques: idxDestaques !== -1 ? String(row[idxDestaques] || "").trim() : null,
-        desenvolver: idxDesenvolver !== -1 ? String(row[idxDesenvolver] || "").trim() : null,
-        encaminhamentos: idxEncaminhamentos !== -1 ? String(row[idxEncaminhamentos] || "").trim() : null
+        rubrics: rubrics,
+        avgScore: avgScore,
+        data_observacao: idxDataObs !== -1 ? formatOnlyDate(row[idxDataObs]) : formatOnlyDate(row[9]),
+        link_acao_observada: idxLinkAcao !== -1 ? String(row[idxLinkAcao] || "").trim() : String(row[10] || "").trim(),
+        data_feedback: idxDataFeedback !== -1 ? formatOnlyDate(row[idxDataFeedback]) : formatOnlyDate(row[11]),
+        link_feedback: idxLinkFeedback !== -1 ? String(row[idxLinkFeedback] || "").trim() : String(row[12] || "").trim(),
+        links_complementares: idxLinksComp !== -1 ? String(row[idxLinksComp] || "").trim() : String(row[13] || "").trim(),
+        checklist_realizadas: idxCheckReal !== -1 ? String(row[idxCheckReal] || "").trim() : (row.length > 37 ? String(row[37] || "").trim() : null),
+        checklist_nao_realizadas: idxCheckNaoReal !== -1 ? String(row[idxCheckNaoReal] || "").trim() : (row.length > 38 ? String(row[38] || "").trim() : null),
+        outros_registros: idxOutros !== -1 ? String(row[idxOutros] || "").trim() : (row.length > 39 ? String(row[39] || "").trim() : null),
+        destaques: idxDestaques !== -1 ? String(row[idxDestaques] || "").trim() : (row.length > 40 ? String(row[40] || "").trim() : null),
+        desenvolver: idxDesenvolver !== -1 ? String(row[idxDesenvolver] || "").trim() : (row.length > 41 ? String(row[41] || "").trim() : null),
+        encaminhamentos: idxEncaminhamentos !== -1 ? String(row[idxEncaminhamentos] || "").trim() : (row.length > 42 ? String(row[42] || "").trim() : null)
       });
     }
 
@@ -1537,24 +1592,38 @@ function sincronizarAbaObservacoesTutoriaParaTiDB() {
     for (var b = 0; b < lista.length; b += BATCH_SIZE) {
       lotes.push(lista.slice(b, b + BATCH_SIZE));
     }
-    for (var p = 0; p < lotes.length; p += PARALLEL_TUT) {
-      var grupo = lotes.slice(p, p + PARALLEL_TUT);
-      var reqs = grupo.map(function(lote) {
-        var opt = obterOpcoesHttp({
-          action: 'sync_observacoes_tutor_bulk',
-          observacoes_tutor: lote,
-          observacoes: lote
-        });
-        opt.url = endpoint;
-        return opt;
-      });
+    if (lotes.length > 0) {
       try {
-        var resps = UrlFetchApp.fetchAll(reqs);
-        for (var rIdx = 0; rIdx < resps.length; rIdx++) {
-          if (resps[rIdx].getResponseCode() === 200) tot += grupo[rIdx].length;
+        var firstOpt = obterOpcoesHttp({
+          action: 'sync_observacoes_tutor_bulk',
+          observacoes_tutor: lotes[0],
+          observacoes: lotes[0],
+          clean_legacy: true
+        });
+        var firstResp = UrlFetchApp.fetch(endpoint, firstOpt);
+        if (firstResp.getResponseCode() === 200) tot += lotes[0].length;
+      } catch (err0) {
+        Logger.log('Erro no primeiro lote de tutoria: ' + err0.toString());
+      }
+      for (var p = 1; p < lotes.length; p += PARALLEL_TUT) {
+        var grupo = lotes.slice(p, p + PARALLEL_TUT);
+        var reqs = grupo.map(function(lote) {
+          var opt = obterOpcoesHttp({
+            action: 'sync_observacoes_tutor_bulk',
+            observacoes_tutor: lote,
+            observacoes: lote
+          });
+          opt.url = endpoint;
+          return opt;
+        });
+        try {
+          var resps = UrlFetchApp.fetchAll(reqs);
+          for (var rIdx = 0; rIdx < resps.length; rIdx++) {
+            if (resps[rIdx].getResponseCode() === 200) tot += grupo[rIdx].length;
+          }
+        } catch (err) {
+          Logger.log('Erro ao enviar observações de tutoria: ' + err.toString());
         }
-      } catch (err) {
-        Logger.log('Erro ao enviar observações de tutoria: ' + err.toString());
       }
     }
     return { total: tot };
