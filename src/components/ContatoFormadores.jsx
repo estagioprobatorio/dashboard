@@ -270,7 +270,19 @@ export default function ContatoFormadores({ data }) {
                 let horarioDisplay = "Não definido";
                 if (item.diaSemana) {
                   const diaClean = item.diaSemana.split(' - ')[1] || item.diaSemana;
-                  horarioDisplay = `${diaClean} | ${item.horarioIni} - ${item.horarioFim}`;
+                  const sanitizeH = (h) => {
+                    if (!h) return '';
+                    const str = String(h).trim();
+                    if (str.includes('1899') || str.includes('1900')) {
+                      const m = str.match(/(\d{1,2}:\d{2})/);
+                      return m ? m[1] : '';
+                    }
+                    return str.includes('/') ? '' : str;
+                  };
+                  const hIni = sanitizeH(item.horarioIni);
+                  const hFim = sanitizeH(item.horarioFim);
+                  const faixaHorario = (hIni && hFim) ? ` | ${hIni} - ${hFim}` : (hIni ? ` | ${hIni}` : '');
+                  horarioDisplay = `${diaClean}${faixaHorario}`;
                   if (item.turno) {
                     horarioDisplay += ` (${item.turno})`;
                   }

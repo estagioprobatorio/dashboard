@@ -7,7 +7,7 @@
 import crypto from 'node:crypto';
 import { query } from './db.js';
 import { encrypt, hmacHex, normalizeDigits } from './crypto.js';
-import { s, lowerEmail, normalizeNre, parseDate, parseDateTime } from './utils.js';
+import { s, lowerEmail, normalizeNre, parseDate, parseDateTime, cleanTime } from './utils.js';
 
 const PRECEDENCIA = { ATIVA: 0, NAO_CONCLUIDA: 1, CONCLUIDA: 2, EXONERADA: 3, TRANSFERIDA: 0 };
 
@@ -300,7 +300,7 @@ export async function ingestCursistas(items, { runId, final }) {
              hora_fim = COALESCE(VALUES(hora_fim), hora_fim), id_classroom = COALESCE(VALUES(id_classroom), id_classroom),
              link = COALESCE(VALUES(link), link), periodo_ini = COALESCE(VALUES(periodo_ini), periodo_ini)`,
           [codigo, cid, compId, form ? form.id : null, tut ? tut.id : null, s(r.modalidade), s(r.turno), s(r.dia_da_semana),
-            s(r.horario_inicial), s(r.horario_fim), s(r.id_classroom), s(r.link || r.link_classroom || r['Link Classroom']), s(r.periodo_ini)]
+            cleanTime(r.horario_inicial), cleanTime(r.horario_fim), s(r.id_classroom), s(r.link || r.link_classroom || r['Link Classroom']), s(r.periodo_ini)]
         );
         ctx.turma.set(codigo, (await query('SELECT id FROM turma WHERE codigo = ?', [codigo]))[0].id);
       }

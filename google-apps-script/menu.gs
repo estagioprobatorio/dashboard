@@ -88,6 +88,7 @@ function onOpen() {
       .addItem('⚖️ Remanejamento de Turmas (Analisar)', 'rmjMenuAnalisar')
       .addSeparator()
       .addItem('⏰ Agendar Sincronização Automática Diária (07:00)', 'configurarGatilhoDiario7h')
+      .addItem('🧹 Limpar Acionadores Antigos (Drive / Falhas)', 'removerGatilhosObsoletos')
       .addItem('🔍 Testar Conexão com TiDB Cloud', 'testarConexaoTiDB')
       .addToUi();
 
@@ -151,7 +152,8 @@ function testarConexaoTiDB() {
 function configurarGatilhoDiario7h() {
   var triggers = ScriptApp.getProjectTriggers();
   for (var i = 0; i < triggers.length; i++) {
-    if (triggers[i].getHandlerFunction() === 'executarSincronizacaoCompletaTiDB') {
+    var fn = triggers[i].getHandlerFunction();
+    if (fn === 'executarSincronizacaoCompletaTiDB' || fn === 'aoAlterarPlanilha' || fn === 'rotinaMatinalConsolidarSigepEDrive') {
       ScriptApp.deleteTrigger(triggers[i]);
     }
   }
@@ -170,6 +172,46 @@ function configurarGatilhoDiario7h() {
     SpreadsheetApp.getUi().alert('Gatilho Automático 07:00', msg, SpreadsheetApp.getUi().ButtonSet.OK);
   } catch (e) {
     Logger.log(msg);
+  }
+}
+
+/**
+ * Remove acionadores legados/obsoletos que possam estar causando falhas no log de execuções
+ * (como 'aoAlterarPlanilha' ou rotinas antigas do Google Drive).
+ */
+function removerGatilhosObsoletos() {
+  var ui = SpreadsheetApp.getUi();
+  try {
+    var triggers = ScriptApp.getProjectTriggers();
+    var removidos = 0;
+    for (var i = 0; i < triggers.length; i++) {
+      var fn = triggers[i].getHandlerFunction();
+      if (fn === 'aoAlterarPlanilha' || fn === 'rotinaMatinalConsolidarSigepEDrive' || fn === 'rotinaDiariaSincronizacaoDrive') {
+        ScriptApp.deleteTrigger(triggers[i]);
+        removidos++;
+      }
+    }
+    ui.alert(
+      'Limpeza de Acionadores',
+      '✓ Foram removidos ' + removidos + ' acionador(es) obsoleto(s)!\n\n' +
+      'Os gatilhos antigos do Google Drive foram removidos com sucesso e não gerarão mais falhas no histórico.',
+      ui.ButtonSet.OK
+    );
+  } catch (e) {
+    ui.alert('Erro ao limpar acionadores: ' + e.toString());
+  }
+}
+
+/**
+ * Função de segurança / compatibilidade.
+ * Se ainda houver algum gatilho configurado na planilha para 'aoAlterarPlanilha',
+ * esta função intercepta a execução sem lançar erros no log.
+ */
+function aoAlterarPlanilha(e) {
+  try {
+    Logger.log('Aviso: Gatilho legado aoAlterarPlanilha interceptado com sucesso.');
+  } catch (err) {
+    // Silencia qualquer exceção
   }
 }
 
@@ -330,13 +372,26 @@ function sincronizarAbaDadosParaTiDB() {
     return -1;
   }
 
-  function formatarValorPlanilha(v) {
+  function formatarValorPlanilha(v, isTimeOnly) {
     if (v === null || v === undefined || v === "") return null;
     if (v instanceof Date) {
       if (isNaN(v.getTime())) return null;
+      var ano = v.getFullYear();
+      // No Google Sheets, células contendo apenas horário são tratadas com ano 1899 ou 1900
+      if (ano <= 1900 || isTimeOnly) {
+        return Utilities.formatDate(v, "America/Sao_Paulo", "HH:mm");
+      }
       return Utilities.formatDate(v, "America/Sao_Paulo", "dd/MM/yyyy");
     }
     var s = String(v).trim();
+    if (isTimeOnly) {
+      if (s.indexOf("1899") !== -1 || s.indexOf("1900") !== -1) {
+        var matchH = s.match(/(\d{1,2}:\d{2})/);
+        return matchH ? matchH[1] : null;
+      }
+      var matchOnlyH = s.match(/^(\d{1,2}:\d{2})/);
+      if (matchOnlyH) return matchOnlyH[1];
+    }
     return s === "" ? null : s;
   }
 
@@ -393,8 +448,8 @@ function sincronizarAbaDadosParaTiDB() {
           if (codT) {
             mapaTurmas[codT] = {
               dia: idxTDia !== -1 ? String(rowT[idxTDia] || "").trim() : null,
-              horario_inicial: idxTHIni !== -1 ? formatarValorPlanilha(rowT[idxTHIni]) : null,
-              horario_fim: idxTHFim !== -1 ? formatarValorPlanilha(rowT[idxTHFim]) : null,
+              horario_inicial: idxTHIni !== -1 ? formatarValorPlanilha(rowT[idxTHIni], true) : null,
+              horario_fim: idxTHFim !== -1 ? formatarValorPlanilha(rowT[idxTHFim], true) : null,
               turno: idxTTurno !== -1 ? String(rowT[idxTTurno] || "").trim() : null
             };
           }
@@ -437,8 +492,8 @@ function sincronizarAbaDadosParaTiDB() {
     var infoTurma = mapaTurmas[turmas] || {};
     var diaSemanaVal = (idxDiaSemana !== -1 ? String(row[idxDiaSemana] || "").trim() : null) || infoTurma.dia || null;
     var turnoVal = (idxTurno !== -1 ? String(row[idxTurno] || "").trim() : null) || infoTurma.turno || null;
-    var horarioIniVal = (idxHorarioIni !== -1 ? formatarValorPlanilha(row[idxHorarioIni]) : null) || infoTurma.horario_inicial || null;
-    var horarioFimVal = (idxHorarioFim !== -1 ? formatarValorPlanilha(row[idxHorarioFim]) : null) || infoTurma.horario_fim || null;
+    var horarioIniVal = (idxHorarioIni !== -1 ? formatarValorPlanilha(row[idxHorarioIni], true) : null) || infoTurma.horario_inicial || null;
+    var horarioFimVal = (idxHorarioFim !== -1 ? formatarValorPlanilha(row[idxHorarioFim], true) : null) || infoTurma.horario_fim || null;
 
     cursistas.push({
       cod_cursista: cod,
@@ -472,7 +527,7 @@ function sincronizarAbaDadosParaTiDB() {
     });
   }
 
-  var BATCH_SIZE = 150;
+  var BATCH_SIZE = 250;
   var totalSinc = 0;
   var runId = 'sync_gs_' + Date.now();
 

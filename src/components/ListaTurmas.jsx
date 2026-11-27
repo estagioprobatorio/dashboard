@@ -46,8 +46,26 @@ export default function ListaTurmas({ data, observacoes = [], userRole, onNovaOb
           modalidade: item.modalidade || '',
           turno: item.turno || '',
           diaSemana: item.dia_da_semana || '',
-          horarioInicial: item.horario_inicial || '',
-          horarioFim: item.horario_fim || '',
+          horarioInicial: (() => {
+            const h = item.horario_inicial;
+            if (!h) return '';
+            const s = String(h).trim();
+            if (s.includes('1899') || s.includes('1900')) {
+              const m = s.match(/(\d{1,2}:\d{2})/);
+              return m ? m[1] : '';
+            }
+            return s.includes('/') ? '' : s;
+          })(),
+          horarioFim: (() => {
+            const h = item.horario_fim;
+            if (!h) return '';
+            const s = String(h).trim();
+            if (s.includes('1899') || s.includes('1900')) {
+              const m = s.match(/(\d{1,2}:\d{2})/);
+              return m ? m[1] : '';
+            }
+            return s.includes('/') ? '' : s;
+          })(),
           formador: item.nome_formador || 'SEM FORMADOR',
           emailFormador: getFormadorEmail(item, data, effectiveObservacoes),
           tutor: item.tutor_responsavel || 'Não Atribuído',

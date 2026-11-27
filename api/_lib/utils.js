@@ -42,3 +42,16 @@ export function parseDateTime(v) {
   const d = new Date(t);
   return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 19).replace('T', ' ');
 }
+
+/** Retorna 'HH:mm' ou null, descartando artefatos de data como '30/12/1899'. */
+export function cleanTime(v) {
+  const t = s(v);
+  if (!t) return null;
+  if (t.includes('1899') || t.includes('1900')) {
+    const m = t.match(/(\d{1,2}:\d{2})/);
+    return m ? m[1] : null;
+  }
+  const m2 = t.match(/^(\d{1,2}:\d{2})/);
+  if (m2) return m2[1];
+  return t.includes('/') ? null : t;
+}

@@ -29,6 +29,19 @@ function sendJson(req, res, statusCode, data, cacheControl = null) {
   return res.status(statusCode).send(payload);
 }
 
+function cleanTime(v) {
+  if (v === null || v === undefined) return null;
+  const t = String(v).trim();
+  if (!t) return null;
+  if (t.includes('1899') || t.includes('1900')) {
+    const m = t.match(/(\d{1,2}:\d{2})/);
+    return m ? m[1] : null;
+  }
+  const m2 = t.match(/^(\d{1,2}:\d{2})/);
+  if (m2) return m2[1];
+  return t.includes('/') ? null : t;
+}
+
 let pool = null;
 
 function parseTiDBConfig() {
@@ -420,8 +433,8 @@ export default async function handler(req, res) {
             r.componente || null,
             r.turmas || r.turma || null,
             r.dia_da_semana || null,
-            r.horario_inicial || null,
-            r.horario_fim || null,
+            cleanTime(r.horario_inicial),
+            cleanTime(r.horario_fim),
             r.turno || null,
             r.ano_formativo || null,
             r.nome_formador || null,
@@ -1171,8 +1184,8 @@ export default async function handler(req, res) {
         d.componente || null,
         d.turmas || d.turma || null,
         d.dia_da_semana || null,
-        d.horario_inicial || null,
-        d.horario_fim || null,
+        cleanTime(d.horario_inicial),
+        cleanTime(d.horario_fim),
         d.turno || null,
         d.ano_formativo || null,
         d.nome_formador || null,

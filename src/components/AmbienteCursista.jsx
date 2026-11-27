@@ -665,7 +665,20 @@ export default function AmbienteCursista({ userEmail, records, observacoes = [],
               <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', display: 'flex', flexDirection: 'column', gap: '0.35rem', marginBottom: '1rem' }}>
                 <div><b>Ano Formativo:</b> {cursistaRecord.ano_formativo || '1º Ano'}</div>
                 <div><b>Componente:</b> {cursistaRecord.componente || cursistaRecord.componente_conc || 'Geral'}</div>
-                <div><b>Encontro:</b> {cursistaRecord.dia_da_semana || 'Conforme cronograma'} {cursistaRecord.horario_inicial ? `(${cursistaRecord.horario_inicial} - ${cursistaRecord.horario_fim})` : ''}</div>
+                <div><b>Encontro:</b> {cursistaRecord.dia_da_semana || 'Conforme cronograma'} {(() => {
+                  const sH = (h) => {
+                    if (!h) return '';
+                    const str = String(h).trim();
+                    if (str.includes('1899') || str.includes('1900')) {
+                      const m = str.match(/(\d{1,2}:\d{2})/);
+                      return m ? m[1] : '';
+                    }
+                    return str.includes('/') ? '' : str;
+                  };
+                  const hIni = sH(cursistaRecord.horario_inicial);
+                  const hFim = sH(cursistaRecord.horario_fim);
+                  return (hIni && hFim) ? `(${hIni} - ${hFim})` : (hIni ? `(${hIni})` : '');
+                })()}</div>
               </div>
 
               <div style={{ display: 'flex', gap: '0.5rem' }}>

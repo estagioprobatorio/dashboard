@@ -49,8 +49,26 @@ export default function TurmaModal({ turmaName, data, onClose, observacoes = nul
       modalidade: first.modalidade || '',
       turno: first.turno || '',
       diaSemana: first.dia_da_semana || '',
-      horarioInicial: first.horario_inicial || '',
-      horarioFim: first.horario_fim || '',
+      horarioInicial: (() => {
+        const h = first.horario_inicial;
+        if (!h) return '';
+        const s = String(h).trim();
+        if (s.includes('1899') || s.includes('1900')) {
+          const m = s.match(/(\d{1,2}:\d{2})/);
+          return m ? m[1] : '';
+        }
+        return s.includes('/') ? '' : s;
+      })(),
+      horarioFim: (() => {
+        const h = first.horario_fim;
+        if (!h) return '';
+        const s = String(h).trim();
+        if (s.includes('1899') || s.includes('1900')) {
+          const m = s.match(/(\d{1,2}:\d{2})/);
+          return m ? m[1] : '';
+        }
+        return s.includes('/') ? '' : s;
+      })(),
       formador: first.nome_formador || 'SEM FORMADOR',
       emailFormador: getFormadorEmail(first, data, observacoes),
       tutor: first.tutor_responsavel || 'Não Atribuído',

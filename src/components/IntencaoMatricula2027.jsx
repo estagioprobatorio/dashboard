@@ -344,8 +344,17 @@ export default function IntencaoMatricula2027({
         if (!mapTurmas.has(tNome)) {
           const turno = r.turno || '—';
           const dia = r.dia_da_semana || '—';
-          const hIni = r.horario_inicial || '';
-          const hFim = r.horario_fim || '';
+          const sH = (h) => {
+            if (!h) return '';
+            const str = String(h).trim();
+            if (str.includes('1899') || str.includes('1900')) {
+              const m = str.match(/(\d{1,2}:\d{2})/);
+              return m ? m[1] : '';
+            }
+            return str.includes('/') ? '' : str;
+          };
+          const hIni = sH(r.horario_inicial);
+          const hFim = sH(r.horario_fim);
           const horarioFormatado = (hIni && hFim) ? `${hIni} às ${hFim}` : (hIni || '—');
 
           mapTurmas.set(tNome, {
@@ -1140,7 +1149,20 @@ export default function IntencaoMatricula2027({
               {evolucao.chamamentoTexto}
             </div>
             <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-              Início: {cursista?.periodo_ini || '—'} {cursista?.horario_inicial ? `· Horário: ${cursista.horario_inicial} às ${cursista.horario_fim || ''}` : ''}
+              Início: {cursista?.periodo_ini || '—'} {(() => {
+                const sH = (h) => {
+                  if (!h) return '';
+                  const str = String(h).trim();
+                  if (str.includes('1899') || str.includes('1900')) {
+                    const m = str.match(/(\d{1,2}:\d{2})/);
+                    return m ? m[1] : '';
+                  }
+                  return str.includes('/') ? '' : str;
+                };
+                const hI = sH(cursista?.horario_inicial);
+                const hF = sH(cursista?.horario_fim);
+                return (hI && hF) ? `· Horário: ${hI} às ${hF}` : (hI ? `· Horário: ${hI}` : '');
+              })()}
             </span>
           </div>
 

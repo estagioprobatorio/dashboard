@@ -105,8 +105,13 @@ export default function App() {
     const formatTimeOnly = (timeStr) => {
       if (!timeStr) return null;
       const str = String(timeStr).trim();
-      const match = str.match(/\b\d{2}:\d{2}(:\d{2})?\b/);
-      return match ? match[0].slice(0, 5) : str;
+      if (str.includes('1899') || str.includes('1900')) {
+        const matchTime = str.match(/(?:^|\s)(\d{1,2}:\d{2})(?::\d{2})?(?:$|\s)/);
+        return matchTime ? matchTime[1] : null;
+      }
+      const match = str.match(/\b\d{1,2}:\d{2}(:\d{2})?\b/);
+      if (match) return match[0].slice(0, 5);
+      return str.includes('/') ? null : str;
     };
 
     // Mapear CGMs que possuem matrícula oficial com chamamento válido para descartar vínculos órfãos antigos (sem chamamento/sala)
