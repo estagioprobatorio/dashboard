@@ -211,11 +211,11 @@ export default async function handler(req, res) {
         executeSql('SELECT * FROM intencao_matricula_2027 ORDER BY created_at DESC').catch(() => []),
         executeSql(`
           SELECT ot.*, 
-                 COALESCE(t.nome, ot.tutor) AS tutor, 
-                 COALESCE(t.email_inst, ot.tutor_email) AS tutor_email, 
-                 COALESCE(f.nome, ot.formador) AS formador, 
-                 COALESCE(f.email_inst, ot.formador_email) AS formador_email, 
-                 COALESCE(n.nome, ot.nre) AS nre_nome,
+                 t.nome AS tutor, 
+                 t.email_inst AS tutor_email, 
+                 f.nome AS formador, 
+                 f.email_inst AS formador_email, 
+                 n.nome AS nre_nome,
                  ot.registrado_em AS ts_registrado
           FROM observacao_tutor ot 
           LEFT JOIN usuario t ON t.id = ot.tutor_id 
@@ -895,11 +895,11 @@ export default async function handler(req, res) {
     if (action === 'get_observacoes_tutor') {
       let rows = await executeSql(`
         SELECT ot.*, 
-               COALESCE(t.nome, ot.tutor) AS tutor, 
-               COALESCE(t.email_inst, ot.tutor_email) AS tutor_email, 
-               COALESCE(f.nome, ot.formador) AS formador, 
-               COALESCE(f.email_inst, ot.formador_email) AS formador_email, 
-               COALESCE(n.nome, ot.nre) AS nre_nome,
+               t.nome AS tutor, 
+               t.email_inst AS tutor_email, 
+               f.nome AS formador, 
+               f.email_inst AS formador_email, 
+               n.nome AS nre_nome,
                ot.registrado_em AS ts_registrado
         FROM observacao_tutor ot 
         LEFT JOIN usuario t ON t.id = ot.tutor_id 

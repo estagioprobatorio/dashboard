@@ -149,14 +149,17 @@ export default function TutorInsightsDashboard({
     }
   }, [observacoesRemotas]);
 
-  // Sincronização inicial automática da planilha do Google Sheets
+  // Sincronização inicial automática apenas se não houver dados já carregados pelo bundle principal
   useEffect(() => {
+    if (Array.isArray(observacoesRemotas) && observacoesRemotas.length > 0) {
+      return;
+    }
     let isMounted = true;
     async function carregarObservacoesRemotas() {
       try {
         const data = await fetchObservacoesTutor();
         if (isMounted && Array.isArray(data) && data.length > 0) {
-          setObservacoes(data);
+          setObservacoes(prev => (data.length >= prev.length ? data : prev));
         }
       } catch (err) {
         console.warn("[TutorInsights] Erro ao sincronizar observações:", err);
@@ -164,7 +167,7 @@ export default function TutorInsightsDashboard({
     }
     carregarObservacoesRemotas();
     return () => { isMounted = false; };
-  }, []);
+  }, [observacoesRemotas]);
 
   const handleSyncSheets = async () => {
     setIsSyncing(true);
